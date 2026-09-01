@@ -175,3 +175,39 @@ export function aiProviderFor(id) {
 export function normalizeAiBase(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
+
+export function classifyAiHttpStatus(status) {
+  if (status >= 200 && status < 300) return "";
+  if (status === 401) return "auth";
+  if (status === 403) return "forbidden";
+  if (status === 429) return "limit";
+  return "http";
+}
+
+export function buildAiRequestBody(providerId, model, messages, options = {}) {
+  const body = {
+    model,
+    messages,
+    temperature: 0.2,
+    max_tokens: options.connectionTest ? 16 : 2400,
+  };
+  if (options.stream) body.stream = true;
+  // A connection check needs one short answer. In real reading conversations
+  // DeepSeek may return reasoning_content, which the UI shows separately.
+  if (providerId === "deepseek") {
+    body.thinking = { type: options.connectionTest ? "disabled" : "enabled" };
+  }
+  return body;
+}
+
+export function buildAiRequestOptions(base, key, body) {
+  const headers = { "Content-Type": "application/json" };
+  if (key) headers.Authorization = `Bearer ${key}`;
+  return {
+    url: `${base}/chat/completions`,
+    method: "POST",
+    headers,
+    throw: false,
+    body: JSON.stringify(body),
+  };
+}

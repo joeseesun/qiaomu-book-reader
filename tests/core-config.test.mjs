@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { AI_PROVIDERS, aiProviderFor, normalizeAiBase } from "../src/ai-providers.js";
+import { AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "../src/ai-providers.js";
 import {
   buildCliInvocation,
   buildCliPrompt,
@@ -10,6 +10,7 @@ import {
   isCliAiProvider,
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
+import { createOpenAiSseParser } from "../src/ai-stream.js";
 
 function luminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16) / 255);
@@ -38,6 +39,49 @@ test("AI presets contain supported providers and no legacy Elton service", () =>
   assert.equal(AI_PROVIDERS.ollama.base, "http://localhost:11434/v1");
   assert.equal(AI_PROVIDERS.lmstudio.base, "http://localhost:1234/v1");
   assert.equal(normalizeAiBase(" https://example.com/v1/// "), "https://example.com/v1");
+});
+
+test("AI HTTP failures distinguish a rejected key from a refused request", () => {
+  assert.equal(classifyAiHttpStatus(200), "");
+  assert.equal(classifyAiHttpStatus(401), "auth");
+  assert.equal(classifyAiHttpStatus(403), "forbidden");
+  assert.equal(classifyAiHttpStatus(429), "limit");
+  assert.equal(classifyAiHttpStatus(500), "http");
+});
+
+test("DeepSeek requests keep thinking separate and make connection checks short", () => {
+  const messages = [{ role: "user", content: "请只回答：连接成功" }];
+  const testBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages, { connectionTest: true });
+  assert.equal(testBody.max_tokens, 16);
+  assert.deepEqual(testBody.thinking, { type: "disabled" });
+
+  const normalBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages);
+  assert.equal(normalBody.max_tokens, 2400);
+  assert.deepEqual(normalBody.thinking, { type: "enabled" });
+
+  const streamBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages, { stream: true });
+  assert.equal(streamBody.stream, true);
+});
+
+test("OpenAI SSE parser separates reasoning from the final answer", () => {
+  const chunks = [];
+  const parser = createOpenAiSseParser((delta) => chunks.push(delta));
+  parser.push('data: {"choices":[{"delta":{"reasoning_content":"先想"}}]}\n\n');
+  parser.push('data: {"choices":[{"delta":{"content":"正式"}}]}\r\n\r\n');
+  parser.push('data: [DONE]\n\n');
+  assert.equal(parser.finish(), true);
+  assert.deepEqual(chunks, [
+    { content: "", reasoning: "先想" },
+    { content: "正式", reasoning: "" },
+  ]);
+});
+
+test("HTTP AI requests actually send the configured bearer key", () => {
+  const options = buildAiRequestOptions("https://api.example.com", "test-secret", { model: "model-a" });
+  assert.equal(options.url, "https://api.example.com/chat/completions");
+  assert.equal(options.headers["Content-Type"], "application/json");
+  assert.equal(options.headers.Authorization, "Bearer test-secret");
+  assert.deepEqual(JSON.parse(options.body), { model: "model-a" });
 });
 
 test("CLI adapters keep reading requests isolated and tool-free", () => {
@@ -118,4 +162,49 @@ test("AI prompt and context are Chinese-first", () => {
   assert.match(aiSource, /你是一名克制、准确的阅读助手/);
   assert.match(aiSource, /书名：《/);
   assert.doesNotMatch(aiSource, /Из книги|Фрагмент|Перевод|По словам/);
+});
+
+test("selection popup exposes configured AI with the wand-sparkles icon", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const start = source.indexOf("function addBarButtons");
+  const end = source.indexOf("const AiExplainModal", start);
+  const popupSource = source.slice(start, end);
+  assert.match(popupSource, /view\.plugin\.settings\.aiEnabled && aiReady/);
+  assert.match(popupSource, /act\("er-hl-ai", "wand-sparkles"/);
+  assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file\)\.open\(\)/);
+  assert.doesNotMatch(source, /brain-circuit/);
+});
+
+test("AI dialog offers reading prompts and keeps reasoning separate", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  for (const prompt of [
+    "Объясни простыми словами",
+    "Выдели ключевые идеи",
+    "Дай необходимый контекст",
+    "Проверь аргументацию",
+    "Свяжи с темой книги",
+    "Задай вопросы для размышления",
+  ]) assert.match(source, new RegExp(prompt));
+  assert.match(source, /createEl\("details", \{ cls: "er-ai-reason" \}\)/);
+  assert.match(source, /reasoningBox\.open = false/);
+  assert.match(source, /onDelta/);
+});
+
+test("reader themes stay on the page while navigation follows Obsidian", () => {
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.er-top \{[^}]*background:var\(--background-primary\)/s);
+  assert.match(css, /\.er-bot \{[^}]*background:var\(--background-primary\)/s);
+  assert.match(css, /\.er-area \{[^}]*background:var\(--er-bg/s);
+  assert.doesNotMatch(css, /\.er-top, \.er-bot \{ background:color-mix\([^}]*--er-bg/s);
+});
+
+test("settings use task tabs, concise intros, and Chinese-first copy", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const chinese = fs.readFileSync(new URL("../src/i18n-zh.js", import.meta.url), "utf8");
+  assert.match(source, /er-settings-head/);
+  assert.match(source, /er-settings-intro/);
+  assert.match(source, /body\.dataset\.tab = this\._tab/);
+  assert.match(chinese, /"Ширина строки": "每行字数"/);
+  assert.match(chinese, /"Данные": "存储与同步"/);
+  assert.match(chinese, /只改变书页；顶部和底部工具栏始终跟随 Obsidian/);
 });

@@ -9,7 +9,8 @@
 import { AbstractInputSuggest, FuzzySuggestModal, ItemView, MarkdownRenderer, Menu, Modal, Notice, Platform, Plugin, PluginSettingTab, Scope, SecretComponent, Setting, TFile, TFolder, normalizePath, requestUrl } from "obsidian";
 import * as pdfjsLib from "pdfjs-dist";
 import ePub from "epubjs";
-import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, normalizeAiBase } from "./ai-providers.js";
+import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "./ai-providers.js";
+import { createOpenAiSseParser } from "./ai-stream.js";
 import { probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
@@ -20,6 +21,31 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "AI 解读": "AI insight",
+  "选中文字后的工具条新增 AI 解读按钮，可直接围绕当前片段提问": "The selection toolbar now includes an AI insight button for asking about the current passage.",
+  "服务拒绝处理该请求（403）。可能是内容限制或账号权限问题，不代表密钥错误。": "The service refused the request (403). This may be a content restriction or an account permission issue, not an invalid API key.",
+  "思考中…": "Thinking…",
+  "思考过程": "Reasoning",
+  "模型只返回了思考过程，没有生成正式回答，请重试。": "The model returned reasoning but no final answer. Try again.",
+  "Объясни простыми словами": "Explain in plain language",
+  "Выдели ключевые идеи": "Extract the key ideas",
+  "Дай необходимый контекст": "Give essential context",
+  "Проверь аргументацию": "Examine the argument",
+  "Свяжи с темой книги": "Connect it to the book",
+  "Задай вопросы для размышления": "Ask reflection questions",
+  "Настройки без лишних слов: выберите задачу и меняйте только то, что вам нужно.": "Choose a task, then change only what you need.",
+  "Выберите способ чтения и перелистывания. Остальное уже настроено разумно.": "Choose how you read and turn pages. The defaults handle the rest.",
+  "Статистика чтения": "Reading statistics",
+  "Меняется только страница книги. Панели управления всегда следуют теме Obsidian.": "Only the book page changes. Controls always follow the Obsidian theme.",
+  "Одна заметка собирает всю книгу; отдельная заметка нужна только для самостоятельной идеи.": "One book note collects the whole book; use a separate note only for a standalone idea.",
+  "Включите только нужные сетевые функции. Обычное чтение остаётся офлайн.": "Enable only the online features you need. Normal reading stays offline.",
+  "Здесь находятся книги, прогресс и синхронизация. Обычно менять ничего не нужно.": "Books, progress, and sync live here. Usually there is nothing to change.",
+  "Справка, обновления и связь с автором.": "Help, updates, and contact information.",
+  "AI 回答改为流式显示，思考过程单独呈现并在完成后自动折叠": "AI answers now stream live; reasoning is shown separately and collapses when complete.",
+  "AI 对话新增六个常用阅读提示词，可继续自由追问": "AI chat now includes six common reading prompts and remains open for follow-up questions.",
+  "阅读主题只改变书页，顶部工具栏和底部页码始终跟随 Obsidian": "Reading themes now affect only the page; the top toolbar and bottom pagination always follow Obsidian.",
+  "插件设置重新分组并精简中文文案，查找和理解选项更容易": "Plugin settings have been regrouped with clearer Chinese copy, making options easier to find and understand.",
+  "修复 API 密钥已保存但请求未携带认证信息的问题": "Fixed API requests failing to include an already saved key.",
   "Закрыть книгу": "Close the book",
   "Перерисовать книгу": "Re-flow the book",
   "Книга перерисована": "The book has been re-flowed",
@@ -999,7 +1025,8 @@ function icon(n) {
     // Paper plane: the one icon every chat in the world uses for "send",
     // so nobody has to work out what the round button does.
     "send": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>`,
-    "sparkles": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.8 2L21 17.8l-2.2.8-.8 2-.8-2-2.2-.8 2.2-.8z"/></svg>`,
+    // Lucide Wand Sparkles: a light, familiar AI action that stays legible at 16 px.
+    "wand-sparkles": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>`,
     "play": `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 4.5v15a1 1 0 0 0 1.53.85l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>`,
     "pause": `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4.5" width="4.2" height="15" rx="1.4"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.4"/></svg>`,
     "check": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
@@ -3229,6 +3256,62 @@ function aiMessages(text, settings, turns, book) {
   });
   return msgs;
 }
+function aiHttpError(status, provider) {
+  const err = new Error("http " + status);
+  err.erReason = classifyAiHttpStatus(status);
+  err.erStatus = status;
+  if (provider?.local) err.erReason = "local";
+  return err;
+}
+async function aiExplainStream(cfg, messages, options) {
+  const body = buildAiRequestBody(cfg.id, cfg.model, messages, { ...options, stream: true });
+  const req = buildAiRequestOptions(cfg.base, cfg.key, body);
+  const response = await window.fetch(req.url, {
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    signal: options.signal,
+  });
+  if (!response.ok) throw aiHttpError(response.status, cfg.provider);
+  if (!response.body || typeof response.body.getReader !== "function") {
+    const err = new Error("stream unavailable");
+    err.erStreamUnavailable = true;
+    throw err;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let answer = "";
+  let reasoning = "";
+  let received = false;
+  const parser = createOpenAiSseParser((delta) => {
+    received = true;
+    reasoning += delta.reasoning;
+    answer += delta.content;
+    if (typeof options.onDelta === "function") {
+      options.onDelta({ ...delta, answer, reasoningText: reasoning });
+    }
+  });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parser.push(decoder.decode(value, { stream: true }));
+    }
+    parser.push(decoder.decode());
+    parser.finish();
+  } catch (e) {
+    if (received) e.erReceived = true;
+    throw e;
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released */ }
+  }
+  if (!answer.trim()) {
+    const err = new Error(reasoning ? "reasoning without answer" : "empty");
+    err.erReason = reasoning ? "emptyanswer" : "empty";
+    throw err;
+  }
+  return answer.trim();
+}
 async function aiExplain(text, plugin, turns, book, options = {}) {
   const settings = plugin.settings;
   const cfg = aiConfig(plugin);
@@ -3250,6 +3333,9 @@ async function aiExplain(text, plugin, turns, book, options = {}) {
       binaryPath: cfg.cliPath,
       signal: options.signal,
     });
+    if (typeof options.onDelta === "function") {
+      options.onDelta({ content: result.answer, reasoning: "", answer: result.answer, reasoningText: "" });
+    }
     return result.answer;
   }
   if (cfg.needsKey && !cfg.key) {
@@ -3257,44 +3343,42 @@ async function aiExplain(text, plugin, turns, book, options = {}) {
     err.erReason = "nokey";
     throw err;
   }
-  const headers = { "Content-Type": "application/json" };
-  if (cfg.key) headers.Authorization = `Bearer ${cfg.key}`;
-  const res = await requestUrl({
-    url: `${cfg.base}/chat/completions`,
-    method: "POST",
-    throw: false,
-    body: JSON.stringify({
-      model: cfg.model,
-      messages,
-      temperature: 0.2,
-      max_tokens: 900,
-    }),
-  });
+  if (typeof options.onDelta === "function" && typeof window.fetch === "function") {
+    try {
+      return await aiExplainStream(cfg, messages, options);
+    } catch (e) {
+      if (options.signal?.aborted || e?.name === "AbortError") {
+        const err = new Error("AI request cancelled");
+        err.erReason = "cancelled";
+        throw err;
+      }
+      // Browser streaming may be unavailable for a custom endpoint because of
+      // CORS. Fall back only before any token arrived, so a request is never
+      // repeated after the model has started answering.
+      if (e?.erReason || e?.erReceived) throw e;
+    }
+  }
+  const body = buildAiRequestBody(cfg.id, cfg.model, messages, options);
+  const res = await requestUrl(buildAiRequestOptions(cfg.base, cfg.key, body));
   if (options.signal && options.signal.aborted) {
     const err = new Error("AI request cancelled");
     err.erReason = "cancelled";
     throw err;
   }
-  if (res.status === 401 || res.status === 403) {
-    const err = new Error("auth"); err.erReason = "auth"; throw err;
+  const httpReason = classifyAiHttpStatus(res.status);
+  if (httpReason) throw aiHttpError(res.status, cfg.provider);
+  const data = res.json;
+  const message = data?.choices?.[0]?.message || {};
+  const reasoning = String(message.reasoning_content || message.reasoning || "");
+  const out = String(message.content || "").trim();
+  if (typeof options.onDelta === "function" && (reasoning || out)) {
+    options.onDelta({ content: out, reasoning, answer: out, reasoningText: reasoning });
   }
-  if (res.status === 429) {
-    const err = new Error("rate"); err.erReason = "limit"; throw err;
-  }
-  if (res.status < 200 || res.status >= 300) {
-    const err = new Error("http " + res.status);
-    err.erReason = "http";
-    err.erStatus = res.status;
-    // A local server that is simply not running is the single most likely
-    // failure of the local option, and "http 0" explains nothing.
-    if (cfg.provider.local) err.erReason = "local";
+  if (!out) {
+    const err = new Error(reasoning ? "reasoning without answer" : "empty");
+    err.erReason = reasoning ? "emptyanswer" : "empty";
     throw err;
   }
-  const data = res.json;
-  let out = data && data.choices && data.choices[0] && data.choices[0].message
-    ? String(data.choices[0].message.content || data.choices[0].message.reasoning_content || "").trim()
-    : "";
-  if (!out) { const err = new Error("empty"); err.erReason = "empty"; throw err; }
   return out;
 }
 async function aiTestConnection(plugin) {
@@ -3305,6 +3389,7 @@ async function aiTestConnection(plugin) {
     plugin,
     [{ role: "user", content: "请只回答：连接成功" }],
     "",
+    { connectionTest: true },
   );
   return { model: cfg.model || cfg.provider && cfg.provider.label || "CLI", latency: Date.now() - started, answer };
 }
@@ -3727,6 +3812,19 @@ function addBarButtons(view, pop) {
     b.addEventListener("click", fn);
     return b;
   };
+  const cfg = aiConfig(view.plugin);
+  const aiReady = cfg.provider && (cfg.transport === "cli"
+    ? Platform.isDesktopApp
+    : cfg.base && cfg.model && (!cfg.needsKey || cfg.key));
+  if (view.plugin.settings.aiEnabled && aiReady) {
+    act("er-hl-ai", "wand-sparkles", __ertr("AI 解读"), () => {
+      const cur = view._currentHl();
+      view._hideHlPopup();
+      selOf(view.areaEl)?.removeAllRanges();
+      if (!cur) return;
+      new AiExplainModal(view.app, view.plugin, cur.text, view.file).open();
+    });
+  }
   act("er-hl-copy", "copy", __ertr("Копировать текст"), async () => {
     const cur = view._currentHl();
     view._hideHlPopup();
@@ -3781,7 +3879,7 @@ const AiExplainModal = class extends Modal {
     const send = bar.createEl("button", { cls: "er-ai-send" });
     this.inputEl = input;
     this.sendEl = send;
-    this.canCancel = aiConfig(this.plugin).transport === "cli";
+    this.canCancel = true;
     this._setSending(false);
     const fire = async () => {
       const q = input.value.trim();
@@ -3847,18 +3945,28 @@ const AiExplainModal = class extends Modal {
     window.addEventListener("keyboardDidShow", this._kbShow);
     window.addEventListener("keyboardWillHide", this._kbHide);
   }
-  // An empty chat should say what it is for and offer the one thing most
-  // readers want first, instead of showing a bare input and a lone chip.
+  // Start with the recurring jobs readers actually have. These are prompts,
+  // not modes: after any one of them the conversation remains fully open.
   _buildEmpty() {
     const empty = this.log.createDiv("er-ai-empty");
-    svgIcon(empty.createDiv("er-ai-empty-icon"), "sparkles");
+    svgIcon(empty.createDiv("er-ai-empty-icon"), "wand-sparkles");
     empty.createDiv({ cls: "er-ai-empty-title", text: __ertr("О чём спросить?") });
     empty.createDiv({
       cls: "er-ai-empty-sub",
       text: __ertr("Спросите что угодно об этом фрагменте — или начните с разбора."),
     });
-    const chip = empty.createEl("button", { cls: "er-ai-chip", text: __ertr("Разбери фрагмент") });
-    chip.addEventListener("click", () => this._send(chip.textContent));
+    const prompts = empty.createDiv("er-ai-prompts");
+    for (const prompt of [
+      "Объясни простыми словами",
+      "Выдели ключевые идеи",
+      "Дай необходимый контекст",
+      "Проверь аргументацию",
+      "Свяжи с темой книги",
+      "Задай вопросы для размышления",
+    ]) {
+      const chip = prompts.createEl("button", { cls: "er-ai-chip", text: __ertr(prompt) });
+      chip.addEventListener("click", () => this._send(chip.textContent));
+    }
     this.empty = empty;
   }
   _scroll() { this.log.scrollTop = this.log.scrollHeight; }
@@ -3901,6 +4009,10 @@ const AiExplainModal = class extends Modal {
     me.setText(text);
     this.turns.push({ role: "user", content: text });
     const group = this.log.createDiv("er-ai-group");
+    const reasoningBox = group.createEl("details", { cls: "er-ai-reason" });
+    reasoningBox.addClass("er-ai-reason-hidden");
+    const reasoningSummary = reasoningBox.createEl("summary", { text: __ertr("思考中…") });
+    const reasoningText = reasoningBox.createDiv("er-ai-reason-text");
     const bubble = group.createDiv("er-ai-msg er-ai-msg-ai");
     // Waiting looks like waiting: three dots that actually move, the same
     // indicator Elton AI uses. A still line of text reads as a frozen window.
@@ -3910,10 +4022,43 @@ const AiExplainModal = class extends Modal {
     ind.createDiv({ cls: "er-ai-typing-text", text: __ertr("Думаю…") });
     this._scroll();
     let answer = "";
+    let reasoning = "";
+    let hasContent = false;
+    const onDelta = (delta) => {
+      if (delta.reasoning) {
+        reasoning = delta.reasoningText || reasoning + delta.reasoning;
+        reasoningBox.removeClass("er-ai-reason-hidden");
+        reasoningBox.open = !hasContent;
+        reasoningText.setText(reasoning);
+      }
+      if (delta.content) {
+        answer = delta.answer || answer + delta.content;
+        if (!hasContent) {
+          hasContent = true;
+          ind.remove();
+          bubble.addClass("er-ai-msg-streaming");
+          if (reasoning) {
+            reasoningBox.open = false;
+            reasoningSummary.setText(__ertr("思考过程"));
+          }
+        }
+        bubble.setText(answer);
+      }
+      this._scroll();
+    };
     try {
-      answer = await aiExplain(this.text, this.plugin, this.turns, this.book, { signal: this.abortController.signal });
+      answer = await aiExplain(this.text, this.plugin, this.turns, this.book, {
+        signal: this.abortController.signal,
+        onDelta,
+      });
     } catch (e) {
       console.error("Book Reader: AI chat failed", e);
+      if (reasoning) {
+        reasoningBox.open = false;
+        reasoningSummary.setText(__ertr("思考过程"));
+      } else {
+        reasoningBox.remove();
+      }
       // The unanswered message leaves the thread: keeping it would send the same
       // question twice as soon as the next one is asked.
       this.turns.pop();
@@ -3931,10 +4076,12 @@ const AiExplainModal = class extends Modal {
           : why === "inputtoolong" ? __ertr("选中内容过长，请缩小选择范围。")
           : why === "outputtoolong" ? __ertr("AI 回答过长，已停止生成。")
           : why === "cli" ? __ertr("CLI 运行失败，请检查安装、登录和模型设置。")
-          : why === "auth" ? __ertr("Сервис не принял ключ. Проверьте его в настройках плагина.")
+          : why === "auth" ? __ertr("密钥未通过验证。")
+            : why === "forbidden" ? __ertr("服务拒绝处理该请求（403）。可能是内容限制或账号权限问题，不代表密钥错误。")
             : why === "limit" ? __ertr("Сервис ограничил частые запросы. Подождите минуту и попробуйте снова.")
               : why === "local" ? __ertr("Локальная модель не отвечает. Проверьте, запущен ли Ollama или LM Studio.")
                 : why === "empty" ? __ertr("Пустой ответ от модели.")
+                  : why === "emptyanswer" ? __ertr("模型只返回了思考过程，没有生成正式回答，请重试。")
                   : why === "http" ? __ertr("Сервис ответил ошибкой {0}.", e.erStatus)
                     : __ertr("Не удалось связаться с сервисом. Похоже, нет интернета."));
       this._scroll();
@@ -3945,7 +4092,13 @@ const AiExplainModal = class extends Modal {
     }
     this.turns.push({ role: "assistant", content: answer });
     this.answer = answer;
+    if (!reasoning) reasoningBox.remove();
+    else {
+      reasoningBox.open = false;
+      reasoningSummary.setText(__ertr("思考过程"));
+    }
     bubble.empty();
+    bubble.removeClass("er-ai-msg-streaming");
     // Rendered as Markdown so the sections and lists read as sections and lists.
     await MarkdownRenderer.render(this.app, answer, bubble, this.bookFile ? this.bookFile.path : "", this);
     this._actions(group, answer);
@@ -6808,6 +6961,13 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.5.0", items: [
+    __ertr("AI 回答改为流式显示，思考过程单独呈现并在完成后自动折叠"),
+    __ertr("AI 对话新增六个常用阅读提示词，可继续自由追问"),
+    __ertr("阅读主题只改变书页，顶部工具栏和底部页码始终跟随 Obsidian"),
+    __ertr("插件设置重新分组并精简中文文案，查找和理解选项更容易"),
+    __ertr("修复 API 密钥已保存但请求未携带认证信息的问题")
+  ] },
   { v: "3.4.0", items: [
     __ertr("新增 Codex CLI、Claude Code CLI 和 Grok CLI，可复用本机已登录账号"),
     __ertr("CLI 请求在隔离的临时目录运行，默认禁用工具、文件编辑和项目规则"),
@@ -7672,7 +7832,7 @@ const ReaderView = class extends ItemView {
         sendQuoteToBookNote(this, { text, block: this._pendingSel && this._pendingSel.block });
       }));
       if (this.plugin.settings.aiEnabled) {
-        menu.addItem((it) => it.setTitle(__ertr("Разобрать фрагмент")).setIcon("sparkles").onClick(() => {
+        menu.addItem((it) => it.setTitle(__ertr("Разобрать фрагмент")).setIcon("wand-sparkles").onClick(() => {
           this._hideHlPopup();
           new AiExplainModal(this.app, this.plugin, text, this.file).open();
         }));
@@ -9189,7 +9349,9 @@ const ReaderModal = class extends Modal {
     m.style.setProperty("--er-border", t.border);
     m.style.setProperty("--er-accent", t.accent);
     m.style.setProperty("--er-muted", t.muted);
-    m.style.background = t.bg;
+    // The book page follows the reading theme; surrounding chrome stays part
+    // of Obsidian, so switching paper colour never repaints navigation bars.
+    m.setCssProps({ background: "var(--background-primary)" });
   }
   _buildDOM() {
     const root = this.contentEl;
@@ -9987,6 +10149,11 @@ const SettingsTab = class extends PluginSettingTab {
         .setButtonText(__ertr("Настроить"))
         .onClick(() => new SettingsGroupModal(this.app, name, build).open()));
   }
+  _sectionIntro(c, title, desc) {
+    const intro = c.createDiv("er-settings-intro");
+    intro.createEl("h2", { text: title });
+    intro.createDiv({ text: desc });
+  }
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -10009,7 +10176,7 @@ const SettingsTab = class extends PluginSettingTab {
   display() {
     const { containerEl: c } = this;
     c.empty();
-    c.createEl("h2", { text: "Qiaomu Book Reader" });
+    c.addClass("er-settings-root");
     const TABS = [
       { id: "read", label: __ertr("Чтение") },
       { id: "look", label: __ertr("Оформление") },
@@ -10019,30 +10186,24 @@ const SettingsTab = class extends PluginSettingTab {
       { id: "about", label: __ertr("О плагине") }
     ];
     if (!this._tab || !TABS.some((t) => t.id === this._tab)) this._tab = "read";
-    // Language sits ABOVE the tabs, not inside the last one.
-    //
-    // It used to live at the bottom of "About", which is the last place someone
-    // who cannot read the interface would look — several readers said switching
-    // to English was hard to find, and one gave up and asked in a comment.
-    // A setting whose whole purpose is "I do not understand this screen" has to
-    // be visible from every screen.
-    new Setting(c)
-      .setName(__ertr("Язык интерфейса"))
-      .setDesc(__ertr("Язык интерфейса плагина. Откройте книгу заново, чтобы применить."))
-      .addDropdown((d) => d
-        .addOption("ru", "Русский")
-        .addOption("en", "English")
-        .addOption("zh", "简体中文")
-        .setValue(this.plugin.settings.language || "zh")
-        .onChange(async (v) => {
-          this.plugin.settings.language = v;
-          // Remember that this was a deliberate choice, so the automatic guess
-          // below never overrides it later.
-          this.plugin.settings.languagePicked = true;
-          __erSetLang(v);
-          await this.plugin.saveAll();
-          this._redraw();
-        }));
+    const head = c.createDiv("er-settings-head");
+    const headText = head.createDiv("er-settings-head-text");
+    headText.createEl("h2", { text: "Qiaomu Book Reader" });
+    headText.createDiv({ text: __ertr("Настройки без лишних слов: выберите задачу и меняйте только то, что вам нужно.") });
+    const language = head.createEl("select", { cls: "dropdown er-settings-language" });
+    for (const [value, label] of [["zh", "简体中文"], ["en", "English"], ["ru", "Русский"]]) {
+      language.createEl("option", { text: label, attr: { value } });
+    }
+    language.value = this.plugin.settings.language || "zh";
+    language.setAttr("aria-label", __ertr("Язык интерфейса"));
+    language.addEventListener("change", async () => {
+      const v = language.value;
+      this.plugin.settings.language = v;
+      this.plugin.settings.languagePicked = true;
+      __erSetLang(v);
+      await this.plugin.saveAll();
+      this._redraw();
+    });
     const bar = c.createDiv("er-set-tabs");
     TABS.forEach((t) => {
       const el = bar.createDiv("er-set-tab");
@@ -10051,6 +10212,7 @@ const SettingsTab = class extends PluginSettingTab {
       el.addEventListener("click", () => { this._tab = t.id; this.display(); });
     });
     const body = c.createDiv("er-set-body");
+    body.dataset.tab = this._tab;
     if (this._tab === "read") this._tabReading(body);
     else if (this._tab === "look") this._groupAppearance(body);
     else if (this._tab === "notes") this._tabNotes(body);
@@ -10111,7 +10273,7 @@ const SettingsTab = class extends PluginSettingTab {
 
   // ── Чтение ────────────────────────────────────────────────────────────────
   _tabReading(c) {
-    this._statsCard(c);
+    this._sectionIntro(c, __ertr("Чтение"), __ertr("Выберите способ чтения и перелистывания. Остальное уже настроено разумно."));
     new Setting(c)
       .setName(__ertr("Ширина строки"))
       .setDesc(__ertr("Максимальная длина строки в символах. На широком мониторе строка во весь экран уходит за 150 символов, и глаз теряет начало следующей — привычный удобный диапазон 60–90. Лишняя ширина уходит в поля, разбивка книги на страницы от этого не меняется."))
@@ -10186,7 +10348,8 @@ const SettingsTab = class extends PluginSettingTab {
       .addSlider((sl) => sl.setLimits(5, 120, 5).setValue(this.plugin.settings.dailyGoalMin || 15).setDynamicTooltip().onChange(async (v) => {
         this.plugin.settings.dailyGoalMin = v; await this.plugin.saveAll();
       }));
-    c.createEl("div", { cls: "er-set-note", text: __ertr("Как выглядит страница — во вкладке «Оформление». Шрифт, размер и межстрочный интервал настраиваются прямо в книге — иконка ползунков вверху читалки.") });
+    c.createEl("h3", { cls: "er-set-h", text: __ertr("Статистика чтения") });
+    this._statsCard(c);
   }
   // Where the breakdown is fetched from. In its own window because it is set up
   // once and then never touched, and because the key field has no business
@@ -10343,6 +10506,7 @@ const SettingsTab = class extends PluginSettingTab {
                       : why === "timeout" ? __ertr("AI 请求超时，请稍后重试。")
                         : why === "cli" ? __ertr("CLI 运行失败，请检查安装、登录和模型设置。")
               : why === "auth" ? __ertr("密钥未通过验证。")
+                : why === "forbidden" ? __ertr("服务拒绝处理该请求（403）。可能是内容限制或账号权限问题，不代表密钥错误。")
                 : why === "local" ? __ertr("本地模型没有响应，请确认服务已经启动。")
                   : why === "http" ? __ertr("服务返回错误 {0}。", e.erStatus)
                     : __ertr("连接失败，请检查网络、接口地址和模型名称。");
@@ -10382,6 +10546,7 @@ const SettingsTab = class extends PluginSettingTab {
   // Set once and forgotten: kept out of the tab so what remains there is only
   // what a reader reaches for mid-book. Same controls, same behaviour.
   _groupAppearance(c) {
+    this._sectionIntro(c, __ertr("Оформление"), __ertr("Меняется только страница книги. Панели управления всегда следуют теме Obsidian."));
     c.createEl("h3", { text: __ertr("Режимы") });
     new Setting(c)
       .setName(__ertr("Свой вид на каждом устройстве"))
@@ -10457,6 +10622,7 @@ const SettingsTab = class extends PluginSettingTab {
   }
   // ── Заметки ───────────────────────────────────────────────────────────────
   _tabNotes(c) {
+    this._sectionIntro(c, __ertr("Заметки"), __ertr("Одна заметка собирает всю книгу; отдельная заметка нужна только для самостоятельной идеи."));
     c.createEl("h3", { text: __ertr("Куда попадают заметки") });
     new Setting(c)
       .setName(__ertr("Папка для новых заметок"))
@@ -10600,6 +10766,7 @@ const SettingsTab = class extends PluginSettingTab {
     c.createEl("div", { cls: "er-set-note", text: __ertr("Совет: шаблон можно переопределить для отдельной книги — откройте книгу, нажмите (i) вверху и укажите свой шаблон в поле «Шаблон для этой книги» (удобно, если у разных жанров разное оформление).") });  }
   // ── Перевод ───────────────────────────────────────────────────────────────
   _tabTranslate(c) {
+    this._sectionIntro(c, __ertr("AI 与翻译"), __ertr("Включите только нужные сетевые функции. Обычное чтение остаётся офлайн."));
     new Setting(c)
       .setName(__ertr("AI 辅助阅读"))
       .setDesc(__ertr("选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。"))
@@ -10639,6 +10806,7 @@ const SettingsTab = class extends PluginSettingTab {
   }
   // ── Данные ────────────────────────────────────────────────────────────────
   _tabData(c) {
+    this._sectionIntro(c, __ertr("Данные"), __ertr("Здесь находятся книги, прогресс и синхронизация. Обычно менять ничего не нужно."));
     new Setting(c).setName(__ertr("Папка с книгами")).setDesc(__ertr("Пусто = весь vault")).addText((t) => {
       t.setPlaceholder("0. Files/3. PDF-files").setValue(this.plugin.settings.booksFolder);
       attachPathInput(this.app, t, async (v) => {
@@ -10771,6 +10939,7 @@ const SettingsTab = class extends PluginSettingTab {
   }
   // ── О плагине ─────────────────────────────────────────────────────────────
   _tabAbout(c) {
+    this._sectionIntro(c, __ertr("О плагине"), __ertr("Справка, обновления и связь с автором."));
     // The language picker used to live here, at the bottom of the last tab.
     // It now sits above the tab bar, visible from every screen — see display().
     new Setting(c)

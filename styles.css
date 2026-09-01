@@ -1,4 +1,4 @@
-.er-view { display:flex; flex-direction:column; height:100%; background:var(--er-ui,#f0ede5); overflow:hidden; position:relative; padding:0!important; margin:0!important; box-sizing:border-box; }
+.er-view { display:flex; flex-direction:column; height:100%; background:var(--background-primary); overflow:hidden; position:relative; padding:0!important; margin:0!important; box-sizing:border-box; }
 .er-content img { max-width:100%; height:auto; display:block; margin:8px auto; break-inside:avoid; }
 .er-content figure { break-inside:avoid; margin:8px auto; text-align:center; }
 .er-content figure img { margin:0 auto; }
@@ -56,11 +56,11 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 }
 .er-pbar { position:absolute; top:0; left:0; right:0; height:3px; background:rgba(0,0,0,.06); z-index:20; pointer-events:none; }
 .er-pbar-fill { height:100%; width:0%; background:linear-gradient(90deg,var(--er-accent,#5548d9),color-mix(in srgb,var(--er-accent) 60%,#fff)); border-radius:0 2px 2px 0; transition:width .5s cubic-bezier(.4,0,.2,1); }
-.er-top { height:50px; display:flex; align-items:center; padding:0 8px; gap:4px; background:var(--er-ui,#f0ede5); border-bottom:1px solid var(--er-border,#ddd9ce); flex-shrink:0; z-index:10; transition:background .25s; }
-.er-top-title { flex:1; text-align:center; font-size:14px; font-weight:600; font-family:'Inter',system-ui,sans-serif; color:var(--er-text,#1a1a2e); opacity:.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.er-top { height:50px; display:flex; align-items:center; padding:0 8px; gap:4px; background:var(--background-primary); border-bottom:1px solid var(--background-modifier-border); flex-shrink:0; z-index:10; transition:background .25s; }
+.er-top-title { flex:1; text-align:center; font-size:14px; font-weight:600; font-family:'Inter',system-ui,sans-serif; color:var(--text-normal); opacity:.72; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .er-top-right { display:flex; gap:2px; align-items:center; }
-.er-ibtn { width:38px; height:38px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; color:var(--er-text); opacity:.45; transition:opacity .15s,background .13s,transform .1s; flex-shrink:0; }
-.er-ibtn:hover { opacity:.9; background:rgba(0,0,0,.06); }
+.er-ibtn { width:38px; height:38px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; color:var(--text-muted); opacity:.72; transition:opacity .15s,background .13s,transform .1s; flex-shrink:0; }
+.er-ibtn:hover { opacity:1; background:var(--background-modifier-hover); }
 .er-ibtn:active { transform:scale(.87); }
 .er-ibtn svg { width:18px; height:18px; }
 .er-area { flex:1; overflow:hidden; position:relative; min-height:0; display:flex; align-items:stretch; margin:12px 16px 14px; border:1px solid var(--er-border,#ddd9ce); border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.10); background:var(--er-bg,#faf8f3); box-sizing:border-box; }
@@ -77,17 +77,17 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-spin { width:36px; height:36px; border:3px solid rgba(0,0,0,.1); border-top-color:var(--er-accent,#5548d9); border-radius:50%; animation:er-spin .7s linear infinite; }
 @keyframes er-spin { to { transform:rotate(360deg); } }
 .er-loading-text { font-size:13px; opacity:.65; }
-.er-bot { height:50px; display:flex; align-items:center; padding:0 6px; gap:2px; background:var(--er-ui); border-top:1px solid var(--er-border); flex-shrink:0; z-index:10; transition:background .25s; }
-.er-navbtn { width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; color:var(--er-text); opacity:.4; transition:opacity .15s,background .13s,transform .1s; flex-shrink:0; }
-.er-navbtn:hover { opacity:1; background:rgba(0,0,0,.06); }
+.er-bot { height:50px; display:flex; align-items:center; padding:0 6px; gap:2px; background:var(--background-primary); border-top:1px solid var(--background-modifier-border); flex-shrink:0; z-index:10; transition:background .25s; }
+.er-navbtn { width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; color:var(--text-muted); opacity:.72; transition:opacity .15s,background .13s,transform .1s; flex-shrink:0; }
+.er-navbtn:hover { opacity:1; background:var(--background-modifier-hover); }
 .er-navbtn:active { transform:scale(.88); }
 .er-navbtn svg { width:22px; height:22px; }
 .er-bot-center { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; min-width:0; padding:0 8px; }
-.er-loc { font-family:'Inter',system-ui,sans-serif; font-size:11px; color:var(--er-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center; }
+.er-loc { font-family:'Inter',system-ui,sans-serif; font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center; }
 .er-loc-clickable { cursor:pointer; border-radius:5px; padding:1px 6px; transition:background .13s,color .13s; }
-.er-loc-clickable:hover { color:var(--er-text); background:rgba(0,0,0,.06); }
+.er-loc-clickable:hover { color:var(--text-normal); background:var(--background-modifier-hover); }
 .er-gotopage-input { width:100%; box-sizing:border-box; margin:2px 0 14px; padding:8px 10px; font-size:15px; border:1px solid var(--background-modifier-border); border-radius:8px; background:var(--background-primary); color:var(--text-normal); }
-.er-pct { font-family:'Inter',system-ui,sans-serif; font-size:14px; font-weight:700; color:var(--er-accent); }
+.er-pct { font-family:'Inter',system-ui,sans-serif; font-size:14px; font-weight:700; color:var(--text-accent); }
 .er-overlay { position:absolute; inset:0; background:rgba(0,0,0,.35); z-index:30; opacity:0; pointer-events:none; transition:opacity .2s; backdrop-filter:blur(3px); }
 .er-overlay.er-overlay-on { opacity:1; pointer-events:all; }
 .er-panel { position:absolute; top:0; right:0; bottom:0; width:300px; background:var(--er-ui); border-left:1px solid var(--er-border); z-index:40; overflow-y:auto; display:none; flex-direction:column; }
@@ -280,9 +280,9 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
      bottom edges of the book stopped being findable at all. A page needs a top
      and a bottom. So: a whisper of the panel colour over the page, and a real
      line, which is enough to bound the text without becoming two stripes. */
-  .er-top, .er-bot { background:color-mix(in srgb, var(--er-ui) 55%, var(--er-bg)); }
-  .er-top { border-bottom:1px solid var(--er-border); }
-  .er-bot { border-top:1px solid var(--er-border); }
+  .er-top, .er-bot { background:var(--background-primary); }
+  .er-top { border-bottom:1px solid var(--background-modifier-border); }
+  .er-bot { border-top:1px solid var(--background-modifier-border); }
   /* Give the book its name back. The top bar had the title squeezed to
      "Выготски…" while the timer pill held a 22px reset button used about once a
      session. On a phone the pill keeps only the state and the clock; the reset
@@ -618,44 +618,50 @@ body:not(.is-mobile) .er-bot {
 .er-pan-adv-body { overflow:hidden; }
 .er-pan-adv.er-pan-adv-on { grid-template-rows:1fr; }
 
-/* ── Plugin settings: tabs ─────────────────────────────────────────────────── */
-/* Same folder-tab construction Commander uses: the active tab is bordered on all
-   sides, but its bottom border is painted the content background so the tab and
-   the page below it read as one surface. */
-.er-set-tabs { display:flex; align-items:flex-end; margin:4px 0 22px;
-  border-bottom:2px solid var(--background-modifier-border);
+/* ── Plugin settings ───────────────────────────────────────────────────────── */
+.er-settings-root { max-width: 820px; }
+.er-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--size-4-4);
+  margin: 2px 0 var(--size-4-5);
+}
+.er-settings-head-text h2 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+.er-settings-head-text div { margin-top: 5px; color: var(--text-muted); font-size: var(--font-ui-small); }
+.er-settings-language { flex: 0 0 auto; min-width: 112px; }
+.er-set-tabs { display:flex; gap:4px; margin:0 0 24px; padding:4px;
+  border:1px solid var(--background-modifier-border);
+  border-radius:12px; background:var(--background-secondary);
   overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
 .er-set-tabs::-webkit-scrollbar { display:none; }
-.er-set-tab { padding:6px 10px; font-size:14px; font-weight:600; cursor:pointer;
-  white-space:nowrap; color:var(--text-muted);
-  border-left:2px solid transparent; border-right:2px solid transparent;
-  transition:color .13s; }
-.er-set-tab:first-child { margin-left:6px; }
-.er-set-tab:hover { color:var(--text-normal); }
-.er-set-tab-on { color:var(--text-normal); transform:translateY(2px); border-radius:2px;
-  border:2px solid var(--background-modifier-border);
-  border-bottom-color:var(--background-primary); }
+.er-set-tab { flex:1 0 auto; padding:8px 11px; font-size:13px; font-weight:600; cursor:pointer;
+  white-space:nowrap; text-align:center; color:var(--text-muted); border-radius:8px;
+  transition:color .13s, background .13s, box-shadow .13s; }
+.er-set-tab:hover { color:var(--text-normal); background:var(--background-modifier-hover); }
+.er-set-tab-on { color:var(--text-normal); background:var(--background-primary);
+  box-shadow:0 1px 3px rgba(0,0,0,.10); }
+.er-settings-intro { margin: 0 0 20px; }
+.er-settings-intro h2 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+.er-settings-intro div { margin-top: 5px; color: var(--text-muted); font-size: var(--font-ui-small); line-height: 1.5; }
 .er-set-body .setting-item:first-child { border-top:none; padding-top:0; }
-/* Section titles inside a settings tab. Small, quiet and letter-spaced rather
-   than another line of ordinary text: their job is to break a long list into
-   groups you can skim, not to compete with the setting names under them. */
+.er-set-body .setting-item { padding-top: 14px; padding-bottom: 14px; }
+.er-set-body .setting-item-description { max-width: 560px; line-height: 1.5; }
 .er-set-body h3 {
-  margin: 28px 0 4px;
-  padding-bottom: 6px;
+  margin: 28px 0 2px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--background-modifier-border);
-  font-size: var(--font-ui-smaller);
+  font-size: var(--font-ui-small);
   font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-normal);
 }
 .er-set-body h3:first-child { margin-top: 4px; }
-/* Phones: a row of tabs would be unusable, so stack them. */
-.is-mobile .er-set-tabs { flex-direction:column; align-items:stretch; border:none; gap:2px; }
-.is-mobile .er-set-tab { border:none !important; transform:none !important;
-  border-radius:7px; padding:9px 12px; }
-.is-mobile .er-set-tab:first-child { margin-left:0; }
-.is-mobile .er-set-tab-on { background:var(--background-modifier-hover); }
+.is-mobile .er-settings-head { align-items: stretch; flex-direction: column; }
+.is-mobile .er-settings-language { width: 100%; }
+.is-mobile .er-set-tabs { margin-bottom:18px; }
+.is-mobile .er-set-tab { flex:0 0 auto; padding:8px 12px; }
 
 /* Per-book settings, now living in the reading panel instead of the help dialog.
    They keep their markup but must wear the reader's theme, not Obsidian's. */
@@ -1565,11 +1571,20 @@ body:not(.is-mobile) .er-bot {
   max-width: 280px;
   line-height: 1.5;
 }
-.er-ai-modal .er-ai-chip {
+.er-ai-prompts {
+  width: min(100%, 420px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--size-4-1);
   margin-top: var(--size-4-2);
+}
+.er-ai-modal .er-ai-chip {
+  margin: 0;
   padding: var(--size-2-3) var(--size-4-3);
-  border-radius: var(--radius-l);
+  min-height: 36px;
+  border-radius: var(--radius-m);
   font-size: var(--font-ui-small);
+  text-align: left;
   cursor: pointer;
   transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -1595,12 +1610,39 @@ body:not(.is-mobile) .er-bot {
   white-space: pre-wrap;
 }
 .er-ai-group { align-self: stretch; display: flex; flex-direction: column; gap: 2px; }
+.er-ai-reason {
+  margin: 0 0 var(--size-4-1);
+  padding: var(--size-2-3) var(--size-4-2);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  font-size: var(--font-ui-smaller);
+}
+.er-ai-reason-hidden { display: none; }
+.er-ai-reason summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-muted);
+  user-select: none;
+}
+.er-ai-reason-text {
+  max-height: 28vh;
+  overflow-y: auto;
+  margin-top: var(--size-2-3);
+  padding-top: var(--size-2-3);
+  border-top: 1px solid var(--background-modifier-border);
+  white-space: pre-wrap;
+  line-height: 1.55;
+  color: var(--text-faint);
+}
 .er-ai-msg-ai {
   max-width: 100%;
   border-bottom-left-radius: var(--radius-s);
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
 }
+.er-ai-msg-streaming { white-space: pre-wrap; }
 .er-ai-msg-err { color: var(--text-error); border-color: var(--text-error); }
 .er-ai-msg-ai h1, .er-ai-msg-ai h2, .er-ai-msg-ai h3, .er-ai-msg-ai h4 {
   font-size: var(--font-ui-medium);
@@ -1727,6 +1769,7 @@ body:not(.is-mobile) .er-bot {
   .er-ai-modal .er-ai-input { height: 40px; }
   .er-ai-modal .er-ai-send { width: 40px; height: 40px; }
   .er-ai-modal .er-ai-act { padding: 6px 8px; }
+  .er-ai-prompts { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   .er-ai-typing-dot, .er-ai-msg { animation: none; opacity: 1; }
