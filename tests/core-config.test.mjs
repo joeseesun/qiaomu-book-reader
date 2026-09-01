@@ -203,9 +203,12 @@ test("reading themes migrate legacy names and meet WCAG AA contrast", () => {
   }
 });
 
-test("public README no longer advertises Elton products", () => {
+test("public README credits the upstream project without advertising legacy services", () => {
   const readme = fs.readFileSync(new URL("../README.md", import.meta.url), "utf8");
-  assert.doesNotMatch(readme, /Elton/i);
+  assert.doesNotMatch(readme, /Elton AI|eltonlabs\.org|ai\.eltonlabs/i);
+  assert.match(readme, /https:\/\/github\.com\/swayinfo\/elton-reader/);
+  assert.match(readme, /感谢 Elton Reader 原作者 Elton Labs 及所有贡献者/);
+  assert.match(readme, /Original copyright notices and third-party license information remain/);
   assert.match(readme, /DeepSeek/);
   assert.match(readme, /Codex CLI/);
   assert.match(readme, /Claude Code CLI/);
