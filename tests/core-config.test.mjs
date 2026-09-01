@@ -13,6 +13,7 @@ import {
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
+import { isChineseSourceText, translateUiText } from "../src/i18n-runtime.js";
 import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
 
 test("JSON stores reject arrays and invalid content instead of treating them as empty data", () => {
@@ -79,6 +80,22 @@ test("runtime diagnostics use the maintained plugin identity", () => {
   assert.doesNotMatch(source, /\bEltonReader\b/);
   assert.match(source, /const QiaomuBookReader = class extends Plugin/);
   assert.match(source, /export default QiaomuBookReader/);
+});
+
+test("Russian UI never leaks Chinese-first source keys", () => {
+  const english = {
+    "AI 解读": "AI reading",
+    "Плагин поддерживается 向阳乔木": "The plugin is maintained by Qiaomu",
+  };
+  assert.equal(isChineseSourceText("AI 解读"), true);
+  assert.equal(isChineseSourceText("Плагин поддерживается 向阳乔木"), false);
+  assert.equal(translateUiText("zh", "AI 解读", english, {}), "AI 解读");
+  assert.equal(translateUiText("en", "AI 解读", english, {}), "AI reading");
+  assert.equal(translateUiText("ru", "AI 解读", english, {}), "AI reading");
+  assert.equal(
+    translateUiText("ru", "Плагин поддерживается 向阳乔木", english, {}),
+    "Плагин поддерживается 向阳乔木",
+  );
 });
 
 function luminance(hex) {

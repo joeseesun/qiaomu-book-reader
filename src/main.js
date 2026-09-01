@@ -13,6 +13,7 @@ import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody
 import { createOpenAiSseParser } from "./ai-stream.js";
 import { cliReasoningEfforts, probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
+import { translateUiText } from "./i18n-runtime.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
 import { cloneJson, createSerialTaskQueue, readJsonRecordStore } from "./storage.js";
 
@@ -607,11 +608,7 @@ let __erLang = "zh";
 function __erSetLang(v) { __erLang = v || "zh"; }
 function __ertr(s){
   const lang = __erLang || 'ru';
-  let out = lang === "zh" && ER_ZH_CN[s] != null
-    ? ER_ZH_CN[s]
-    : lang === "en" && __erEN[s] != null
-      ? __erEN[s]
-      : s;
+  let out = translateUiText(lang, s, __erEN, ER_ZH_CN);
   if (arguments.length>1){ var a=arguments; out = String(out).replace(/\{(\d+)\}/g, function(m,d){ var v=a[(+d)+1]; return v==null?m:v; }); }
   return out;
 }

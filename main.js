@@ -56478,6 +56478,24 @@ for (const [key, value] of Object.entries(ER_ZH_CN)) {
   ER_ZH_CN[key] = String(value).replaceAll("\u56FE\u4E66\u9986", "\u4E66\u5E93").replaceAll("\u5B58\u50A8\u5E93", "\u4ED3\u5E93").replaceAll("\u5B58\u50A8\u7A7A\u95F4", "\u4ED3\u5E93").replaceAll("\u8BFB\u4E66\u7B14\u8BB0", "\u9605\u8BFB\u7B14\u8BB0").replaceAll("\u56FE\u4E66\u7B14\u8BB0", "\u9605\u8BFB\u7B14\u8BB0").replaceAll("\u4EAE\u70B9", "\u5212\u7EBF").replaceAll("\u8BC4\u8BBA", "\u6279\u6CE8").replaceAll("\u5F15\u6587", "\u6458\u5F55");
 }
 
+// src/i18n-runtime.js
+var HAN = /[\u3400-\u9fff]/;
+var CYRILLIC = /[А-Яа-яЁё]/;
+function isChineseSourceText(value) {
+  const text = String(value || "");
+  return HAN.test(text) && !CYRILLIC.test(text);
+}
+function translateUiText(language, source, english, chinese) {
+  var _a2, _b, _c;
+  const text = String(source != null ? source : "");
+  if (language === "zh") return (_a2 = chinese == null ? void 0 : chinese[text]) != null ? _a2 : text;
+  if (language === "en") return (_b = english == null ? void 0 : english[text]) != null ? _b : text;
+  if (language === "ru" && isChineseSourceText(text)) {
+    return (_c = english == null ? void 0 : english[text]) != null ? _c : text;
+  }
+  return text;
+}
+
 // src/reader-themes.js
 var READER_THEMES = {
   auto: {
@@ -57062,7 +57080,7 @@ function __erSetLang(v) {
 }
 function __ertr(s) {
   const lang = __erLang || "ru";
-  let out = lang === "zh" && ER_ZH_CN[s] != null ? ER_ZH_CN[s] : lang === "en" && __erEN[s] != null ? __erEN[s] : s;
+  let out = translateUiText(lang, s, __erEN, ER_ZH_CN);
   if (arguments.length > 1) {
     var a = arguments;
     out = String(out).replace(/\{(\d+)\}/g, function(m, d) {

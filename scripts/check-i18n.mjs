@@ -75,6 +75,10 @@ if (!source.includes('let __erLang = "zh"') || !source.includes('language: "zh"'
 if (source.includes("getLanguage")) {
   errors.push("The plugin still derives its default language from Obsidian instead of defaulting to Chinese");
 }
+if (!source.includes('import { translateUiText } from "./i18n-runtime.js"')
+  || !source.includes("translateUiText(lang, s, __erEN, ER_ZH_CN)")) {
+  errors.push("Russian UI does not use the safe fallback for Chinese-first source strings");
+}
 if (!/[\u3400-\u9fff]/.test(manifest.description || "")) {
   errors.push("manifest.json description is not Chinese");
 }
