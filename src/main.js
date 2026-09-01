@@ -9400,7 +9400,8 @@ const LibraryModal = class extends Modal {
     const pct = (_a = prog == null ? void 0 : prog.percent) != null ? _a : 0;
     const card = grid.createDiv("er-lib-card");
     card.setAttribute("role", "group");
-    card.setAttribute("aria-label", file.basename);
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("aria-label", __ertr("Открыть книгу: {0}", file.basename));
     const cover = card.createDiv("er-lib-cover");
     const fits = ((_b = this.plugin.settings.coverFits) != null ? _b : (this.plugin.settings.coverFits = {}));
     if (fits[file.path] === "fill") cover.addClass("er-fit-fill");
@@ -9412,11 +9413,6 @@ const LibraryModal = class extends Modal {
       this.close();
       void this.plugin.openFile(file);
     };
-    const openCover = cover.createEl("button", {
-      cls: "er-lib-open-cover",
-      attr: { type: "button", "aria-label": __ertr("Открыть книгу: {0}", file.basename) },
-    });
-    openCover.addEventListener("click", openBook);
     // Hover button: switch this cover between "\u0432\u043F\u0438\u0441\u0430\u0442\u044C" (whole cover visible,
     // contain) and "\u0437\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u044C" (fill the box, cover). Applied as inline
     // background-size so it survives theme CSS.
@@ -9441,9 +9437,7 @@ const LibraryModal = class extends Modal {
       s.createDiv("er-lib-strip-fill").style.width = `${pct}%`;
     }
     const info = card.createDiv("er-lib-info");
-    const titleButton = info.createEl("button", { cls: "er-lib-book-title er-lib-title-button", attr: { type: "button" } });
-    titleButton.setText(file.basename);
-    titleButton.addEventListener("click", openBook);
+    info.createDiv("er-lib-book-title").setText(file.basename);
     const meta = info.createDiv("er-lib-book-meta");
     if (prog == null ? void 0 : prog.lastRead) {
       meta.setText(`${pct}% \xB7 ${new Date(prog.lastRead).toLocaleDateString(__erLocale(), { day: "numeric", month: "short" })}`);
@@ -9470,6 +9464,13 @@ const LibraryModal = class extends Modal {
     moreBtn.setAttribute("aria-label", __ertr("Действия с книгой"));
     svgIcon(moreBtn, "more");
     moreBtn.addEventListener("click", bookMenu);
+    card.addEventListener("click", openBook);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openBook();
+      }
+    });
   }
   async loadThumb(file, coverEl, ph) {
     // A cover named in the book's note wins over everything.

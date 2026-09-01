@@ -65262,7 +65262,8 @@ var LibraryModal = class extends import_obsidian.Modal {
     const pct = (_a2 = prog == null ? void 0 : prog.percent) != null ? _a2 : 0;
     const card = grid.createDiv("er-lib-card");
     card.setAttribute("role", "group");
-    card.setAttribute("aria-label", file.basename);
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("aria-label", __ertr("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u043D\u0438\u0433\u0443: {0}", file.basename));
     const cover = card.createDiv("er-lib-cover");
     const fits = (_b = this.plugin.settings.coverFits) != null ? _b : this.plugin.settings.coverFits = {};
     if (fits[file.path] === "fill") cover.addClass("er-fit-fill");
@@ -65274,11 +65275,6 @@ var LibraryModal = class extends import_obsidian.Modal {
       this.close();
       void this.plugin.openFile(file);
     };
-    const openCover = cover.createEl("button", {
-      cls: "er-lib-open-cover",
-      attr: { type: "button", "aria-label": __ertr("\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u043D\u0438\u0433\u0443: {0}", file.basename) }
-    });
-    openCover.addEventListener("click", openBook);
     const fitBtn = cover.createEl("button", { cls: "er-lib-fitbtn", attr: { type: "button" } });
     fitBtn.setAttribute("aria-label", __ertr("\u0412\u0438\u0434 \u043E\u0431\u043B\u043E\u0436\u043A\u0438"));
     const applyFit = () => {
@@ -65301,9 +65297,7 @@ var LibraryModal = class extends import_obsidian.Modal {
       s.createDiv("er-lib-strip-fill").style.width = `${pct}%`;
     }
     const info2 = card.createDiv("er-lib-info");
-    const titleButton = info2.createEl("button", { cls: "er-lib-book-title er-lib-title-button", attr: { type: "button" } });
-    titleButton.setText(file.basename);
-    titleButton.addEventListener("click", openBook);
+    info2.createDiv("er-lib-book-title").setText(file.basename);
     const meta = info2.createDiv("er-lib-book-meta");
     if (prog == null ? void 0 : prog.lastRead) {
       meta.setText(`${pct}% \xB7 ${new Date(prog.lastRead).toLocaleDateString(__erLocale(), { day: "numeric", month: "short" })}`);
@@ -65326,6 +65320,13 @@ var LibraryModal = class extends import_obsidian.Modal {
     moreBtn.setAttribute("aria-label", __ertr("\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0441 \u043A\u043D\u0438\u0433\u043E\u0439"));
     svgIcon(moreBtn, "more");
     moreBtn.addEventListener("click", bookMenu);
+    card.addEventListener("click", openBook);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openBook();
+      }
+    });
   }
   async loadThumb(file, coverEl, ph) {
     const own = this.coverFromBookNote(file);

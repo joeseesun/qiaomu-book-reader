@@ -198,8 +198,7 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
    timing-proof). No <img> element exists anywhere → image-mauling themes
    (Cupertino/Encore) have nothing to grab. */
 .er-lib-cover { position:relative; width:100%; aspect-ratio:2/3; overflow:hidden; border-radius:8px; background-color:var(--er-lib-border,#ddd9ce); background-repeat:no-repeat; background-position:center top; border:1px solid color-mix(in srgb,var(--er-lib-border) 80%,transparent); box-shadow:0 5px 16px rgba(37,31,22,.12); transition:transform .2s ease,box-shadow .2s ease; }
-.er-lib-open-cover{position:absolute;inset:0;z-index:2;width:100%;height:100%;min-height:0;padding:0!important;border:0!important;border-radius:inherit;box-shadow:none!important;background:transparent!important;cursor:pointer;appearance:none}
-.er-lib-open-cover:focus-visible{outline:3px solid var(--er-lib-accent);outline-offset:-3px}
+.er-lib-card:focus-visible{outline:2px solid var(--er-lib-accent);outline-offset:4px;border-radius:8px}
 .er-lib-card:hover .er-lib-cover { transform:translateY(-4px); box-shadow:0 14px 30px rgba(37,31,22,.19); }
 .er-lib-ph { position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:linear-gradient(145deg,var(--er-lib-card) 0%,var(--er-lib-border) 100%); }
 .er-lib-ph-ext { font-size:10px; font-weight:800; letter-spacing:.1em; color:var(--er-lib-accent,#5548d9); background:color-mix(in srgb,var(--er-lib-accent) 10%,transparent); padding:3px 8px; border-radius:4px; border:1px solid color-mix(in srgb,var(--er-lib-accent) 28%,transparent); }
@@ -221,8 +220,6 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-lib-strip-fill { height:100%; background:var(--er-lib-accent,#5548d9); }
 .er-lib-info { padding:11px 2px 0; }
 .er-lib-book-title { font-size:13px; font-weight:600; color:var(--er-lib-text,#1a1a2e); line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-bottom:5px; }
-.er-lib-title-button{width:100%;min-height:0;padding:0!important;border:0!important;box-shadow:none!important;background:transparent!important;text-align:left;cursor:pointer;font-family:inherit;appearance:none}
-.er-lib-title-button:focus-visible{outline:2px solid var(--er-lib-accent);outline-offset:2px;border-radius:3px}
 .er-lib-book-meta { font-size:11px; color:var(--er-lib-muted,#8a8678); font-weight:450; }
 .er-lib-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
 .er-lib-empty-icon { width:56px; height:56px; display:flex; color:var(--er-lib-muted); opacity:.8; }
