@@ -84,7 +84,9 @@ if (!/[\u3400-\u9fff]/.test(packageJson.description || "")) {
 if (!source.includes('"Book Reader обновлён до {0}": "Qiaomu Book Reader has been updated to {0}"') && !ER_ZH_CN["Book Reader обновлён до {0}"].startsWith("Qiaomu Book Reader")) {
   errors.push("The update notice is not branded and translated for Chinese users");
 }
-if (!source.includes('.addOption("zh", "简体中文")')) errors.push("Missing Simplified Chinese language option");
+if (!source.includes('.addOption("zh", "简体中文")') && !source.includes('["zh", "简体中文"]')) {
+  errors.push("Missing Simplified Chinese language option");
+}
 if (!source.includes("Object.values(READER_FONTS)")) errors.push("Font controls do not use the unified font registry");
 if (!source.includes('id: "sourceHanSerif"') || !source.includes('id: "sourceHanSans"')) {
   errors.push("Source Han Serif and Source Han Sans are missing from the reader font registry");
