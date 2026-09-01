@@ -1,36 +1,38 @@
 # Qiaomu Book Reader
 
-在 Obsidian 里直接阅读 EPUB、FB2 和 PDF，把划线、批注、阅读进度沉淀为真正属于你的 Markdown 阅读笔记。
+**中文** · [English](#english) · [下载最新版](https://github.com/joeseesun/qiaomu-book-reader/releases/latest) · [问题反馈](https://github.com/joeseesun/qiaomu-book-reader/issues)
 
-[English](#english) · [问题反馈](https://github.com/joeseesun/qiaomu-book-reader/issues)
+> 在 Obsidian 中阅读 EPUB、FB2 和 PDF，把进度、划线和批注沉淀为自己的 Markdown 阅读笔记。
+> Read EPUB, FB2 and PDF in Obsidian and keep progress, highlights and annotations in your own Markdown notes.
 
-> 中文优先、数据本地、每本书一篇阅读笔记。
-> Chinese-first, local-first, with one Markdown reading note per book.
+中文优先、本地优先、每本书一篇阅读笔记。阅读本身完全离线，AI 能力由你选择服务并主动启用。
 
-## 适合谁
+## 你会得到什么
 
-如果你希望电子书、阅读进度和笔记都留在自己的 Obsidian 仓库里，而不是被锁在某个阅读平台中，这个插件就是为这种工作流设计的。
-
-## 主要功能
-
-- 在 Obsidian 中阅读 EPUB、FB2 和 PDF，支持分页、滚动、单页与双页。
-- 中文优先界面，内置系统黑体、宋体、楷体、霞鹜文楷、思源宋体和思源黑体等字体选项。
-- 选中文本后就近完成三色划线、复制、批注和创建摘录笔记。
-- 每本书自动建立一份专用阅读笔记，集中保存划线与批注。
-- 阅读笔记中的 `↩` 图标可精确跳回原书段落，不夹带“返回原文”等干扰文字。
-- 阅读进度自动保存；书籍、进度、划线与笔记随 Obsidian 仓库一起同步。
-- 书库按阅读状态、文件夹和主题筛选，并支持自定义封面。
+| 能力 | 实际效果 |
+| --- | --- |
+| 内置阅读器 | EPUB、FB2、PDF，支持分页、滚动、单页与双页 |
+| 中文排版 | 系统黑体、宋体、楷体、霞鹜文楷、思源宋体、思源黑体等字体 |
+| 阅读主题 | 跟随 Obsidian、纸白、暖纸、青瓷、夜间和电子墨水 |
+| 就近批注 | 选中文字后完成三色划线、复制、评论和创建摘录笔记 |
+| 专用阅读笔记 | 每本书自动关联一篇 Markdown 笔记，汇总划线与评论 |
+| 精确返回原文 | 笔记中的 `↩` 可跳回原书对应段落 |
+| 自动进度 | 翻页、滚动和关闭书籍时自动保存，不需要手动点击保存 |
+| 可选 AI 阅读 | 支持 DeepSeek、Kimi、千问、智谱、MiniMax、硅基流动、豆包、OpenRouter、OpenAI、Ollama 和 LM Studio |
 
 ## 安装
 
-### 使用 BRAT
+### 使用 BRAT（推荐）
 
 1. 在 Obsidian 第三方插件市场安装 **BRAT**。
 2. 打开 BRAT → **Add beta plugin**。
 3. 输入 `joeseesun/qiaomu-book-reader`。
 4. 在“第三方插件”中启用 **Qiaomu Book Reader**。
 
-### 手动安装
+之后的新版本会通过 GitHub Releases 由 BRAT 持续更新。
+
+<details>
+<summary>手动安装</summary>
 
 从 [最新版本](https://github.com/joeseesun/qiaomu-book-reader/releases/latest) 下载 `main.js`、`manifest.json` 和 `styles.css`，放入：
 
@@ -38,28 +40,39 @@
 <你的仓库>/.obsidian/plugins/qiaomu-book-reader/
 ```
 
-重新加载 Obsidian 后启用插件。插件 ID 为 `qiaomu-book-reader`；BRAT 会按这个 ID 安装到独立目录，并从本仓库的 GitHub Releases 持续更新。
+重新加载 Obsidian 后启用插件。插件 ID 为 `qiaomu-book-reader`。
 
-如果你曾安装原版 `elton-reader-books`，请先停用原插件，再安装本插件。阅读进度与划线文件仍保存在仓库中；需要沿用旧设置时，可将旧目录中的 `data.json` 复制到新目录。
+</details>
+
+## AI 辅助阅读
+
+AI 默认关闭。启用后，可以围绕选中的原文解释、翻译、提炼关键概念并继续追问。
+
+- 国产模型：DeepSeek、Kimi、通义千问、智谱 GLM、MiniMax。
+- 聚合服务：硅基流动、豆包/火山方舟、OpenRouter。
+- 国际服务：OpenAI。
+- 本地模型：Ollama、LM Studio。
+- 高级配置：任意 OpenAI 兼容接口。
+
+API 密钥保存在 Obsidian 的密钥库中，不会写入插件 `data.json`。设置页可发送一条不含书籍内容的最短消息测试连接。
 
 ## 阅读笔记如何工作
 
-首次打开一本书时，插件会创建或关联一份带有 `type: reading-note` 标记的专用 Markdown 笔记。之后的新划线和批注自动汇总到“划线与批注”章节；插件不会仅凭书名误把人物、项目或模板笔记当成阅读笔记。
+首次打开一本书时，插件会创建或关联一份带有 `type: reading-note` 标记的专用 Markdown 笔记。之后的新划线和评论自动汇总到“划线与批注”章节；插件不会仅凭书名误把人物、项目或模板笔记当成阅读笔记。
 
-批注以普通正文显示在摘录下方，不使用引用样式。每条摘录末尾的 `↩` 是返回原书位置的链接。
+评论以普通正文显示在引文下方，不使用引用样式。每条引文末尾的 `↩` 是返回原书位置的链接。
 
 ## 隐私与联网
 
-阅读、划线、批注、笔记和进度完全在本地工作，无需账号，也没有遥测、分析或广告。
+书籍、进度、划线、评论和笔记均在本地工作，无需账号，没有遥测、分析或广告。
 
-只有两项可选功能会联网，并且默认关闭：
-
-| 功能 | 发送内容 | 服务 |
+| 可选功能 | 发送内容 | 目标服务 |
 | --- | --- | --- |
-| 翻译所选文字 | 仅当前选中的段落 | Google Translate |
-| AI 解析段落 | 仅当前选中的段落和书名 | 你选择的 Elton AI、OpenRouter、OpenAI，或本地 Ollama / LM Studio |
+| 翻译所选文字 | 当前选中的段落 | Google Translate |
+| AI 辅助阅读 | 当前选中的段落、书名和你的问题 | 你明确选择并配置的模型服务 |
+| 本地 AI | 当前选中的段落、书名和你的问题 | 本机 Ollama 或 LM Studio，不离开设备 |
 
-API 密钥保存在插件的本地设置中。如果仓库参与同步，对应配置文件也可能一起同步。
+两项联网功能均默认关闭。插件不会自动发送整本书或整章内容。
 
 ## 从源码构建
 
@@ -72,26 +85,30 @@ npx eslint src/
 
 构建产物是仓库根目录的 `main.js`。
 
-## 作者与致谢
+## 作者
 
-Qiaomu Book Reader 由 [向阳乔木](https://qiaomu.ai) 改造与维护：
+Qiaomu Book Reader 由 [向阳乔木](https://qiaomu.ai) 维护：
 
 - X：[@vista8](https://x.com/vista8)
 - GitHub：[@joeseesun](https://github.com/joeseesun)
 - 乔木推荐：[tuijian.qiaomu.ai](https://tuijian.qiaomu.ai)
 
-本项目基于 Elton Labs 的 [swayinfo/elton-reader](https://github.com/swayinfo/elton-reader) 改造。感谢原作者和所有贡献者。项目继续采用 MIT License，并保留原版权声明。
+第三方开源软件、上游来源和版权声明见 [NOTICE.md](NOTICE.md) 与 [LICENSE](LICENSE)。
 
-## English
+---
 
-Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. It keeps highlights, annotations, automatic reading progress and one dedicated Markdown reading note per book inside your own vault.
+<a name="english"></a>
 
-Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest). The plugin ID is `qiaomu-book-reader`.
+# English
 
-The reader works offline. Optional translation and AI passage analysis are off by default and send only the selected passage to the service you explicitly configure. See the Chinese section above for the full feature and privacy notes.
+Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. It keeps automatic reading progress, highlights, annotations, and one dedicated Markdown reading note per book inside your vault.
 
-Maintained by [Qiaomu](https://qiaomu.ai). Based on the MIT-licensed [Elton Reader](https://github.com/swayinfo/elton-reader) project by Elton Labs, with thanks to its author and contributors.
+Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest).
+
+Reading works fully offline. Optional AI reading assistance supports DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
+
+Maintained by [Qiaomu](https://qiaomu.ai). Third-party notices and upstream attribution are preserved in [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
 
 ## License
 
-[MIT](LICENSE) · Third-party notices are listed in [NOTICE.md](NOTICE.md).
+[MIT](LICENSE)

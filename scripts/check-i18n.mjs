@@ -41,12 +41,14 @@ function translatedLiterals(code) {
 }
 
 const english = readEnglishDictionary(source);
-const missing = Object.keys(english).filter((key) => ER_ZH_CN[key] == null || ER_ZH_CN[key] === "");
+const isChineseSource = (key) => /[\u3400-\u9fff]/.test(key);
+const chineseValue = (key) => isChineseSource(key) ? key : ER_ZH_CN[key];
+const missing = Object.keys(english).filter((key) => !isChineseSource(key) && (ER_ZH_CN[key] == null || ER_ZH_CN[key] === ""));
 const usedLiterals = translatedLiterals(source);
 const missingUsedEnglish = usedLiterals.filter((key) => english[key] == null);
-const missingUsedChinese = usedLiterals.filter((key) => ER_ZH_CN[key] == null || ER_ZH_CN[key] === "");
+const missingUsedChinese = usedLiterals.filter((key) => !isChineseSource(key) && (ER_ZH_CN[key] == null || ER_ZH_CN[key] === ""));
 const placeholderErrors = Object.keys(english).filter((key) =>
-  JSON.stringify(placeholders(english[key])) !== JSON.stringify(placeholders(ER_ZH_CN[key])),
+  JSON.stringify(placeholders(english[key])) !== JSON.stringify(placeholders(chineseValue(key))),
 );
 const bannedChineseCopy = [
   "报价", "报价单", "图书笔记", "读书笔记", "选择的新笔记", "选择的笔记",

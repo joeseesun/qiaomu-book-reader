@@ -6,10 +6,12 @@
  * (pdf.js, epub.js, JSZip, localForage) come from npm and are bundled at build
  * time by esbuild — see esbuild.config.mjs.
  */
-import { AbstractInputSuggest, FuzzySuggestModal, ItemView, MarkdownRenderer, Menu, Modal, Notice, Platform, Plugin, PluginSettingTab, Scope, Setting, TFile, TFolder, normalizePath, requestUrl } from "obsidian";
+import { AbstractInputSuggest, FuzzySuggestModal, ItemView, MarkdownRenderer, Menu, Modal, Notice, Platform, Plugin, PluginSettingTab, Scope, SecretComponent, Setting, TFile, TFolder, normalizePath, requestUrl } from "obsidian";
 import * as pdfjsLib from "pdfjs-dist";
 import ePub from "epubjs";
+import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, normalizeAiBase } from "./ai-providers.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
+import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
 
 // ---- i18n (RU source / EN / Simplified Chinese) ----
 const __erEN = {"Пожелания и ошибки — в телеграм-бота":"Feedback and bugs — in the Telegram bot","Всё, что хочется поменять или починить, теперь собирается в одном месте — в телеграм-боте @book_in_obsidian_bot.":"Everything you would like changed or fixed is now collected in one place — the Telegram bot @book_in_obsidian_bot.","Ни аккаунта на GitHub, ни формы не нужно: заметили ошибку, не хватает возможности, неудобно на телефоне — просто отправьте боту обычное сообщение.":"No GitHub account and no form needed: found a bug, missing a feature, something awkward on the phone — just send the bot an ordinary message.","Читаю всё подряд; из этих сообщений и складывается список того, что делать дальше.":"I read every one of them, and that is what the plan for the next versions is made of.","Пожелания и ошибки":"Feedback and bugs","Всё, что хочется поменять или починить, собирается в телеграм-боте @book_in_obsidian_bot. Напишите ему обычным сообщением — ни аккаунта на GitHub, ни формы не нужно.":"Everything you would like changed or fixed is collected in the Telegram bot @book_in_obsidian_bot. Send it an ordinary message — no GitHub account and no form needed.","Написать в бота":"Message the bot","Обратная связь: ":"Feedback: "," — версия {0}. Автор: Elton.":" — version {0}. Author: Elton.","Пожелания и ошибки теперь собираются в телеграм-боте @book_in_obsidian_bot — просто напишите ему сообщение":"Feedback and bugs are now collected in the Telegram bot @book_in_obsidian_bot — just send it a message","Разбор фрагмента стал диалогом: свой вопрос, свой системный промпт, название книги уходит фоном":"Explaining a passage is a conversation now: your own question, your own system prompt, and the book's title is sent as background context","Читалка подстраивается под устройство: у телефона, планшета и компьютера своя раскладка":"The reader adapts to the device: phone, tablet and desktop each get their own layout","Тема читалки и библиотеки меняется мгновенно, появилась подстройка под тему Obsidian":"Reader and library themes switch instantly, and can follow your Obsidian theme","Движок PDF обновлён — открытие книг стало надёжнее":"The PDF engine has been updated — opening books is more reliable","стр. {0}":"p. {0}","разв. {0}":"spr. {0}","Введите хотя бы два символа":"Type at least two characters","Что найти в книге…":"What to find in the book…","Фильтр по названию…":"Filter by title…","В этой книге не нашлось ни оглавления, ни заголовков.":"No contents and no headings were found in this book.","Каким цветом подсветить фрагмент, если вы написали к нему комментарий, не выбрав цвет вручную. Комментарий может храниться только при выделении, поэтому оно создаётся само.":"Which colour to use when you comment on a passage without picking a colour first. A comment can only be stored on a highlight, so one is created for you.","Цвет выделения по умолчанию":"Default highlight colour","Не удалось сохранить комментарий":"Could not save the comment","Найдено: {0}. Слово подсвечено в тексте.":"Found: {0}. The word is highlighted in the text.","Снять подсветку":"Clear highlight","Эта страница слишком тяжёлая, чтобы нарисовать её":"This page is too heavy to draw","Найденное слово подсвечивается прямо в тексте, чтобы не искать его глазами в абзаце":"The matched word is painted right in the text, so you don't have to hunt for it in the paragraph","Найденное слово подсвечивается жёлтым прямо в тексте книги, поэтому искать его глазами в абзаце не нужно. Через несколько секунд подсветка гаснет сама, чтобы не мешать чтению; убрать сразу — «Снять подсветку» в панели поиска.":"The matched word is painted yellow right in the book's text — and stays painted after you close the panel, so you don't have to hunt for it in the paragraph. Turn it off with \"Clear highlight\" in the search panel.","Поиск по всему тексту книги — список совпадений с фрагментом вокруг каждого, клик переходит к месту.":"Search across the whole book's text — a list of matches with context around each, click to jump to that spot.","Поиск":"Search","Экспорт цитат группирует их по главам и подписывает номер страницы":"Quote export now groups by chapter and labels the page number","Оглавление наконец работает — брало данные, но не показывало их; починил, добавил номер страницы, живой номер разворота и фильтр для длинных списков":"Contents finally works — it had the data but never showed it; fixed, plus page numbers, a live spread number and a filter for long lists","Комментарий к выделению — короткая мысль остаётся при цитате, а не улетает в отдельный файл":"Comment on a highlight — a short thought stays with the quote instead of flying into a separate file","Поиск по всей книге — значок лупы вверху читалки, со списком совпадений и переходом к месту":"Search the whole book — magnifier icon at the top, with a match list and jump-to-spot","Если пунктов много (в технических книгах бывает 300–400), сверху появляется поле фильтра — начните печатать название главы.":"When there are many entries (technical books can have 300–400), a filter field appears at the top — start typing a chapter name.","У каждого пункта — номер страницы книги и номер текущего разворота, который пересчитывается на лету: он меняется при изменении ширины окна или открытии боковых панелей, поэтому его нельзя один раз сохранить.":"Each entry shows the book's own page number and the current spread number, recomputed live — it changes with window width or a sidebar opening, so it can't be stored once and reused.","Плагин ищет оглавление в таком порядке: сначала настоящие закладки из PDF, потом заголовки в тексте, потом печатное содержание книги (та страница со списком глав и точками), и в последнюю очередь — жирные абзацы, если больше зацепиться не за что.":"The plugin looks for a contents source in this order: real PDF bookmarks first, then headings in the text, then the book's own printed contents page (the one with the dotted leaders), and as a last resort, bold paragraphs if nothing else is there to go on.","Оглавление: откуда оно берётся":"Contents: where it comes from","Ищет по части слова: запрос «систем» найдёт и «система», и «системы», и «системный».":"Matches partial words: searching \"system\" finds \"system\", \"systems\" and \"systemic\".","Клик по результату — переход прямо к этому месту, на любом устройстве и при любой ширине окна.":"Click a result to jump straight to that spot, on any device and at any window width.","Значок лупы вверху читалки (или команда «Поиск по книге») открывает поиск по всему тексту — со списком совпадений и фрагментом текста вокруг каждого.":"The magnifier icon at the top of the reader (or the \"Search the book\" command) opens full-text search, with a list of matches and surrounding context for each.","Поиск по книге":"Search the book","Сохраняется по кнопке или Ctrl+Enter. Если очистить поле — комментарий удаляется, сама цитата остаётся.":"Saved with the button or Ctrl+Enter. Clearing the field removes the comment; the quote itself stays.","Пример: подчеркнули спорный тезис и приписали «а вот тут он сам себе противоречит» — эта строка видна в панели «Выделения» под цитатой и попадает в заметку книги при экспорте.":"Example: you highlight a shaky claim and jot \"he contradicts himself right here\" — it shows under the quote in the Highlights panel and travels with it on export.","У выделенного текста, кроме «Создать заметку», есть значок комментария — короткая мысль, которая остаётся ПРИ выделении, а не улетает в отдельный файл.":"Highlighted text has a comment icon besides \"Create a note\" — a short thought that stays WITH the highlight instead of flying off into a separate file.","Комментарий к выделению":"Comment on a highlight","В заметке цитаты собраны по главам, у каждой — номер страницы книги, а комментарий (если вы его оставили) идёт прямо под цитатой.":"In the note, quotes are grouped by chapter, each carries the book's page number, and your comment (if you left one) sits right under the quote.","Инструкция выросла до 21 экрана — теперь разбирает каждую настройку с примерами":"The guide has grown — it now walks through every setting with examples","Режим для e-ink читалок: без анимаций и теней, чистый чёрный на белом, крупнее кнопки":"E-ink reader mode: no animations or shadows, pure black on white, bigger buttons","Выделения переносятся выборочно: галочки, «выделить все», «только новые» — уже перенесённое не задваивается":"Highlights are exported selectively: tick boxes, \"select all\", \"new only\" — nothing already copied gets duplicated","Заметку из выделения можно сразу положить в нужную папку и проставить теги":"A note made from a highlight can go straight into the folder you want, with tags","Картинки из книг теперь показываются сразу — раньше их приходилось искать в другой читалке":"Pictures now show up straight away — previously you had to open another reader to find them","Картинки в книгах":"Pictures in books","Заметка из выделения: название, папка, теги":"A note from a highlight: title, folder, tags","Папка и теги запомнятся для следующей заметки. Сам фрагмент попадёт в текст целиком — название на это не влияет.":"The folder and tags are remembered for the next note. The passage itself goes into the note in full — the title does not affect that.","Например: идеи, психология":"For example: ideas, psychology","Теги":"Tags","Название":"Title","Новая заметка из выделения":"New note from a highlight","Для Obsidian на Android-читалке с электронными чернилами. Убирает анимации, плавные переходы, тени и размытие — они оставляют на таком экране следы. Чистый чёрный на белом, жёсткие рамки, крупнее кнопки, листание без скольжения.":"For Obsidian on an Android e-ink reader. Removes animations, fades, shadows and blur — they leave ghosting on such a screen. Pure black on white, hard borders, bigger buttons, page turns that jump instead of sliding.","Режим для e-ink читалок":"E-ink reader mode","Перенести выделения в заметки":"Move highlights into notes","Инструкция по плагину":"Plugin guide","Инструкция: разбор всех настроек по шагам":"Guide: every setting, step by step","Команды и горячие клавиши":"Commands and hotkeys","Как перенести выделения в заметки":"Moving highlights into notes","Вкладка «Данные»: где что лежит":"The Data tab: where things live","Вкладка «Перевод»":"The Translate tab","Заметка книги и шаблон":"The book note and the template","Куда складывать заметки":"Where notes are filed","Вкладка «Заметки»: название заметки":"The Notes tab: note titles","«Погружение» и цель чтения":"Immersive mode and the reading goal","«Выравнивание» и «Положение текста»":"Alignment and text position","Настройка «Листание страниц»":"The \"Turning pages\" setting","Вкладка «Чтение»: статистика":"The Reading tab: statistics","Дальше — разбор настроек":"Next: a tour of the settings","Что перенести в заметку":"What to copy into the note","Заметка «{0}» — {1} уже перенесено, отмечено {2} новых":"Note \"{0}\" — {1} already there, {2} new ones ticked","Заметка «{0}» — все {1} ещё не перенесены":"Note \"{0}\" — none of the {1} are there yet","Заметка книги не привязана — доступны только отдельные заметки":"No book note linked — separate notes only","Выделить все":"Select all","Снять все":"Clear all","Только новые":"New only","уже в заметке":"already in the note","Отмечено: {0} из {1}":"Ticked: {0} of {1}","В заметку книги":"Into the book note","Отдельными заметками":"As separate notes","Эта цитата уже есть в «{0}»":"That quote is already in \"{0}\"","Все выбранные цитаты уже есть в «{0}»":"All the selected quotes are already in \"{0}\"","Добавлено в «{0}»: {1}, пропущено уже имевшихся: {2}":"Added to \"{0}\": {1}; skipped as already present: {2}","Название подбирается автоматически: первое предложение фрагмента или его начало по границе слова. Выключено — в имя файла идёт весь фрагмент, как раньше.":"The title is chosen automatically: the passage's first sentence, or its opening cut on a word boundary. Off — the whole passage goes into the filename, as before.","Короткие названия без вопросов":"Short titles, no questions","Перед созданием заметки из выделения появится окно с коротким названием — его можно исправить или одной кнопкой вставить фрагмент целиком. Без этого имя файла берётся из самого фрагмента и выходит очень длинным.":"Before a note is created from a highlight, a dialog offers a short title you can edit, or insert the whole passage with one click. Without it the filename is taken from the passage itself and comes out very long.","Спрашивать название заметки":"Ask for the note title","Отмена":"Cancel","Сам фрагмент попадёт в текст заметки целиком — название на это не влияет.":"The passage itself goes into the note in full — the title does not affect that.","Взять весь фрагмент как название":"Use the whole passage as the title","Какую книгу открыть?":"Which book do you want to open?","Книга не найдена: {0}":"Book not found: {0}","Открыть книгу: {0}":"Open book: {0}","Открыть книгу…":"Open a book…","Продолжить чтение (последняя книга)":"Continue reading (last book)","Перестроение при сворачивании панелей стало плавным, а не рывком":"Re-layout when sidebars open or close now fades instead of jumping","Строки заполняют страницу до конца — больше нет пустых мест внизу колонки":"Lines fill the page to the bottom — no more blank gaps at the foot of a column","Листание строго вправо, без съезжания в угол, и текст стал чётким":"Page turns go straight sideways instead of drifting into the corner, and text is sharp","Статистика чтения: сколько всего прочитано, серия дней и график за две недели":"Reading stats: all-time total, day streak and a two-week chart","Книгу можно открыть командой — своя команда и горячая клавиша на каждую книгу":"Open a book by command — each book gets its own command and hotkey","Сколько минут в день вы хотите читать. Прогресс за сегодня — в карточке вверху этой вкладки.":"How many minutes a day you want to read. Today's progress is in the card at the top of this tab.","Откройте книгу и включите таймер ▶ — здесь появится история чтения.":"Open a book and start the timer ▶ — your reading history will appear here.","14 дней назад":"14 days ago","лучший день":"best day","в среднем за день":"daily average","дней с книгой":"days with a book","сегодня":"today","{0} дн. подряд":"{0}-day streak","за всё время с книгами":"all-time with books","{0} д":"{0} d","{0} д {1} ч":"{0} d {1} h","{0} ч":"{0} h","меньше минуты":"less than a minute","Положение на странице":"Position on the page","Положение текста на странице":"Text position on the page","Сверху":"Top","Снизу":"Bottom","Куда прижимать текст, если страница заполнена не до конца — например, в конце главы.":"Where to place the text when a page isn't filled — at the end of a chapter, for instance.","Если страница заполнена не до конца (например, в конце главы), текст можно не оставлять прижатым к верху. Меняется и на лету — в панели настроек чтения.":"When a page isn't filled (at the end of a chapter, for instance), the text needn't stay pinned to the top. Can also be changed on the fly from the reading-settings panel.","Чтение":"Reading","Заметки":"Notes","Данные":"Data","О плагине":"About","Очистка":"Cleanup","Шаблон":"Template","Цель чтения":"Reading goal","Что нового":"What's new","Показать":"Show","Список изменений последних версий.":"Changes from recent versions.","<b>Book Reader</b> — версия {0}. Автор: Elton Labs.":"<b>Book Reader</b> — version {0}. By Elton Labs.","Шрифт, размер и межстрочный интервал настраиваются прямо в книге — иконка ползунков вверху читалки.":"Font, size and line spacing are set inside the book — the sliders icon at the top of the reader.","Доп. настройки":"More settings","Память о книгах":"What the reader remembers","Забыть все книги":"Forget all books","Точно забыть?":"Really forget?","Готово — читалка снова спросит про заметку при открытии книги":"Done — the reader will ask about a note again when you open a book","Забыть настройки этой книги":"Forget this book's settings","Настройки книги сброшены — окно появится при следующем открытии":"Book settings cleared — the setup screen will appear next time you open it","Книг: {0}. Привязанные заметки, категории, шаблоны отдельных книг и отметки «про заметку уже спрашивали». Сами заметки НЕ удаляются — читалка просто забывает связи и спросит про заметку заново при открытии каждой книги.":"Books: {0}. Linked notes, categories, per-book templates and the \"already asked about a note\" marks. The notes themselves are NOT deleted — the reader just forgets the links and will ask about a note again when you open each book.","Заметка книги для ссылок":"Book note for links","Шаблон для этой книги":"Template for this book","Book Reader обновлён до {0}":"Book Reader updated to {0}","Понятно":"Got it","Открыть инструкцию":"Open the guide","Расширенные":"Advanced","Категория":"Category","Например: Психология, Бизнес":"e.g. Psychology, Business","Жанр или тема — по ней книги группируются в библиотеке. Несколько — через запятую. Можно оставить пустым.":"Genre or topic — books are grouped by it in the library. Separate several with commas. Can be left empty.","Жанр или тема — по ней книги группируются в библиотеке. Несколько — через запятую. Пусто — без категории.":"Genre or topic — books are grouped by it in the library. Separate several with commas. Empty means no category.","Цитаты и мысли из книги будут ссылаться на эту заметку.":"Quotes and thoughts from this book will link to this note.","Поиск заметки…":"Search notes…","Создать заметку…":"Create a note…","Создать заметку":"Create note","← Назад":"← Back","В хранилище пока нет заметок — создайте новую ниже":"No notes in the vault yet — create one below","Ничего не найдено":"Nothing found","Все":"All","Читаю":"Reading","Не начатые":"Not started","Прочитано":"Finished","Без папки":"No folder","Заметка для книги":"A note for this book","Куда собирать цитаты и мысли из этой книги? Выделенные фрагменты будут ссылаться на эту заметку.":"Where should quotes and thoughts from this book go? Highlights will link back to this note.","Создать заметку для книги":"Create a note for this book","Название заметки":"Note name","Папка":"Folder","Корень хранилища":"Vault root","Создать и начать читать":"Create and start reading","или":"or","Выбрать существующую заметку":"Pick an existing note","Читать без заметки":"Read without a note","В хранилище пока нет заметок — создайте новую":"There are no notes in the vault yet — create one","Больше не спрашивать — создавать заметку для каждой книги автоматически":"Don't ask again — create a note for every book automatically","Это всегда можно поменять потом — кнопка (i) вверху читалки или настройки плагина.":"You can change this later — the (i) button at the top of the reader, or the plugin settings.","+ Создать новую":"+ Create new","Заметка с этой страницы":"Note from this page","{0} — стр. {1}":"{0} — p. {1}","— из [[{0}]], стр. {1}":"— from [[{0}]], p. {1}","> *(страница-скан — текста для цитаты нет, впишите своими словами)*":"> *(scanned page — no text to quote, write it in your own words)*","Заметка создана: {0}":"Note created: {0}","Показывать картинки из книги":"Show pictures from the book","По умолчанию ВЫКЛ: если из страницы извлекается текст — показывается только чистый текст. Включите, чтобы над текстом показывались иллюстрации, схемы и графики: вырезаются сами картинки, а не скриншот всей страницы. На сканах (где текст извлечь нельзя) страница по-прежнему показывается целиком. Откройте книгу заново, чтобы применить.":"Off by default: when a page yields text, only the clean text is shown. Turn this on to also show the book's illustrations, diagrams and charts above the text — the pictures themselves are cropped out, not a screenshot of the whole page. Scanned pages (where no text can be extracted) are still shown in full. Reopen the book to apply.","Перевод":"Translation","Перевод выделенного":"Translating a selection","Оригинал":"Original","Переводим…":"Translating…","Перевести":"Translate","Копировать перевод":"Copy translation","В заметку":"To a note","Пустой ответ переводчика":"The translator returned nothing","Не удалось перевести. Нужен интернет — перевод идёт через Google Translate, и у него есть лимиты на частые запросы.":"Could not translate. An internet connection is required — translation goes through Google Translate, which rate-limits frequent requests.","Кнопка перевода в выделении":"Translate button in the selection popup","Добавляет кнопку перевода в панельку, которая появляется при выделении текста. Перевод открывается рядом с оригиналом, его можно скопировать или сохранить в заметку под цитатой. Откройте книгу заново, чтобы кнопка появилась.":"Adds a translate button to the popup that appears when you select text. The translation is shown next to the original; you can copy it or save it into a note under the quote. Reopen the book for the button to appear.","Это первая версия функции. Перевод идёт через бесплатный Google Translate: нужен интернет, есть лимиты на частые запросы, а выделенный фрагмент уходит на серверы Google. Для больших объёмов пока не рассчитано.":"This is an early version of the feature. Translation uses the free Google Translate: it needs internet, is rate-limited, and the selected fragment is sent to Google's servers. Not intended for large volumes yet.","Переводить на язык":"Translate into","Язык, на который переводить выделенный фрагмент. Исходный язык определяется автоматически.":"The language to translate the selected fragment into. The source language is detected automatically.","Русский":"Russian","Перевод — это отдельный сетевой запрос к Google. Если вам важно, чтобы текст книги никуда не уходил, оставьте функцию выключенной: всё остальное в читалке работает полностью офлайн.":"Translation is a separate network request to Google. If you need the book's text to stay on your device, leave this off: everything else in the reader works fully offline.","\n\n**Перевод:**\n{0}":"\n\n**Translation:**\n{0}","Читалка открывает три формата: EPUB (.epub), FB2 (.fb2) и PDF (.pdf).":"The reader opens three formats: EPUB (.epub), FB2 (.fb2) and PDF (.pdf).","1. Кладёте файл книги (.epub, .fb2 или .pdf) в хранилище и открываете его кликом.":"1. Put the book file (.epub, .fb2 or .pdf) in your vault and open it with a click.","Этот FB2 упакован в ZIP. Распакуйте архив и положите в хранилище сам файл .fb2.":"This FB2 is packed in a ZIP. Unpack the archive and put the .fb2 file itself into your vault.","Выравнивание текста":"Text alignment","Слева":"Left","По ширине":"Justify","По центру":"Center","Справа":"Right","{0} ч {1} мин":"{0} h {1} min","{0} мин":"{0} min","Своя заметка на каждую книгу":"A separate note per book","При первом открытии книги автоматически создаётся отдельная заметка с названием книги (в «Папке заметок-книг», иначе в «Папке для новых заметок») и привязывается к ней. Дальше все выделения из этой книги идут в её заметку. Выключено по умолчанию.":"On a book's first open, a dedicated note titled after the book is created (in the \"Book notes folder\", otherwise the \"New notes folder\") and linked to it. From then on every highlight from this book goes into its note. Off by default.","Заметка книги создана: {0}":"Book note created: {0}","Это первая версия функции — проверьте результат на паре книг. Заметка создаётся один раз при первом открытии книги.":"This is an early version of the feature — check the result on a couple of books first. The note is created once, on a book's first open.","Как выравнивается текст в колонке чтения. Можно менять и на лету — в панели настроек чтения (иконка ползунков) в самой книге. Откройте книгу заново, чтобы применить.":"How text is aligned in the reading column. You can also change it on the fly from the reading-settings panel (sliders icon) inside a book. Reopen the book to apply.","Сегодня прочитано: {0} мин. Всего за всё время: {1}. Кнопка ▶ вверху запускает обратный отсчёт до цели (пауза — ⏸).":"Read today: {0} min. All-time total: {1}. The ▶ button at the top starts the countdown toward the goal (pause — ⏸).","Сегодня прочитано: {0} мин. Всего за всё время: {1} мин.":"Read today: {0} min. All-time total: {1} min.","Жёлтый":"Yellow","Зелёный":"Green","Голубой":"Blue","Розовый":"Pink","Цель чтения на сегодня достигнута 🎉":"Today's reading goal reached 🎉","Таймер выключен — включите его в настройках чтения":"Timer is off — enable it in reading settings","Таймер сброшен":"Timer reset","Листание":"Page turning","Кнопками":"Buttons","По клику":"By click","«По клику»: клик по левой части страницы — назад, по правой — вперёд. Центр свободен для выделения текста.":"\"By click\": clicking the left part of the page goes back, the right part goes forward. The center stays free for selecting text.","Вкл":"On","Выкл":"Off","Тап по картинке — увеличить · фон или ✕ — закрыть":"Tap the image to zoom · background or ✕ to close","Elton Reader: используем pdf.worker.js из CDN (нужен интернет). Причина:":"Elton Reader: using pdf.worker.js from the CDN (internet required). Reason:","Elton Reader: could not register .pdf, use right-click → Открыть в Elton Reader":"Elton Reader: could not register .pdf, use right-click → Open in Elton Reader","Book Reader — Библиотека":"Book Reader — Library","Открыть библиотеку":"Open library","Открыть PDF в Book Reader":"Open PDF in Book Reader","Сохранить позицию чтения":"Save reading position","Экспортировать выделения в заметки":"Export highlights to notes","📖 Открыть в Book Reader":"📖 Open in Book Reader","Показать приветствие (онбординг)":"Show welcome (onboarding)","Заметка книги для ссылок — начните вводить название…":"Book note for links — start typing a name…","Шаблон заметки — начните вводить путь…":"Note template — start typing a path…","## Заметки из выделений":"## Notes from highlights","Заметка":"Note","Пустое выделение":"Empty highlight","Заметка создана":"Note created","Не удалось создать заметку":"Could not create the note","Нет выделений для экспорта":"No highlights to export","Книга":"Book","Не удалось экспортировать выделения":"Could not export highlights","Нет":"No","Да":"Yes","Для книги не привязана заметка — задайте её в настройках":"No note is linked to this book — set it in settings","## Цитаты":"## Quotes","Цитаты добавлены":"Quotes added","Да, открыть":"Yes, open","Не удалось добавить цитаты в заметку книги":"Could not add quotes to the book note","Как пользоваться Book Reader":"How to use Book Reader","Что делает каждая кнопка и зачем":"What each button does and why","Верхняя панель":"Top bar","Сохранить позицию":"Save position","Запоминает, где вы остановились, и ставит точку возврата (помечена 💾 в «Настройки → Вернуться к месту»). Это как «сохранение» в игре — нажмите перед закрытием книги, если хотите быть точно уверены, что место не потеряется.":"Remembers where you left off and drops a restore point (marked 💾 in \"Settings → Jump back\"). It's like a \"save\" in a game — press it before closing the book if you want to be completely sure your spot won't be lost.","Обновить":"Refresh","Перестраивает страницу заново, если вёрстка «поехала» — например, после смены размера окна или открытия/закрытия боковой панели или вкладки (текст может отобразиться криво). Текущую позицию при этом сохраняет.":"Rebuilds the page if the layout breaks — for example, after resizing the window or opening/closing a sidebar panel or tab (the text may look misaligned). Your current position is preserved.","Выделения":"Highlights","Открывает список всех ваших выделений в этой книге. Клик по строке — переход к этому месту. Сверху списка — кнопка экспорта в заметки.":"Opens the list of all your highlights in this book. Click a row to jump to that spot. Above the list is the export-to-notes button.","Содержание":"Contents","Оглавление книги — быстрый переход по главам.":"The book's table of contents — quickly jump between chapters.","Настройки":"Settings","Тема, шрифт, размер текста, число колонок и блок «Вернуться к месту» — список точек, к которым можно откатиться.":"Theme, font, text size, column count and the \"Jump back\" block — a list of points you can roll back to.","Справка":"Help","Это окно.":"This window.","Чтение и навигация":"Reading and navigation","Листать страницы":"Turn pages","Стрелки внизу экрана, клавиши ← → ↑ ↓ и пробел, либо свайп пальцем на телефоне. Каждое перелистывание автоматически сохраняет позицию — отдельно жать «Сохранить» не обязательно.":"The arrows at the bottom of the screen, the ← → ↑ ↓ keys and space, or a finger swipe on mobile. Every page turn saves your position automatically — you don't need to press \"Save\" separately.","Выделения и заметки":"Highlights and notes","Выделить текст":"Highlight text","Выделите фрагмент мышью или пальцем — всплывёт палитра цветов. Клик по уже готовому выделению — сменить цвет или удалить его.":"Select a fragment with the mouse or a finger — a color palette pops up. Click an existing highlight to change its color or remove it.","Создать заметку из выделения":"Create a note from a highlight","Правый клик по выделенному тексту → «Создать новую заметку». Заметка создаётся по вашему шаблону в выбранной папке, с цитатой и ссылкой на книгу.":"Right-click the highlighted text → \"Create new note\". The note is created from your template in the chosen folder, with the quote and a link to the book.","Экспортировать все выделения":"Export all highlights","Кнопка вверху панели «Выделения». Собирает все выделения книги разом. Спросит формат: одна общая заметка со всеми цитатами, отдельный файл на каждое выделение, либо вставить все цитаты текстом прямо в привязанную заметку книги.":"The button at the top of the \"Highlights\" panel. Collects all of the book's highlights at once. It asks for a format: one shared note with all quotes, a separate file per highlight, or inserting all quotes as text straight into the linked book note.","Куда вести ссылку «— из [[…]]» в заметках из выделений. Пусто — имя файла книги.":"Where the \"— from [[…]]\" link in highlight notes points. Empty — the book's file name.","Сначала откройте книгу…":"Open a book first…","Выбрать из списка…":"Choose from the list…","В хранилище нет заметок":"No notes in the vault","Свой шаблон только для этой книги (например, под жанр). Пусто — используется общий шаблон из настроек плагина.":"A template just for this book (for example, per genre). Empty — the shared template from the plugin settings is used.","Templates/Шаблон.md":"Templates/Template.md","Про автосохранение":"About autosave","Позиция сохраняется сама при каждом перелистывании и хранится в общем файле, который синхронизируется между устройствами (Obsidian Sync). Перестроение страницы (смена размера окна, панелей, масштаба) больше НЕ двигает и не пересохраняет прогресс — поэтому он не «уезжает» сам по себе.":"Your position is saved automatically on every page turn and kept in a shared file that syncs across devices (Obsidian Sync). Rebuilding the page (resizing the window, panels, zoom) no longer moves or re-saves progress — so it won't \"drift\" on its own.","Добро пожаловать в Book Reader!":"Welcome to Book Reader!","Это уютная читалка книг прямо внутри Obsidian. Читаете, выделяете важное и превращаете выделения в заметки — не выходя из хранилища.":"It's a cozy book reader right inside Obsidian. Read, highlight what matters and turn highlights into notes — without leaving your vault.","Пролистайте несколько экранов стрелкой → (или кнопкой «Далее»). Это займёт минуту, зато потом всё будет понятно.":"Flip through a few screens with the → arrow (or the \"Next\" button). It takes a minute, but then everything will be clear.","Какие форматы и как открыть книгу":"Which formats, and how to open a book","Читалка открывает два формата: EPUB (файлы .epub) и PDF (файлы .pdf).":"The reader opens two formats: EPUB (.epub files) and PDF (.pdf files).","Чтобы читать книгу, положите её файл в своё хранилище Obsidian и просто кликните по нему — она откроется в читалке.":"To read a book, put its file into your Obsidian vault and just click it — it opens in the reader.","На левой панели есть значок 📖 «Библиотека» — там все ваши книги с обложками в одном месте.":"In the left sidebar there's a 📖 \"Library\" icon — all your books with covers in one place.","Это самая первая версия":"This is the very first version","Пожалуйста, не загружайте сразу много книг. Начните с двух-трёх и проверьте, что всё работает стабильно именно на вашем устройстве.":"Please don't load a lot of books at once. Start with two or three and check that everything works reliably on your device.","Особенно аккуратно с очень большими PDF (сотни страниц или сканы картинок) — они тяжёлые и могут подтормаживать.":"Be especially careful with very large PDFs (hundreds of pages or scanned images) — they're heavy and may lag.","Плагин будет становиться лучше. А пока — по чуть-чуть и бережно 🙂":"The plugin will keep getting better. For now — little by little and gently 🙂","Выделения: цвета и действия":"Highlights: colors and actions","Выделите текст пальцем или мышью — появится палитра. Выберите цвет, и выделение сохранится.":"Select text with a finger or the mouse — a palette appears. Pick a color and the highlight is saved.","Нажмите на уже готовое выделение — откроется то же меню: сменить цвет, скопировать, поставить закладку «остановился здесь», создать заметку, отправить в заметку книги или удалить.":"Tap an existing highlight — the same menu opens: change color, copy, set a \"stopped here\" bookmark, create a note, send it to the book note, or delete.","Все выделения книги собраны в панели 🖍️ наверху — оттуда можно перейти к любому или экспортировать все сразу.":"All of the book's highlights are gathered in the 🖍️ panel at the top — from there you can jump to any of them or export them all at once.","Что такое «заметка книги»":"What a \"book note\" is","У каждой книги можно завести одну обычную заметку Obsidian — её «главную страницу», например «Мастер и Маргарита.md».":"For each book you can keep one ordinary Obsidian note — its \"home page\", for example \"The Master and Margarita.md\".","Когда вы создаёте заметку из выделения, в ней ставится ссылка на эту заметку книги. А ещё цитаты можно отправлять прямо в неё — так все мысли по книге собираются в одном месте.":"When you create a note from a highlight, it links back to this book note. You can also send quotes straight into it — so all your thoughts on the book gather in one place.","Это не обязательно настраивать прямо сейчас — привязать заметку книги можно в любой момент позже. Откройте книгу, нажмите значок ⓘ (справка) вверху читалки и заполните поле «Заметка книги для ссылок». Пока ничего не привязано, ссылки просто ведут на имя файла книги.":"You don't have to set this up right now — you can link a book note at any time later. Open the book, press the ⓘ (help) icon at the top of the reader and fill in the \"Book note for links\" field. Until something is linked, links simply point to the book's file name.","Где всё хранится":"Where everything is stored","Ваш прогресс чтения и выделения хранятся файлами прямо в хранилище (рядом с книгами или в отдельной папке — это настраивается). Ничего не спрятано «внутри плагина» — всё лежит у вас.":"Your reading progress and highlights are stored as files right in the vault (next to the books or in a separate folder — it's configurable). Nothing is hidden \"inside the plugin\" — it's all yours.","Заметки из выделений и заметки книги — это самые обычные .md заметки в вашей папке. Открывайте, редактируйте и связывайте их, как любые другие.":"Highlight notes and book notes are ordinary .md notes in your folder. Open, edit and link them like any others.","Про синхронизацию":"About syncing","Раз прогресс и выделения — это файлы в хранилище, они синхронизируются вместе с ним (Obsidian Sync, iCloud и т.п.).":"Since progress and highlights are files in the vault, they sync along with it (Obsidian Sync, iCloud, etc.).","Дайте синхронизации закончиться, прежде чем открывать ту же книгу на другом устройстве, и не читайте одну книгу на двух устройствах сразу — иначе позиция может «поспорить сама с собой».":"Let syncing finish before opening the same book on another device, and don't read one book on two devices at once — otherwise the position may \"argue with itself\".","На разных устройствах путь к папке с книгами бывает разным — проверьте папки в настройках плагина.":"The path to the books folder can differ across devices — check the folders in the plugin settings.","Пример: как это всё работает":"Example: how it all works","1. Кладёте файл книги (.epub или .pdf) в хранилище и открываете его кликом.":"1. Put a book file (.epub or .pdf) into the vault and open it with a click.","2. Читаете. Позиция сохраняется сама при каждом перелистывании — ничего нажимать не нужно.":"2. Read. Your position saves itself on every page turn — nothing to press.","3. Понравилась мысль — выделяете её и выбираете цвет. Выделение сохранилось.":"3. Like a thought — highlight it and pick a color. The highlight is saved.","4. (по желанию) Нажимаете ⓘ вверху и привязываете «заметку книги» — свою страницу для этой книги. Это можно сделать и потом.":"4. (optional) Press ⓘ at the top and link a \"book note\" — your page for this book. You can do this later too.","5. Нажимаете на выделение → «в заметку книги» — цитата улетает в эту страницу, и плагин предложит открыть её. Готово: все ваши цитаты в одном месте.":"5. Tap a highlight → \"to book note\" — the quote flies into that page, and the plugin offers to open it. Done: all your quotes in one place.","Готово — приятного чтения!":"All set — enjoy your reading!","Что настроить по желанию (не обязательно сразу): папку для книг и папку для заметок — в настройках плагина. Заметку книги — под значком ⓘ прямо во время чтения.":"What to set up if you like (not required right away): the books folder and the notes folder — in the plugin settings. The book note — under the ⓘ icon while reading.","Что можно вообще не трогать: прогресс и выделения работают сразу и сохраняются сами.":"What you can leave alone entirely: progress and highlights work right away and save themselves.","Полная справка по каждой кнопке — значок ⓘ в читалке. Этот экран приветствия можно снова открыть в настройках плагина.":"Full help for every button — the ⓘ icon in the reader. You can reopen this welcome screen in the plugin settings.","Нажмите «Начать читать» и откройте свою первую книгу 📖":"Press \"Start reading\" and open your first book 📖","‹ Назад":"‹ Back","Начать читать":"Start reading","Далее ›":"Next ›","Пропустить":"Skip","Загружаем книгу…":"Loading the book…","Ошибка при открытии файла":"Error opening the file","Сбросить таймер":"Reset timer","Таймер: сколько осталось до цели — старт/пауза":"Timer: time left to the goal — start/pause","Обновить (перерисовать вид)":"Refresh (redraw the view)","Оглавление":"Table of contents","Настройки чтения":"Reading settings","Создать новую заметку":"Create new note","Текстом в заметку книги":"As text into the book note","Нечего сохранять":"Nothing to save","Книга не открыта":"No book is open","Тема":"Theme","Тёмная":"Dark","Светлая":"Light","Сепия":"Sepia","Размер шрифта":"Font size","Шрифт":"Font","Межстрочный":"Line spacing","Страниц рядом":"Pages side by side","1 страница":"1 page","2 страницы":"2 pages","Вернуться к месту":"Jump back","Действия":"Actions","Точек пока нет":"No points yet","Недоступно":"Unavailable","Нечего обновлять":"Nothing to refresh","Обновлено":"Refreshed","Копировать текст":"Copy text","Скопировано ✓":"Copied ✓","Не удалось скопировать":"Could not copy","Остановился здесь":"Stopped here","Экспортировать в заметку книги":"Export to the book note","Выделение не найдено":"Highlight not found","Пока нет выделений.\nВыделите текст и выберите цвет.":"No highlights yet.\nSelect text and pick a color.","Удалить":"Delete","Закрыть":"Close","Библиотека":"Library","Поиск книги…":"Search a book…","Меньше обложки":"Smaller covers","Больше обложки":"Larger covers","Нет книг":"No books","Все папки vault":"All vault folders","книг":"books","книги":"books","книга":"book","Вид обложки":"Cover fit","Не читалась":"Not started","Ещё":"More","Перейти к странице":"Go to page","Перейти":"Go","Приветствие и инструкция":"Welcome and guide","Показать вводный экран с объяснением форматов, заметки книги, хранения данных и синхронизации.":"Show the intro screen explaining formats, the book note, data storage and syncing.","Открыть приветствие":"Open welcome","Папка с книгами":"Books folder","Пусто = весь vault":"Empty = the whole vault","Папка данных чтения":"Reading-data folder","Где хранятся прогресс чтения, выделения и резервные копии (reading-progress.json, reading-highlights.json). Пусто — рядом с книгами (в «Папке с книгами»). Файлы синхронизируются вместе с хранилищем.":"Where reading progress, highlights and rescue backups are kept (reading-progress.json, reading-highlights.json). Empty — next to the books (in the \"Books folder\"). The files sync along with the vault.","Рядом с книгами":"Next to the books","Заметки из выделений":"Notes from highlights","Шаблон заметки":"Note template","Путь к вашему шаблону (Templater), который применяется к новой заметке из выделения. Пусто — заметка создаётся без шаблона, только с цитатой. Пример: 0. Files/4. Templates/Шаблон стандартный.md":"Path to your (Templater) template applied to each new highlight note. Empty — the note is created without a template, with just the quote. Example: 0. Files/4. Templates/Default template.md","Папка для новых заметок":"Folder for new notes","Куда сохранять заметки, создаваемые из выделений. Пусто — корень хранилища.":"Where to save notes created from highlights. Empty — the vault root.","Папка заметок-книг (для ссылок)":"Book-notes folder (for links)","Из этой папки берётся список при выборе заметки книги, куда ведёт ссылка «— из [[…]]». Пусто — можно выбрать любую заметку хранилища.":"The list for choosing a book note (where the \"— from [[…]]\" link points) is taken from this folder. Empty — you can pick any note in the vault.","3. Resources/База книг":"3. Resources/Book base","Совет: шаблон можно переопределить для отдельной книги — откройте книгу, нажмите (i) вверху и укажите свой шаблон в поле «Шаблон для этой книги» (удобно, если у разных жанров разное оформление).":"Tip: the template can be overridden per book — open the book, press (i) at the top and set your template in the \"Template for this book\" field (handy if different genres need different formatting).","Сохранять цвет выделений при экспорте":"Keep highlight color on export","Каждая цитата оборачивается в цветной <mark> — цвет выделения виден в готовой заметке (в режиме чтения и live preview, без плагинов). Выключите, если хотите обычные цитаты без HTML.":"Each quote is wrapped in a colored <mark> — the highlight color shows in the finished note (in reading mode and live preview, no plugins needed). Turn it off if you want plain quotes without HTML.","Дублировать страницу картинкой, если есть текст":"Duplicate the page as an image when text exists","По умолчанию ВЫКЛ: если из страницы извлекается текст — показывается только чистый текст, без скриншота. Картинка показывается лишь когда текст извлечь нельзя (сканы, схемы, обложки). Включите, если хотите ВИДЕТЬ оригинальный рисунок страницы над текстом (например, для книг-скетчноутов). Откройте книгу заново, чтобы применить.":"OFF by default: if text can be extracted from the page, only the clean text is shown, without a screenshot. The image is shown only when text can't be extracted (scans, diagrams, covers). Turn it on if you want to SEE the original page image above the text (for example, for sketchnote books). Reopen the book to apply.","Листание страниц":"Page turning","«Кнопками» — стрелки/клавиши/свайп. «По клику» — клик по левой/правой части страницы листает назад/вперёд (центр свободен для выделения текста).":"\"Buttons\" — arrows/keys/swipe. \"By click\" — clicking the left/right part of the page turns back/forward (the center stays free for selecting text).","По клику мышкой":"By mouse click","Таймер цели чтения":"Reading-goal timer","Обратный отсчёт до дневной цели (например, 15 минут) — сколько ещё осталось прочитать. Запускается ВРУЧНУЮ кнопкой ▶ вверху читалки, рядом с «Сохранить» (пауза — ⏸).":"A countdown to your daily goal (for example, 15 minutes) — how much is left to read. Started MANUALLY with the ▶ button at the top of the reader, next to \"Save\" (pause — ⏸).","Цель на день, минут":"Daily goal, minutes","Погружение (Immersive)":"Immersive","Панели сверху и снизу мягко притухают через пару секунд без движения мыши и мгновенно возвращаются при движении — чтобы ничто не отвлекало от текста.":"The top and bottom bars gently dim after a couple of seconds without mouse movement and instantly return when you move — so nothing distracts from the text.","Кэш обложек":"Cover cache","Очистить":"Clear","Кэш очищен":"Cache cleared","Прогресс":"Progress","Прогресс очищен":"Progress cleared","Очистить все":"Clear all","Выделения очищены":"Highlights cleared","Синхронизация между устройствами":"Syncing across devices","Способ синхронизации":"Sync method","Подсказывает плагину, насколько свежо перечитывать файлы прогресса при открытии книги.":"Tells the plugin how eagerly to re-read the progress files when opening a book.","Авто (рекомендуется)":"Auto (recommended)","iCloud / Google Drive / папка":"iCloud / Google Drive / folder","Без синхронизации":"No syncing","Облачные папки (iCloud/Drive) обновляются с задержкой. Если на одном устройстве вы только читаете — конфликтов не будет: плагин перечитывает прогресс при каждом открытии книги и аккуратно сливает выделения.":"Cloud folders (iCloud/Drive) update with a delay. If you only read on one device there will be no conflicts: the plugin re-reads progress every time a book is opened and carefully merges highlights.","✓ Цель достигнута — {0} мин сегодня":"✓ Goal reached — {0} min today","⏱ {0} из {1} мин · {2}%":"⏱ {0} of {1} min · {2}%","{0} мин/день":"{0} min/day","Сегодня прочитано: {0} мин. Кнопка ▶ вверху запускает обратный отсчёт до цели (пауза — ⏸).":"Read today: {0} min. The ▶ button at the top starts the countdown to the goal (pause — ⏸).","\n\n— из [[{0}]]":"\n\n— from [[{0}]]","Выделения — {0}":"Highlights — {0}","---\ncreated: {0}\nsource: \"[[{1}]]\"\ntags: [выделения]\n---\n\n# {2}\n\n{3}\n\n— из [[{4}]]\n":"---\ncreated: {0}\nsource: \"[[{1}]]\"\ntags: [highlights]\n---\n\n# {2}\n\n{3}\n\n— from [[{4}]]\n","Экспортировано выделений: {0}":"Highlights exported: {0}","Создаю заметки: {0}…":"Creating notes: {0}…","Создано заметок: {0}, ошибок: {1}":"Notes created: {0}, errors: {1}","Создано заметок: {0}":"Notes created: {0}","Заметка книги не найдена: {0}":"Book note not found: {0}","Добавлено цитат в «{0}»: {1}":"Quotes added to \"{0}\": {1}","Открыть заметку «{0}» в отдельной вкладке?":"Open the note \"{0}\" in a separate tab?","Отдельная заметка на каждое ({0})":"A separate note for each ({0})","Текстом в заметку книги ({0})":"As text into the book note ({0})","Нет заметок в «{0}»":"No notes in \"{0}\"","Заметка книги: {0}":"Book note: {0}","Шаблон книги: {0}":"Book template: {0}","Экран {0}":"Screen {0}","Готовим книгу… {0}%":"Preparing the book… {0}%","Выделить: {0}":"Highlight: {0}","Сохранено ✓ — {0}%":"Saved ✓ — {0}%","Разворот {0} из {1}":"Spread {0} of {1}","Вернулись к {0}%":"Jumped back to {0}%","Закладка «остановился здесь» — {0}%":"\"Stopped here\" bookmark — {0}%","{0}<span>Экспортировать в заметки ({1})</span>":"{0}<span>Export to notes ({1})</span>","<p style=\"padding:40px;color:var(--er-muted);margin:auto;\">Ошибка: {0}</p>":"<p style=\"padding:40px;color:var(--er-muted);margin:auto;\">Error: {0}</p>","{0}<span>Справка</span>":"{0}<span>Help</span>","Сегодня прочитано: {0} мин.":"Read today: {0} min.","Сохранено: {0}":"Saved: {0}","Книг: {0}":"Books: {0}","Всего: {0}":"Total: {0}","Прогресс чтения и выделения хранятся <b>файлами прямо в хранилище</b>, рядом с книгами:":"Reading progress and highlights are stored <b>as files right in the vault</b>, next to the books:","Поэтому они переезжают между ПК и телефоном <b>любым</b> способом, которым вы синхронизируете само хранилище ":"So they travel between PC and phone by <b>any</b> means you use to sync the vault itself ","(Obsidian Sync, iCloud, Google Drive, Remotely Save и т.п.). Привязка к месту — по номеру абзаца, ":"(Obsidian Sync, iCloud, Google Drive, Remotely Save, etc.). The position is anchored by paragraph number, ","так что ПК и телефон находят одну и ту же точку при любом размере экрана.<br>":"so PC and phone find the same spot at any screen size.<br>","Настройки оформления и кэш обложек — локальные (в <code>data.json</code> плагина) и намеренно не синхронизируются.":"Appearance settings and the cover cache are local (in the plugin's <code>data.json</code>) and are intentionally not synced.","Добавить книгу":"Add a book","Отпустите файлы, чтобы добавить их в библиотеку":"Drop the files to add them to your library","Поддерживаются только файлы PDF, EPUB и FB2":"Only PDF, EPUB and FB2 files are supported","Файлы не выбраны":"No files selected","Добавлено книг: {0}":"Books added: {0}","пропущено: {0}":"skipped: {0}","Не удалось добавить: {0}":"Could not add: {0}","Абзацы в PDF сохраняются как в оригинале — текст больше не склеивается в сплошную стену":"PDF paragraphs are kept as in the original — the text no longer glues into one solid wall","Библиотека: кнопка «Добавить книгу» и перетаскивание файлов (PDF, EPUB, FB2) прямо в окно":"Library: an \"Add a book\" button and drag-and-drop of files (PDF, EPUB, FB2) straight into the window","PDF-движок встроен в плагин — книги открываются офлайн, ничего не подгружается из интернета":"The PDF engine is now bundled in — books open offline, nothing is fetched from the internet","В списке выделений комментарий больше не ломает цитату — он аккуратно встаёт под ней":"In the highlights list a comment no longer breaks the quote — it sits neatly underneath it"};
@@ -391,6 +393,59 @@ Object.assign(__erEN, {
   "修复旧阅读笔记的重复书名标题迁移": "Fixed migration of duplicate book-title headings in existing reading notes.",
   "修复历史关联名称不一致时的阅读笔记标题迁移": "Fixed reading-note title migration when legacy link names differ from actual filenames.",
 });
+// New Qiaomu-owned surfaces use Chinese source strings. Keeping these additions
+// here lets the project migrate away from Russian-as-key without rewriting the
+// entire inherited dictionary in one risky release.
+Object.assign(__erEN, {
+  "AI 辅助阅读": "AI-assisted reading",
+  "选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。": "Show ✨ for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
+  "AI 模型配置": "AI model configuration",
+  "选择服务、模型和密钥；Ollama 与 LM Studio 在本机运行。": "Choose a service, model, and key. Ollama and LM Studio run locally.",
+  "跟随 Obsidian": "Match Obsidian",
+  "纸白": "Paper white",
+  "暖纸": "Warm paper",
+  "青瓷": "Celadon",
+  "夜间": "Night",
+  "电子墨水": "E-ink",
+  "请先在插件设置中选择 AI 服务和模型。": "Choose an AI service and model in plugin settings first.",
+  "请先在插件设置中选择或创建 API 密钥。": "Select or create an API key in plugin settings first.",
+  "AI 服务": "AI service",
+  "优先展示国产模型；未选择时不会发送任何内容。": "Chinese model providers are shown first. Nothing is sent until you choose one.",
+  "请选择服务": "Choose a service",
+  "选择服务后再配置模型和密钥。AI 功能默认关闭，不影响离线阅读。": "Choose a service to configure its model and key. AI is off by default and offline reading is unaffected.",
+  "API 密钥": "API key",
+  "密钥保存在 Obsidian 密钥库中，不会写入插件 data.json。": "The key is stored in Obsidian SecretStorage and is not written to plugin data.json.",
+  "获取密钥": "Get API key",
+  "模型": "Model",
+  "可直接使用推荐模型，也可以填写服务商提供的其他模型 ID。": "Use the recommended model or enter another model ID from the provider.",
+  "请输入服务商控制台显示的模型或推理接入点 ID。": "Enter the model or inference endpoint ID shown by the provider.",
+  "模型 ID": "Model ID",
+  "接口地址": "Base URL",
+  "通常保持为空；只有区域地址、代理或自建服务需要修改。": "Usually leave this empty. Change it only for regional endpoints, proxies, or self-hosted services.",
+  "测试连接": "Test connection",
+  "发送一条不含书籍内容的最短测试消息。云端服务可能产生极少量费用。": "Sends a minimal test with no book content. Cloud services may charge a tiny amount.",
+  "开始测试": "Run test",
+  "测试中…": "Testing…",
+  "连接成功：{0} · {1} ms": "Connected: {0} · {1} ms",
+  "请先填写接口地址和模型。": "Enter a Base URL and model first.",
+  "请先选择或创建 API 密钥。": "Select or create an API key first.",
+  "密钥未通过验证。": "The API key was rejected.",
+  "本地模型没有响应，请确认服务已经启动。": "The local model did not respond. Make sure its server is running.",
+  "服务返回错误 {0}。": "The service returned error {0}.",
+  "连接失败，请检查网络、接口地址和模型名称。": "Connection failed. Check the network, Base URL, and model name.",
+  "自定义阅读提示词": "Custom reading prompt",
+  "留空使用内置中文阅读助手；填写后将完全替换内置提示词。": "Leave empty to use the built-in reading assistant. Your text replaces it completely.",
+  "例如：用通俗语言解释，并指出作者论证中的隐含假设。": "For example: explain in plain language and point out hidden assumptions in the author's argument.",
+  "回答语言": "Response language",
+  "AI 解释和追问默认使用的语言。": "The language used for AI explanations and follow-up questions.",
+  "本地模型只在这台设备上运行；手机无法连接电脑的 localhost。": "Local models run on this device only; a phone cannot reach the computer's localhost.",
+  "只有你主动使用 AI 时，选中的原文、书名和问题才会发送到 {0}。": "Only when you use AI are the selected passage, book title, and question sent to {0}.",
+  "AI 与翻译": "AI & translation",
+  "新增 DeepSeek、Kimi、千问、智谱、MiniMax、硅基流动和豆包等模型配置": "Added provider presets for DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, and more.",
+  "API 密钥改用 Obsidian 密钥库存储，并增加连接测试": "API keys now use Obsidian SecretStorage, with a built-in connection test.",
+  "阅读主题重做为纸白、暖纸、青瓷、夜间和电子墨水": "Redesigned reading themes: Paper White, Warm Paper, Celadon, Night, and E-ink.",
+  "AI 阅读提示词改为中文阅读逻辑，移除旧服务默认值": "Rebuilt the AI reading prompt for Chinese readers and removed the legacy service default.",
+});
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
 // has no business on the window object at all. One value, one place.
@@ -558,7 +613,10 @@ const DEFAULT = {
   // selected passage to whichever service they choose, and that has to be a
   // decision, never a surprise.
   aiEnabled: false,
-  aiProvider: "eltonlabs",
+  aiProvider: "",
+  // The API key itself lives in Obsidian SecretStorage. data.json keeps only
+  // the selected secret ID so vault syncing never copies the key.
+  aiSecret: "",
   aiKey: "",
   aiModel: "",
   aiBase: "",
@@ -612,25 +670,17 @@ const DEFAULT = {
   // После обновления список изменений сохраняется заметкой в хранилище.
   whatsNewNote: true
 };
-const THEMES = {
-  // Цвета самого Obsidian, а не свои: книга и библиотека выглядят как
-  // остальное приложение — и меняются вместе с ним, включая чужие темы из каталога.
-  // Это ссылки на переменные, а не цвета: браузер разбирает их в момент отрисовки,
-  // поэтому переключение темы в Obsidian видно сразу, без перезапуска.
-  auto: {
-    bg: "var(--background-primary)",
-    text: "var(--text-normal)",
-    ui: "var(--background-secondary)",
-    border: "var(--background-modifier-border)",
-    accent: "var(--interactive-accent)",
-    muted: "var(--text-muted)",
-  },
-  // Maximum contrast, no tinting: anything softer turns to mush on an e-ink panel.
-  eink: { bg: "#ffffff", text: "#000000", ui: "#ffffff", border: "#000000", accent: "#000000", muted: "#444444" },
-  dark: { bg: "#12121a", text: "#ddd8f0", ui: "#1c1c2a", border: "#2e2e45", accent: "#7c6af7", muted: "#6a6880" },
-  light: { bg: "#faf8f3", text: "#1a1a2e", ui: "#f0ede5", border: "#ddd9ce", accent: "#5548d9", muted: "#8a8678" },
-  sepia: { bg: "#f5efe3", text: "#2c2416", ui: "#ece4d2", border: "#cfc4a8", accent: "#8B6914", muted: "#9a8a68" }
-};
+const THEMES = READER_THEMES;
+function readerThemeLabel(id) {
+  return __ertr((THEMES[id] && THEMES[id].label) || id);
+}
+function selectedReaderTheme(settings) {
+  return settings.einkMode ? "eink" : migrateReaderTheme(settings.theme);
+}
+function setReaderTheme(settings, id) {
+  settings.einkMode = id === "eink";
+  settings.theme = id === "eink" ? "eink" : migrateReaderTheme(id);
+}
 // Одно место, где решается, какими цветами рисовать. Режим e-ink сильнее
 // выбранной темы, а неизвестное имя темы откатывается к «как в Obsidian»,
 // а не к белому листу посреди тёмного приложения.
@@ -1507,12 +1557,12 @@ const EltonReader = class extends Plugin {
     // built-in handler for it, but another plugin might have claimed it, and that
     // must not take epub down with it.
     try { this.registerExtensions(["fb2"], VIEW_TYPE); }
-    catch (e) { console.warn("Elton Reader: could not register .fb2", e); }
+    catch (e) { console.warn("Qiaomu Book Reader: could not register .fb2", e); }
     // Also open PDFs in the reader instead of Obsidian's built-in PDF viewer.
     // Separate call in try/catch: if some other plugin already claimed "pdf",
     // we still keep epub working and fall back to the right-click menu for PDFs.
     try { this.registerExtensions(["pdf"], VIEW_TYPE); }
-    catch (e) { console.warn(__ertr("Elton Reader: could not register .pdf, use right-click → Открыть в Elton Reader"), e); }
+    catch (e) { console.warn("Qiaomu Book Reader: could not register .pdf; use the file menu to open it in Qiaomu Book Reader", e); }
     this.addRibbonIcon(
       "book-open",
       `Qiaomu Book Reader — ${__ertr("\u0411\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0430")}`,
@@ -1758,9 +1808,49 @@ const EltonReader = class extends Plugin {
     return erPath(folder ? `${folder}/reading-progress.json` : "reading-progress.json");
   }
   async loadAll() {
-    let _a, _b, _c;
+    let _a, _b;
     const d = await this.loadData();
     this.settings = { ...DEFAULT, ...(_a = d == null ? void 0 : d.settings) != null ? _a : {} };
+    let v33SettingsMigrated = false;
+    // v3.3 replaces the old colour names with purpose-built reading themes.
+    // Migrate both the shared appearance and any per-device profiles once.
+    const migratedTheme = migrateReaderTheme(this.settings.theme);
+    if (migratedTheme !== this.settings.theme) v33SettingsMigrated = true;
+    this.settings.theme = migratedTheme;
+    if (!["auto", "reader"].includes(this.settings.libTheme)) {
+      const migratedLibraryTheme = migrateReaderTheme(this.settings.libTheme);
+      if (migratedLibraryTheme !== this.settings.libTheme) v33SettingsMigrated = true;
+      this.settings.libTheme = migratedLibraryTheme;
+    }
+    for (const profile of Object.values(this.settings.deviceProfiles || {})) {
+      if (profile && profile.theme) {
+        const migratedProfileTheme = migrateReaderTheme(profile.theme);
+        if (migratedProfileTheme !== profile.theme) v33SettingsMigrated = true;
+        profile.theme = migratedProfileTheme;
+      }
+    }
+    // Elton AI is no longer a product option. Do not silently redirect an old
+    // paid key to another provider; leave AI disabled until the reader chooses.
+    if (this.settings.aiProvider === "eltonlabs") {
+      this.settings.aiProvider = "";
+      this.settings.aiEnabled = false;
+      v33SettingsMigrated = true;
+    } else if (this.settings.aiProvider === "local") {
+      this.settings.aiProvider = "ollama";
+      v33SettingsMigrated = true;
+    }
+    // Move legacy plaintext keys out of data.json on modern Obsidian. The old
+    // Elton key is preserved under a clearly named secret but not selected.
+    if (this.settings.aiKey && this.app.secretStorage) {
+      const secretId = this.settings.aiProvider
+        ? `qiaomu-book-reader-${this.settings.aiProvider}`
+        : "qiaomu-book-reader-legacy-key";
+      this.app.secretStorage.setSecret(secretId, this.settings.aiKey);
+      if (this.settings.aiProvider) this.settings.aiSecret = secretId;
+      this.settings.aiKey = "";
+      v33SettingsMigrated = true;
+    }
+    if (v33SettingsMigrated) await this._saveLocalData();
     // Overlay whatever THIS device last looked like (no-op unless enabled).
     applyDeviceProfile(this.settings);
     // An older install may carry a null here from a build that derived this
@@ -3042,21 +3132,26 @@ async function translateText(text, to = "ru") {
  * the app itself, so the local option works with no setup — which is the whole
  * reason for offering it.
  */
-const AI_PROVIDERS = {
-  eltonlabs:  { label: "Elton AI", needsKey: true,  base: "https://api.eltonlabs.org/v1", model: "anthropic/claude-haiku-4.5" },
-  openrouter: { label: "OpenRouter", needsKey: true, base: "https://openrouter.ai/api/v1", model: "anthropic/claude-haiku-4.5" },
-  openai:     { label: "OpenAI", needsKey: true, base: "https://api.openai.com/v1", model: "gpt-4.1-mini" },
-  // Runs on the reader's own machine; nothing leaves the device.
-  local:      { label: "Ollama / LM Studio", needsKey: false, base: "http://localhost:11434/v1", model: "qwen2.5:3b" },
-};
-function aiConfig(settings) {
-  const id = settings.aiProvider || "eltonlabs";
-  const p = AI_PROVIDERS[id] || AI_PROVIDERS.eltonlabs;
+function aiSecretValue(plugin) {
+  const settings = plugin.settings;
+  if (settings.aiSecret && plugin.app.secretStorage) {
+    return plugin.app.secretStorage.getSecret(settings.aiSecret) || "";
+  }
+  // Temporary compatibility path for Obsidian before SecretStorage and for the
+  // one load in which a legacy plaintext key is being migrated.
+  return settings.aiKey || "";
+}
+function aiConfig(plugin) {
+  const settings = plugin.settings;
+  const id = settings.aiProvider || "";
+  const p = aiProviderFor(id);
+  if (!p) return { id: "", provider: null, base: "", model: "", key: "", needsKey: false };
   return {
     id,
-    base: (settings.aiBase || p.base).replace(/\/+$/, ""),
+    provider: p,
+    base: normalizeAiBase(settings.aiBase || p.base),
     model: settings.aiModel || p.model,
-    key: settings.aiKey || "",
+    key: aiSecretValue(plugin),
     needsKey: p.needsKey,
   };
 }
@@ -3065,22 +3160,17 @@ function aiConfig(settings) {
 // and sent as an ordinary message.
 function aiSystemChat(into) {
   return [
-    `You are helping someone read a book in a language they are still learning.`,
-    `They send a passage from it and then talk to you about that passage.`,
-    `Answer in ${into}. Use Markdown. Be concise — this is read beside the book, not instead of it.`,
+    `你是一名克制、准确的阅读助手。用户会围绕书中的一个片段与你讨论。`,
+    `请使用${into}回答，使用 Markdown，表达简洁清楚；帮助用户读懂原文，而不是替代阅读。`,
+    `区分原文信息、你的解释和不确定推断。不要编造书中没有出现的内容。`,
     ``,
-    `If they ask for разбор (a breakdown) of the passage, give exactly these sections:`,
-    `1. **Перевод** — a natural translation of the whole passage, not word-for-word.`,
-    `2. **По словам** — a list of only the words and phrases that are genuinely hard`,
-    `   (idioms, rare senses, false friends). Skip anything obvious. For each: the word,`,
-    `   its meaning HERE, and its dictionary form if that differs.`,
-    `3. **Почему так сказано** — the tone, register or construction that a learner`,
-    `   would miss: why this wording rather than the plain one. Two or three sentences.`,
-    `4. **Откуда слово** — etymology for at most two words, and only where it actually`,
-    `   helps remember them. Omit this section entirely if nothing qualifies.`,
+    `当用户要求“解释这段”或“分析这段”时，按需使用以下小节：`,
+    `1. **这段在说什么** — 用自然语言解释核心意思。`,
+    `2. **关键概念** — 只解释真正影响理解的术语、隐喻或背景。`,
+    `3. **为什么这样表达** — 说明语气、结构或作者的论证方式。`,
+    `4. **值得追问** — 最多给出两个能帮助继续思考的问题。`,
     ``,
-    `For anything else, just answer what was asked — no fixed sections, and no`,
-    `translation of the whole passage unless that is what they asked for.`,
+    `其他问题直接回答，不强行套用固定结构；除非用户要求，不要全文翻译。`,
   ].join("\n");
 }
 // The reader's own instruction replaces the built-in one entirely. The passage
@@ -3092,7 +3182,7 @@ function aiMessages(text, settings, turns, book) {
   // Which book this is from, sent quietly with the passage: a page out of context
   // reads very differently from the same page in a book the model knows.
   const from = String(book || "").trim();
-  const head = (from ? `Из книги «${from}».\n` : "") + `Фрагмент:\n${text}`;
+  const head = (from ? `书名：《${from}》\n` : "") + `原文片段：\n${text}`;
   turns.forEach((turn, i) => {
     msgs.push(i === 0 && turn.role === "user"
       ? { role: "user", content: `${head}\n\n${turn.content}` }
@@ -3100,8 +3190,14 @@ function aiMessages(text, settings, turns, book) {
   });
   return msgs;
 }
-async function aiExplain(text, settings, turns, book) {
-  const cfg = aiConfig(settings);
+async function aiExplain(text, plugin, turns, book) {
+  const settings = plugin.settings;
+  const cfg = aiConfig(plugin);
+  if (!cfg.provider || !cfg.base || !cfg.model) {
+    const err = new Error("AI is not configured");
+    err.erReason = "notconfigured";
+    throw err;
+  }
   if (cfg.needsKey && !cfg.key) {
     const err = new Error("no api key");
     err.erReason = "nokey";
@@ -3112,7 +3208,6 @@ async function aiExplain(text, settings, turns, book) {
   const res = await requestUrl({
     url: `${cfg.base}/chat/completions`,
     method: "POST",
-    headers,
     throw: false,
     body: JSON.stringify({
       model: cfg.model,
@@ -3133,15 +3228,26 @@ async function aiExplain(text, settings, turns, book) {
     err.erStatus = res.status;
     // A local server that is simply not running is the single most likely
     // failure of the local option, and "http 0" explains nothing.
-    if (cfg.id === "local") err.erReason = "local";
+    if (cfg.provider.local) err.erReason = "local";
     throw err;
   }
   const data = res.json;
   let out = data && data.choices && data.choices[0] && data.choices[0].message
-    ? String(data.choices[0].message.content || "").trim()
+    ? String(data.choices[0].message.content || data.choices[0].message.reasoning_content || "").trim()
     : "";
   if (!out) { const err = new Error("empty"); err.erReason = "empty"; throw err; }
   return out;
+}
+async function aiTestConnection(plugin) {
+  const cfg = aiConfig(plugin);
+  const started = Date.now();
+  const answer = await aiExplain(
+    "这是一条连接测试，不包含任何书籍内容。",
+    plugin,
+    [{ role: "user", content: "请只回答：连接成功" }],
+    "",
+  );
+  return { model: cfg.model, latency: Date.now() - started, answer };
 }
 // Shows the translation of a selection, with the original kept above it so the
 // reader can compare. Actions mirror the popup: copy, or save as a note (the
@@ -3727,7 +3833,7 @@ const AiExplainModal = class extends Modal {
     this._scroll();
     let answer = "";
     try {
-      answer = await aiExplain(this.text, this.plugin.settings, this.turns, this.book);
+      answer = await aiExplain(this.text, this.plugin, this.turns, this.book);
     } catch (e) {
       console.error("Book Reader: AI chat failed", e);
       // The unanswered message leaves the thread: keeping it would send the same
@@ -3736,7 +3842,8 @@ const AiExplainModal = class extends Modal {
       const why = e && e.erReason;
       bubble.addClass("er-ai-msg-err");
       bubble.setText(
-        why === "nokey" ? __ertr("Не задан ключ. Откройте настройки плагина → «Разбор ИИ» и вставьте ключ выбранного сервиса.")
+        why === "notconfigured" ? __ertr("请先在插件设置中选择 AI 服务和模型。")
+          : why === "nokey" ? __ertr("请先在插件设置中选择或创建 API 密钥。")
           : why === "auth" ? __ertr("Сервис не принял ключ. Проверьте его в настройках плагина.")
             : why === "limit" ? __ertr("Сервис ограничил частые запросы. Подождите минуту и попробуйте снова.")
               : why === "local" ? __ertr("Локальная модель не отвечает. Проверьте, запущен ли Ollama или LM Studio.")
@@ -5397,14 +5504,10 @@ const ReadSettingsModal = class extends Modal {
     this._seg(
       appearance,
       __ertr("Тема"),
-      [["auto", __ertr("Как в Obsidian")], ["light", __ertr("Светлая")], ["sepia", __ertr("Сепия")], ["dark", __ertr("Тёмная")], ["eink", __ertr("Электронные чернила")]],
-      () => s.einkMode ? "eink" : s.theme,
+      READER_THEME_CHOICES.map((id) => [id, readerThemeLabel(id)]),
+      () => selectedReaderTheme(s),
       async (t) => {
-        if (t === "eink") s.einkMode = true;
-        else {
-          s.einkMode = false;
-          s.theme = t;
-        }
+        setReaderTheme(s, t);
         await this._apply(false);
       }
     );
@@ -6613,6 +6716,12 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.3.0", items: [
+    __ertr("新增 DeepSeek、Kimi、千问、智谱、MiniMax、硅基流动和豆包等模型配置"),
+    __ertr("API 密钥改用 Obsidian 密钥库存储，并增加连接测试"),
+    __ertr("阅读主题重做为纸白、暖纸、青瓷、夜间和电子墨水"),
+    __ertr("AI 阅读提示词改为中文阅读逻辑，移除旧服务默认值")
+  ] },
   { v: "3.2.3", items: [
     __ertr("修复历史关联名称不一致时的阅读笔记标题迁移")
   ] },
@@ -7632,13 +7741,13 @@ const ReaderView = class extends ItemView {
     const sec = (l) => p.createDiv("er-pan-sec").setText(l);
     sec(__ertr("Тема"));
     const thRow = p.createDiv("er-theme-row");
-    ["auto", "dark", "light", "sepia", "eink"].forEach((t) => {
+    READER_THEME_CHOICES.forEach((t) => {
       const btn = thRow.createDiv(`er-theme-btn er-theme-${t}`);
-      btn.setText({ auto: __ertr("Как в Obsidian"), dark: __ertr("Тёмная"), light: __ertr("Светлая"), sepia: __ertr("Сепия"), eink: "E-ink" }[t]);
-      if (this.plugin.settings.theme === t)
+      btn.setText(readerThemeLabel(t));
+      if (selectedReaderTheme(this.plugin.settings) === t)
         btn.addClass("active");
       btn.addEventListener("click", async () => {
-        this.plugin.settings.theme = t;
+        setReaderTheme(this.plugin.settings, t);
         await this.plugin.saveAll();
         this.applyVars();
         if (this.bookHtml)
@@ -9346,12 +9455,12 @@ const ReaderModal = class extends Modal {
     const sec = l => p.createDiv("er-pan-sec").setText(l);
     sec(__ertr("\u0422\u0435\u043C\u0430"));
     const thRow = p.createDiv("er-theme-row");
-    ["auto","dark","light","sepia","eink"].forEach(t => {
+    READER_THEME_CHOICES.forEach(t => {
       const btn = thRow.createDiv(`er-theme-btn er-theme-${t}`);
-      btn.setText({ auto:__ertr("Как в Obsidian"), dark:__ertr("\u0422\u0451\u043C\u043D\u0430\u044F"), light:__ertr("\u0421\u0432\u0435\u0442\u043B\u0430\u044F"), sepia:"Sepia", eink:"E-ink" }[t]);
-      if (this.plugin.settings.theme === t) btn.addClass("active");
+      btn.setText(readerThemeLabel(t));
+      if (selectedReaderTheme(this.plugin.settings) === t) btn.addClass("active");
       btn.addEventListener("click", async () => {
-        this.plugin.settings.theme = t;
+        setReaderTheme(this.plugin.settings, t);
         await this.plugin.saveAll();
         // Только цвета: пересобирать страницы ради темы не нужно.
         this._applyTheme();
@@ -9807,7 +9916,7 @@ const SettingsTab = class extends PluginSettingTab {
       { id: "read", label: __ertr("Чтение") },
       { id: "look", label: __ertr("Оформление") },
       { id: "notes", label: __ertr("Заметки") },
-      { id: "translate", label: __ertr("Перевод") },
+      { id: "translate", label: __ertr("AI 与翻译") },
       { id: "data", label: __ertr("Данные") },
       { id: "about", label: __ertr("О плагине") }
     ];
@@ -9986,63 +10095,119 @@ const SettingsTab = class extends PluginSettingTab {
   // sitting next to the reading options.
   _groupAi(c, redraw) {
     const s = this.plugin.settings;
-    const cfg = aiConfig(s);
+    const cfg = aiConfig(this.plugin);
     new Setting(c)
-      .setName(__ertr("Сервис"))
+      .setName(__ertr("AI 服务"))
+      .setDesc(__ertr("优先展示国产模型；未选择时不会发送任何内容。"))
       .addDropdown((d) => {
-        for (const [id, p] of Object.entries(AI_PROVIDERS)) d.addOption(id, p.label);
-        d.setValue(s.aiProvider || "eltonlabs").onChange(async (v) => {
+        d.addOption("", __ertr("请选择服务"));
+        for (const category of AI_PROVIDER_CATEGORIES) {
+          for (const [id, p] of Object.entries(AI_PROVIDERS)) {
+            if (p.category === category.id) d.addOption(id, `${category.label} · ${p.label}`);
+          }
+        }
+        d.setValue(s.aiProvider || "").onChange(async (v) => {
           s.aiProvider = v;
-          // The model belongs to the provider: carrying one service's model
-          // name over to another fails on the first request with a bare 404.
           s.aiModel = "";
+          s.aiBase = "";
           await this.plugin.saveAll();
           redraw();
         });
       });
-    if (AI_PROVIDERS[s.aiProvider || "eltonlabs"].needsKey) {
-      new Setting(c)
-        .setName(__ertr("Ключ"))
-        .setDesc(__ertr("Хранится в настройках плагина, внутри вашего хранилища. Если хранилище синхронизируется, ключ едет вместе с ним — держите это в уме."))
-        .addText((t) => {
-          t.inputEl.type = "password";
-          t.setPlaceholder("sk-…").setValue(s.aiKey || "").onChange(async (v) => {
-            s.aiKey = v.trim();
+    if (!cfg.provider) {
+      c.createEl("div", { cls: "er-set-note", text: __ertr("选择服务后再配置模型和密钥。AI 功能默认关闭，不影响离线阅读。") });
+      return;
+    }
+    const p = cfg.provider;
+    c.createEl("div", { cls: "er-ai-provider-note", text: p.description });
+    if (!p.local) {
+      const keySetting = new Setting(c)
+        .setName(__ertr("API 密钥"))
+        .setDesc(__ertr("密钥保存在 Obsidian 密钥库中，不会写入插件 data.json。"));
+      if (typeof SecretComponent === "function" && this.app.secretStorage) {
+        keySetting.addComponent((el) => new SecretComponent(this.app, el)
+          .setValue(s.aiSecret || "")
+          .onChange(async (v) => {
+            s.aiSecret = v;
+            s.aiKey = "";
             await this.plugin.saveAll();
-          });
-        });
+          }));
+      }
+      if (p.apiKeyUrl) {
+        keySetting.addButton((b) => b.setButtonText(__ertr("获取密钥")).onClick(() => window.open(p.apiKeyUrl, "_blank")));
+      }
     }
     new Setting(c)
-      .setName(__ertr("Модель"))
-      .setDesc(__ertr("Пусто — модель по умолчанию для этого сервиса: {0}", cfg.model))
-      .addText((t) => t.setPlaceholder(cfg.model).setValue(s.aiModel || "").onChange(async (v) => {
-        s.aiModel = v.trim();
+      .setName(__ertr("模型"))
+      .setDesc(p.model
+        ? __ertr("可直接使用推荐模型，也可以填写服务商提供的其他模型 ID。")
+        : __ertr("请输入服务商控制台显示的模型或推理接入点 ID。"))
+      .addText((t) => {
+        const listId = `er-ai-models-${p.category}-${s.aiProvider}`;
+        t.setPlaceholder(p.model || __ertr("模型 ID"))
+          .setValue(s.aiModel || "")
+          .onChange(async (v) => {
+            s.aiModel = v.trim();
+            await this.plugin.saveAll();
+          });
+        if (p.models && p.models.length) {
+          t.inputEl.setAttr("list", listId);
+          const list = c.createEl("datalist", { attr: { id: listId } });
+          p.models.forEach((model) => list.createEl("option", { attr: { value: model } }));
+        }
+      });
+    new Setting(c)
+      .setName(__ertr("接口地址"))
+      .setDesc(__ertr("通常保持为空；只有区域地址、代理或自建服务需要修改。"))
+      .addText((t) => t.setPlaceholder(p.base || "https://…/v1").setValue(s.aiBase || "").onChange(async (v) => {
+        s.aiBase = normalizeAiBase(v);
         await this.plugin.saveAll();
       }));
     new Setting(c)
-      .setName(__ertr("Свой системный промпт"))
-      .setDesc(__ertr("Что именно делать с фрагментом. Пусто — встроенный разбор: перевод, трудные слова, обороты, этимология. Свой текст заменяет его целиком — и для разбора, и для ваших вопросов в окне разбора."))
+      .setName(__ertr("测试连接"))
+      .setDesc(__ertr("发送一条不含书籍内容的最短测试消息。云端服务可能产生极少量费用。"))
+      .addButton((b) => b.setButtonText(__ertr("开始测试")).setCta().onClick(async () => {
+        b.setDisabled(true).setButtonText(__ertr("测试中…"));
+        try {
+          const result = await aiTestConnection(this.plugin);
+          new Notice(__ertr("连接成功：{0} · {1} ms", result.model, result.latency));
+        } catch (e) {
+          const why = e && e.erReason;
+          const msg = why === "notconfigured" ? __ertr("请先填写接口地址和模型。")
+            : why === "nokey" ? __ertr("请先选择或创建 API 密钥。")
+              : why === "auth" ? __ertr("密钥未通过验证。")
+                : why === "local" ? __ertr("本地模型没有响应，请确认服务已经启动。")
+                  : why === "http" ? __ertr("服务返回错误 {0}。", e.erStatus)
+                    : __ertr("连接失败，请检查网络、接口地址和模型名称。");
+          new Notice(msg, 7000);
+        } finally {
+          b.setDisabled(false).setButtonText(__ertr("开始测试"));
+        }
+      }));
+    new Setting(c)
+      .setName(__ertr("自定义阅读提示词"))
+      .setDesc(__ertr("留空使用内置中文阅读助手；填写后将完全替换内置提示词。"))
       .addTextArea((t) => {
         t.inputEl.rows = 6;
         t.inputEl.addClass("er-ai-sys");
-        t.setPlaceholder(__ertr("Например: объясни простыми словами и дай два примера из жизни."))
+        t.setPlaceholder(__ertr("例如：用通俗语言解释，并指出作者论证中的隐含假设。"))
           .setValue(s.aiSystem || "").onChange(async (v) => {
             s.aiSystem = v;
             await this.plugin.saveAll();
           });
       });
     new Setting(c)
-      .setName(__ertr("Отвечать на языке"))
-      .setDesc(__ertr("На каком языке писать разбор. Язык самой книги определяется сам."))
+      .setName(__ertr("回答语言"))
+      .setDesc(__ertr("AI 解释和追问默认使用的语言。"))
       .addText((t) => t.setPlaceholder("中文").setValue(s.aiInto || "中文").onChange(async (v) => {
         s.aiInto = v.trim() || "中文";
         await this.plugin.saveAll();
       }));
     c.createEl("div", {
       cls: "er-set-note",
-      text: cfg.id === "local"
-        ? __ertr("Локальная модель: текст никуда не уходит, но нужен запущенный Ollama или LM Studio на этом же компьютере.")
-        : __ertr("Выделенный фрагмент отправляется на {0}. Всё остальное в читалке работает офлайн.", cfg.base),
+      text: p.local
+        ? __ertr("本地模型只在这台设备上运行；手机无法连接电脑的 localhost。")
+        : __ertr("只有你主动使用 AI 时，选中的原文、书名和问题才会发送到 {0}。", cfg.base),
     });
   }
   // Set once and forgotten: kept out of the tab so what remains there is only
@@ -10267,8 +10432,8 @@ const SettingsTab = class extends PluginSettingTab {
   // ── Перевод ───────────────────────────────────────────────────────────────
   _tabTranslate(c) {
     new Setting(c)
-      .setName(__ertr("Разбор фрагмента через ИИ"))
-      .setDesc(__ertr("Добавляет к выделению кнопку ✨: открывает разговор о выделенном куске. Одним тапом можно попросить разбор — перевод, трудные слова, обороты, этимология, — а можно просто спросить своими словами и продолжить расспрашивать. Сам ничего не спрашивает: фрагмент уходит на выбранный вами сервис только по вашему сообщению. Выключено, пока вы это не настроите."))
+      .setName(__ertr("AI 辅助阅读"))
+      .setDesc(__ertr("选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。"))
       .addToggle((t) => t.setValue(this.plugin.settings.aiEnabled === true).onChange(async (v) => {
         this.plugin.settings.aiEnabled = v;
         await this.plugin.saveAll();
@@ -10276,8 +10441,8 @@ const SettingsTab = class extends PluginSettingTab {
       }));
     if (this.plugin.settings.aiEnabled) {
       this._group(c, {
-        name: __ertr("Куда обращаться за разбором"),
-        desc: __ertr("Сервис, ключ и модель. Локальная модель работает без ключа и не отправляет текст в интернет."),
+        name: __ertr("AI 模型配置"),
+        desc: __ertr("选择服务、模型和密钥；Ollama 与 LM Studio 在本机运行。"),
         build: (b, redraw) => this._groupAi(b, redraw),
       });
     }
@@ -10293,6 +10458,7 @@ const SettingsTab = class extends PluginSettingTab {
       .setName(__ertr("Переводить на язык"))
       .setDesc(__ertr("Язык, на который переводить выделенный фрагмент. Исходный язык определяется автоматически."))
       .addDropdown((d) => d
+        .addOption("zh-CN", "简体中文")
         .addOption("ru", __ertr("Русский"))
         .addOption("en", "English")
         .addOption("de", "Deutsch")
