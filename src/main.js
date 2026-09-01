@@ -512,6 +512,39 @@ Object.assign(__erEN, {
   "批注改为就近输入：显示三行原文，可展开，回车发送、Esc 取消": "Comments now stay beside the passage, showing a three-line expandable quote with Enter to send and Escape to cancel.",
   "AI 设置默认只显示必要项，模型和接口地址收进高级设置": "AI setup now shows only essentials by default, with model and endpoint overrides under Advanced.",
   "英文字体名称不再附加多余的中文解释，设置提示与确认文案更自然": "English font names no longer carry redundant Chinese suffixes, and settings guidance and confirmation copy are clearer.",
+  "Объясни": "Explain it",
+  "Приведи пример": "Give an example",
+  "Ключевые мысли": "Summarize key points",
+  "Чем это полезно мне": "How is this useful?",
+  "Другой взгляд": "See another angle",
+  "Проверь меня": "Quiz me",
+  "Объясни этот фрагмент простым и понятным языком.": "Explain this passage in simple, easy-to-understand language.",
+  "Объясни этот фрагмент на одном конкретном примере из жизни или реальной ситуации.": "Explain this passage with one concrete example from everyday life or a real situation.",
+  "Выдели основные мысли этого фрагмента и кратко перечисли их по пунктам.": "Extract the key points of this passage and list them concisely.",
+  "Свяжи этот фрагмент с реальными жизненными или рабочими ситуациями и объясни, какую конкретную пользу или идею я могу из него вынести.": "Connect this passage to real life or work and explain what concrete value or insight I can take from it.",
+  "Рассмотри этот фрагмент с другой позиции или точки зрения: дополни, поставь под сомнение или возрази автору.": "Consider this passage from another position or perspective: add to it, question it, or challenge the author.",
+  "Составь по этому фрагменту 2–3 вопроса, чтобы проверить, действительно ли я его понял.": "Create 2–3 questions about this passage to test whether I truly understood it.",
+  "Настройка быстрых вопросов": "Manage quick prompts",
+  "Название показывается на кнопке, а полный текст отправляется AI.": "The name appears on the button; the full prompt is sent to AI.",
+  "Добавить вопрос": "Add prompt",
+  "Можно сохранить не больше 20 быстрых вопросов.": "You can save up to 20 quick prompts.",
+  "Быстрых вопросов пока нет. Добавьте первый или восстановите встроенные.": "No quick prompts yet. Add one or restore the built-ins.",
+  "Название на кнопке": "Button label",
+  "Текст, который будет отправлен AI": "Prompt sent to AI",
+  "Восстановить встроенные": "Restore defaults",
+  "Заполните и название, и текст вопроса.": "Enter both a name and prompt text.",
+  "Быстрые вопросы сохранены": "Quick prompts saved",
+  "Настроить быстрые вопросы": "Manage quick prompts",
+  "Выберите быстрый вопрос или напишите свой.": "Choose a quick prompt or write your own.",
+  "Добавьте быстрые вопросы через значок настроек вверху.": "Add quick prompts from the settings icon above.",
+  "Открыть заметку \xAB{0}\xBB в отдельной вкладке? В следующий раз отрывок будет добавлен без этого вопроса.": "Open the note \xAB{0}\xBB in a new tab? Next time the excerpt will be added without asking.",
+  "Не сейчас": "Not now",
+  "Быстрые вопросы": "Quick prompts",
+  "{0} кнопок в окне AI. Можно менять названия и полный текст, добавлять свои и удалять ненужные.": "{0} buttons in the AI dialog. Rename them, edit the full prompts, add your own, or remove those you do not need.",
+  "Управлять": "Manage",
+  "追加摘录后只在第一次询问是否打开阅读笔记，后续不再打断阅读": "After appending an excerpt, the reader asks whether to open the reading note only once and no longer interrupts later reading.",
+  "AI 快捷提示词支持新增、修改、删除和恢复默认": "AI quick prompts can now be added, edited, deleted, and restored to defaults.",
+  "AI 对话框新增提示词设置入口，并内置六个更贴近日常阅读的问题": "The AI dialog now links directly to prompt settings and includes six questions designed for everyday reading.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
@@ -694,6 +727,15 @@ const DEFAULT = {
   // Empty means the built-in instruction. A reader who wants a different kind
   // of answer writes their own here instead of getting the four fixed sections.
   aiSystem: "",
+  // null = use the six built-in reading prompts in the current UI language.
+  // Once edited this becomes an array of { id, name, prompt } objects. Keeping
+  // the built-ins implicit means switching interface language still translates
+  // them until the reader actually customises the library.
+  aiQuickPrompts: null,
+  // The first manual append explains where the excerpt went and offers to open
+  // the reading note. Later appends use a quiet toast; the reading-note button is
+  // always available when the reader does want to open it.
+  bookNoteAppendPromptSeen: false,
   // Put a link back to the exact paragraph under every exported quote.
   // "pages" (default) or "scroll": one long column the reader scrolls.
   // Set once the reader has chosen a language by hand; until then the plugin
@@ -3247,6 +3289,40 @@ function aiSystemChat(into) {
     `其他问题直接回答，不强行套用固定结构；除非用户要求，不要全文翻译。`,
   ].join("\n");
 }
+const DEFAULT_AI_QUICK_PROMPTS = Object.freeze([
+  { id: "explain", name: "Объясни", prompt: "Объясни этот фрагмент простым и понятным языком." },
+  { id: "example", name: "Приведи пример", prompt: "Объясни этот фрагмент на одном конкретном примере из жизни или реальной ситуации." },
+  { id: "summary", name: "Ключевые мысли", prompt: "Выдели основные мысли этого фрагмента и кратко перечисли их по пунктам." },
+  { id: "useful", name: "Чем это полезно мне", prompt: "Свяжи этот фрагмент с реальными жизненными или рабочими ситуациями и объясни, какую конкретную пользу или идею я могу из него вынести." },
+  { id: "perspective", name: "Другой взгляд", prompt: "Рассмотри этот фрагмент с другой позиции или точки зрения: дополни, поставь под сомнение или возрази автору." },
+  { id: "quiz", name: "Проверь меня", prompt: "Составь по этому фрагменту 2–3 вопроса, чтобы проверить, действительно ли я его понял." },
+]);
+function defaultAiQuickPrompts() {
+  return DEFAULT_AI_QUICK_PROMPTS.map((item) => ({
+    id: item.id,
+    name: __ertr(item.name),
+    prompt: __ertr(item.prompt),
+  }));
+}
+function normalizeAiQuickPrompts(value) {
+  if (!Array.isArray(value)) return null;
+  const seen = new Set();
+  return value.slice(0, 20).map((item, index) => {
+    const rawId = String(item && item.id || "").trim();
+    let id = rawId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48) || `custom-${index + 1}`;
+    while (seen.has(id)) id = `${id}-${index + 1}`;
+    seen.add(id);
+    return {
+      id,
+      name: String(item && item.name || "").trim().slice(0, 40),
+      prompt: String(item && item.prompt || "").trim().slice(0, 2e3),
+    };
+  }).filter((item) => item.name && item.prompt);
+}
+function aiQuickPrompts(settings) {
+  const custom = normalizeAiQuickPrompts(settings && settings.aiQuickPrompts);
+  return custom === null ? defaultAiQuickPrompts() : custom;
+}
 // The reader's own instruction replaces the built-in one entirely. The passage
 // rides along with their first message, so the model never sees it as an order.
 function aiMessages(text, settings, turns, book) {
@@ -3912,6 +3988,101 @@ function addBarButtons(view, pop) {
     menu.showAtMouseEvent(e);
   });
 }
+const AiPromptLibraryModal = class extends Modal {
+  constructor(app, plugin, onSaved) {
+    super(app);
+    this.plugin = plugin;
+    this.onSaved = onSaved;
+    this.usingDefaults = !Array.isArray(plugin.settings.aiQuickPrompts);
+    this.items = aiQuickPrompts(plugin.settings).map((item) => ({ ...item }));
+  }
+  onOpen() {
+    this.modalEl.addClass("er-ai-prompt-modal");
+    this._draw();
+  }
+  _draw() {
+    const c = this.contentEl;
+    const oldScroll = this.listEl ? this.listEl.scrollTop : 0;
+    c.empty();
+    const head = c.createDiv("er-prompt-head");
+    const copy = head.createDiv("er-prompt-head-copy");
+    copy.createEl("h3", { text: __ertr("Настройка быстрых вопросов") });
+    copy.createDiv({ text: __ertr("Название показывается на кнопке, а полный текст отправляется AI.") });
+    const add = head.createEl("button", { cls: "er-prompt-add" });
+    svgIcon(add, "plus");
+    add.createSpan({ text: __ertr("Добавить вопрос") });
+    add.addEventListener("click", () => {
+      if (this.items.length >= 20) {
+        new Notice(__ertr("Можно сохранить не больше 20 быстрых вопросов."));
+        return;
+      }
+      this.usingDefaults = false;
+      this.items.push({ id: `custom-${Date.now().toString(36)}`, name: "", prompt: "" });
+      this._draw();
+      const inputs = this.contentEl.querySelectorAll(".er-prompt-name");
+      const last = inputs[inputs.length - 1];
+      if (last) erAutoFocus(last, 0);
+    });
+    this.listEl = c.createDiv("er-prompt-list");
+    if (!this.items.length) {
+      this.listEl.createDiv({ cls: "er-prompt-empty", text: __ertr("Быстрых вопросов пока нет. Добавьте первый или восстановите встроенные.") });
+    }
+    this.items.forEach((item, index) => {
+      const row = this.listEl.createDiv("er-prompt-row");
+      const rowHead = row.createDiv("er-prompt-row-head");
+      const name = rowHead.createEl("input", { cls: "er-prompt-name", type: "text" });
+      name.value = item.name;
+      name.placeholder = __ertr("Название на кнопке");
+      name.setAttribute("aria-label", __ertr("Название на кнопке"));
+      const del = rowHead.createEl("button", { cls: "er-prompt-delete" });
+      svgIcon(del, "trash");
+      del.setAttribute("aria-label", __ertr("Удалить"));
+      const prompt = row.createEl("textarea", { cls: "er-prompt-text" });
+      prompt.value = item.prompt;
+      prompt.placeholder = __ertr("Текст, который будет отправлен AI");
+      prompt.setAttribute("aria-label", __ertr("Текст, который будет отправлен AI"));
+      name.addEventListener("input", () => {
+        this.usingDefaults = false;
+        item.name = name.value;
+      });
+      prompt.addEventListener("input", () => {
+        this.usingDefaults = false;
+        item.prompt = prompt.value;
+      });
+      del.addEventListener("click", () => {
+        this.usingDefaults = false;
+        this.items.splice(index, 1);
+        this._draw();
+      });
+    });
+    if (oldScroll) this.listEl.scrollTop = oldScroll;
+    const foot = c.createDiv("er-prompt-foot");
+    const restore = foot.createEl("button", { cls: "er-prompt-restore", text: __ertr("Восстановить встроенные") });
+    restore.addEventListener("click", () => {
+      this.usingDefaults = true;
+      this.items = defaultAiQuickPrompts();
+      this._draw();
+    });
+    const actions = foot.createDiv("er-prompt-actions");
+    const cancel = actions.createEl("button", { text: __ertr("Отмена") });
+    cancel.addEventListener("click", () => this.close());
+    const save = actions.createEl("button", { cls: "mod-cta", text: __ertr("Сохранить") });
+    save.addEventListener("click", async () => {
+      const partlyEmpty = this.items.some((item) => Boolean(String(item.name || "").trim()) !== Boolean(String(item.prompt || "").trim()));
+      if (partlyEmpty) {
+        new Notice(__ertr("Заполните и название, и текст вопроса."));
+        return;
+      }
+      const clean = normalizeAiQuickPrompts(this.items.filter((item) => String(item.name || "").trim() && String(item.prompt || "").trim())) || [];
+      this.plugin.settings.aiQuickPrompts = this.usingDefaults ? null : clean;
+      await this.plugin.saveAll();
+      if (typeof this.onSaved === "function") this.onSaved();
+      new Notice(__ertr("Быстрые вопросы сохранены"));
+      this.close();
+    });
+  }
+  onClose() { this.contentEl.empty(); }
+};
 // The breakdown itself: the passage on top, the answer under it, and the two
 // things a reader wants to do with it — copy it, or keep it under the quote.
 const AiExplainModal = class extends Modal {
@@ -3933,8 +4104,20 @@ const AiExplainModal = class extends Modal {
     // a composer pinned under it. On a phone the three used to be four stacked
     // rows of buttons with the conversation squeezed into the gap between them.
     const head = c.createDiv("er-ai-head");
-    head.createDiv({ cls: "er-ai-title", text: __ertr("Разговор о фрагменте") });
-    if (this.book) head.createDiv({ cls: "er-ai-book", text: this.book });
+    const headText = head.createDiv("er-ai-headtext");
+    headText.createDiv({ cls: "er-ai-title", text: __ertr("Разговор о фрагменте") });
+    if (this.book) headText.createDiv({ cls: "er-ai-book", text: this.book });
+    const settings = head.createEl("button", { cls: "er-ai-prompt-settings" });
+    svgIcon(settings, "sliders");
+    settings.setAttribute("aria-label", __ertr("Настроить быстрые вопросы"));
+    settings.addEventListener("click", () => {
+      new AiPromptLibraryModal(this.app, this.plugin, () => {
+        if (!this.turns.length && this.log) {
+          this.log.empty();
+          this._buildEmpty();
+        }
+      }).open();
+    });
     // The passage is context, not the subject: two lines, and it opens on a tap
     // for the times the reader wants to check the wording.
     const quote = c.createDiv({ cls: "er-ai-quote", text: this.text });
@@ -4019,22 +4202,14 @@ const AiExplainModal = class extends Modal {
     const empty = this.log.createDiv("er-ai-empty");
     svgIcon(empty.createDiv("er-ai-empty-icon"), "wand-sparkles");
     empty.createDiv({ cls: "er-ai-empty-title", text: __ertr("О чём спросить?") });
-    empty.createDiv({
-      cls: "er-ai-empty-sub",
-      text: __ertr("Спросите что угодно об этом фрагменте — или начните с разбора."),
-    });
+    empty.createDiv({ cls: "er-ai-empty-sub", text: __ertr("Выберите быстрый вопрос или напишите свой.") });
     const prompts = empty.createDiv("er-ai-prompts");
-    for (const prompt of [
-      "Объясни простыми словами",
-      "Выдели ключевые идеи",
-      "Дай необходимый контекст",
-      "Проверь аргументацию",
-      "Свяжи с темой книги",
-      "Задай вопросы для размышления",
-    ]) {
-      const chip = prompts.createEl("button", { cls: "er-ai-chip", text: __ertr(prompt) });
-      chip.addEventListener("click", () => this._send(chip.textContent));
+    const items = aiQuickPrompts(this.plugin.settings);
+    for (const item of items) {
+      const chip = prompts.createEl("button", { cls: "er-ai-chip", text: item.name });
+      chip.addEventListener("click", () => this._send(item.prompt));
     }
+    if (!items.length) prompts.createDiv({ cls: "er-ai-prompts-empty", text: __ertr("Добавьте быстрые вопросы через значок настроек вверху.") });
     this.empty = empty;
   }
   _scroll() { this.log.scrollTop = this.log.scrollHeight; }
@@ -6599,13 +6774,20 @@ ${heading}
     if (typeof app.vault.process === "function") await app.vault.process(noteFile, add);
     else await app.vault.modify(noteFile, add(await app.vault.read(noteFile)));
     new Notice(skipped ? __ertr("Добавлено в \xAB{0}\xBB: {1}, пропущено уже имевшихся: {2}", noteFile.basename, parts.length, skipped) : __ertr("Добавлено цитат в \xAB{0}\xBB: {1}", noteFile.basename, parts.length));
-    new ConfirmModal(app, {
-      title: __ertr("Цитаты добавлены"),
-      body: __ertr("Открыть заметку \xAB{0}\xBB в отдельной вкладке?", noteFile.basename),
-      okText: __ertr("Да, открыть"),
-      cancelText: __ertr("Нет"),
-      onYes: () => openNoteInTab(app, noteFile, targetLine)
-    }).open();
+    // Explain the destination once, then get out of the reader's way. The book
+    // already has a permanent "reading note" button, so asking after every
+    // append adds a decision without adding a capability.
+    if (plugin.settings.bookNoteAppendPromptSeen !== true) {
+      plugin.settings.bookNoteAppendPromptSeen = true;
+      await plugin._saveLocalData();
+      new ConfirmModal(app, {
+        title: __ertr("Цитаты добавлены"),
+        body: __ertr("Открыть заметку \xAB{0}\xBB в отдельной вкладке? В следующий раз отрывок будет добавлен без этого вопроса.", noteFile.basename),
+        okText: __ertr("Да, открыть"),
+        cancelText: __ertr("Не сейчас"),
+        onYes: () => openNoteInTab(app, noteFile, targetLine)
+      }).open();
+    }
   } catch (e) {
     console.error("Elton Reader: append quotes to book note failed", e);
     new Notice(__ertr("Не удалось добавить цитаты в заметку книги"));
@@ -7029,6 +7211,11 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.6.0", items: [
+    __ertr("追加摘录后只在第一次询问是否打开阅读笔记，后续不再打断阅读"),
+    __ertr("AI 快捷提示词支持新增、修改、删除和恢复默认"),
+    __ertr("AI 对话框新增提示词设置入口，并内置六个更贴近日常阅读的问题")
+  ] },
   { v: "3.5.1", items: [
     __ertr("选中文本后的工具条新增“更多”菜单，摘录笔记、添加到阅读笔记和删除划线集中收纳"),
     __ertr("批注改为就近输入：显示三行原文，可展开，回车发送、Esc 取消"),
@@ -10872,6 +11059,12 @@ const SettingsTab = class extends PluginSettingTab {
         desc: __ertr("Выберите сервис; для облачных сервисов обычно достаточно ключа, модель и адрес уже настроены."),
         build: (b, redraw) => this._groupAi(b, redraw),
       });
+      new Setting(c)
+        .setName(__ertr("Быстрые вопросы"))
+        .setDesc(__ertr("{0} кнопок в окне AI. Можно менять названия и полный текст, добавлять свои и удалять ненужные.", aiQuickPrompts(this.plugin.settings).length))
+        .addButton((b) => b.setButtonText(__ertr("Управлять")).onClick(() => {
+          new AiPromptLibraryModal(this.app, this.plugin, () => this._redraw()).open();
+        }));
     }
     new Setting(c)
       .setName(__ertr("Кнопка перевода в выделении"))
