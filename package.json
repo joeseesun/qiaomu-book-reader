@@ -1,6 +1,6 @@
 {
   "name": "qiaomu-book-reader",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "中文优先的 Obsidian EPUB、FB2 与 PDF 阅读器，支持划线、批注、阅读笔记和进度同步。",
   "main": "main.js",
   "type": "module",

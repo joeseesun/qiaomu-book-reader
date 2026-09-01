@@ -142,7 +142,7 @@ if (!source.includes('await reader.plugin.saveProgress(reader.file.path, current
 if (!source.includes("openOrCreateBookNoteBeside") || !source.includes('svgIcon(noteBtn, "note")') || !source.includes('{ mode: "split" }')) {
   errors.push("The reader toolbar does not create or open the reading note beside the book");
 }
-if (!source.includes('let body = "";') || !source.includes("stripGeneratedReadingNoteTitle")) {
+if (!source.includes('let body = "";') || !source.includes("stripGeneratedReadingNoteTitle") || !source.includes("readingNoteTitlesMigratedV3") || !source.includes("markedInText")) {
   errors.push("Generated reading notes still repeat the filename as an H1 heading");
 }
 if (!source.includes('["yellow", "green", "pink"].includes(item.id)')) {
