@@ -93,6 +93,12 @@ npx eslint src/
 
 构建产物是仓库根目录的 `main.js`。
 
+## 鸣谢与项目来源
+
+Qiaomu Book Reader 起源于 MIT 开源项目 [swayinfo/elton-reader](https://github.com/swayinfo/elton-reader)。感谢 Elton Reader 原作者 Elton Labs 及所有贡献者打下的阅读器基础，为本项目的持续改造提供了代码基础与启发。
+
+当前仓库是由向阳乔木独立维护的长期 fork，已使用独立的插件 ID、发布渠道和产品名称，并持续围绕中文界面、中文阅读排版、阅读笔记与 AI 辅助阅读进行开发。原始版权声明和第三方许可信息保留在 [LICENSE](LICENSE) 与 [NOTICE.md](NOTICE.md) 中。
+
 ## 作者
 
 Qiaomu Book Reader 由 [向阳乔木](https://qiaomu.ai) 维护：
@@ -114,6 +120,12 @@ Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. It 
 Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest).
 
 Reading works fully offline. Optional AI reading assistance includes editable quick prompts and supports signed-in Codex CLI, Claude Code CLI and Grok CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI providers are desktop-only and still send the selected passage to their cloud service. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
+
+## Acknowledgements and provenance
+
+Qiaomu Book Reader began as a fork of the MIT-licensed [swayinfo/elton-reader](https://github.com/swayinfo/elton-reader) project. We thank the original Elton Reader author, Elton Labs, and every contributor whose work provided the technical foundation and inspiration for this project.
+
+This repository is now an independently maintained long-term fork with its own plugin ID, release channel, and product name. Original copyright notices and third-party license information remain in [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
 Maintained by [Qiaomu](https://qiaomu.ai). Third-party notices and upstream attribution are preserved in [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
 
