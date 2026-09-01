@@ -1,0 +1,44 @@
+{
+  "name": "qiaomu-book-reader",
+  "version": "3.2.1",
+  "description": "中文优先的 Obsidian EPUB、FB2 与 PDF 阅读器，支持划线、批注、阅读笔记和进度同步。",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node patch-pdfjs.cjs",
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production && node patch-pdfjs.cjs",
+    "check:i18n": "node scripts/check-i18n.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "epub",
+    "fb2",
+    "pdf",
+    "reader",
+    "highlights"
+  ],
+  "author": "向阳乔木",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.1",
+    "jsdom": "^29.1.1",
+    "obsidian": "latest"
+  },
+  "dependencies": {
+    "epubjs": "^0.3.93",
+    "jszip": "^3.10.1",
+    "localforage": "^1.10.0",
+    "pdfjs-dist": "^6.2.108"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.9.12",
+    "minimatch@3.1.5": {
+      "brace-expansion": "2.0.2"
+    },
+    "tar": "^7.5.22"
+  }
+}
