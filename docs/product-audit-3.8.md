@@ -45,8 +45,8 @@
 
 ## 当前验证
 
-- `npm test`：24 项通过；包含损坏 JSON 原文备份、读取失败不伪造备份路径、串行队列失败恢复等真实存储回归。
-- `npm run check:i18n`：中文覆盖检查通过。
+- `npm test`：27 项通过；包含损坏 JSON 原文备份、读取失败不伪造备份路径、串行队列失败恢复、运行期身份、多语言回退和目标语言标签等回归。
+- `npm run check:i18n`：935 条英文键的简体中文覆盖检查通过，并验证中文默认语言与俄文安全回退链路。
 - `npx eslint src/`：0 error；仅保留专有产品名和示例路径的 sentence-case warning。
 - `npm run build`：通过，PDF worker 已嵌入。
 - Rockfish：书库四本封面正常；点击卡片可打开 EPUB；阅读笔记的 `↩` 可精确返回原文并闪烁定位；阅读设置无横向滚动，竖向内容在弹层内滚动。
@@ -54,3 +54,10 @@
 - Rockfish AI 设置：DeepSeek 密钥只显示为钥匙串占位符；新增“思考模式”开关；使用推荐模型和官方接口时“高级设置”默认收起。未发送连接测试或书籍内容。
 - Rockfish 多语言：真实切换到俄文后，既有界面保持俄文，中文优先新增的 AI 文案按设计回退英文；翻译目标显示为“Китайский (упрощённый)”而不是“简体中文”。验收后已恢复简体中文。
 - 安装边界：只覆盖 `main.js`、`manifest.json`、`styles.css`，未覆盖 `data.json`、`thumb-cache.json`、钥匙串或用户内容。
+
+## 发布前本地门禁
+
+- 从 `package-lock.json` 重新执行 `npm ci` 后，按 GitHub CI 顺序完成测试、中文覆盖、构建、ESLint 和提交产物一致性检查；全部通过，ESLint 仅有 7 条已知专有名称提示、0 error。
+- `package.json`、`manifest.json` 与 `versions.json` 均为 `3.8.0` / Obsidian `1.11.4`，插件 ID 保持 `qiaomu-book-reader`。
+- Rockfish 安装的三个发布资产与当前本地候选一致；`main.js` SHA-256 为 `e6149efa7ff33edccf45c04ecd3fd6280d9cbf55a32f81b4d8f25dae33adcfb7`。
+- GitHub 仍无 `codex/plugin-product-robustness` 远端分支、`v3.8.0` 标签或 Release；PR #11 保持关闭，满足“本地确认后才发布”的门禁。
