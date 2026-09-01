@@ -1,0 +1,23 @@
+name: 功能建议
+description: 说明阅读场景、当前困难和理想结果
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 阅读场景
+      description: 你在什么情况下需要这个功能？
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 理想结果
+      description: 你希望插件如何表现？
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 目前的替代办法

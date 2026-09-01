@@ -1,0 +1,31 @@
+name: 问题反馈
+description: 报告可复现的阅读、划线、笔记或界面问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？你原本预期什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: "1. 打开……\n2. 点击……\n3. 出现……"
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: 版本信息
+      description: Qiaomu Book Reader、Obsidian 和操作系统版本
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 截图或补充信息
+      description: 请先移除书籍正文、路径、密钥等敏感信息。

@@ -1,0 +1,10 @@
+{
+  "id": "qiaomu-book-reader",
+  "name": "Qiaomu Book Reader",
+  "version": "3.2.1",
+  "minAppVersion": "1.4.0",
+  "description": "在 Obsidian 中阅读 EPUB、FB2 和 PDF，支持划线、批注、阅读笔记与进度同步。",
+  "author": "向阳乔木",
+  "authorUrl": "https://qiaomu.ai",
+  "isDesktopOnly": false
+}
