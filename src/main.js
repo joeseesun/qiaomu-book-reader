@@ -1698,12 +1698,12 @@ async function setupWorker(app) {
     // Запасного пути через CDN здесь нет намеренно: правила каталога запрещают
     // подтягивать код из сети, а воркер и так вшит в сборку. Если он почему-то
     // не поднялся — честно говорим об этом, а не тянем скрипт со стороны.
-    console.error("Book Reader: не удалось поднять встроенный pdf.worker", e);
+    console.error("Qiaomu Book Reader: could not start the embedded pdf.worker", e);
     new Notice(__ertr("Не удалось подготовить чтение PDF. Переустановите плагин."));
   }
   workerReady = true;
 }
-const EltonReader = class extends Plugin {
+const QiaomuBookReader = class extends Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT };
@@ -2219,7 +2219,7 @@ const EltonReader = class extends Plugin {
         this.thumbCache = (j && j.ver === 2 && j.cache) ? j.cache : {};
         return;
       }
-    } catch (e) { console.warn("Book Reader: thumb cache load failed", e); }
+    } catch (e) { console.warn("Qiaomu Book Reader: thumb cache load failed", e); }
     // Migrate the old in-data.json cache once, then persist to the new file.
     this.thumbCache = ((d == null ? void 0 : d.thumbCacheVer) === 2 && (d == null ? void 0 : d.thumbCache)) ? d.thumbCache : {};
     if (Object.keys(this.thumbCache).length) this._saveThumbCache();
@@ -2227,7 +2227,7 @@ const EltonReader = class extends Plugin {
   _saveThumbCache() {
     this._thumbSaveChain = (this._thumbSaveChain || Promise.resolve()).then(
       () => this.app.vault.adapter.write(this._thumbCachePath(), JSON.stringify({ ver: 2, cache: this.thumbCache }))
-    ).catch((e) => console.warn("Book Reader: thumb cache save failed", e));
+    ).catch((e) => console.warn("Qiaomu Book Reader: thumb cache save failed", e));
     return this._thumbSaveChain;
   }
   // ── Daily reading-goal timer ───────────────────────────────────────────────
@@ -2538,7 +2538,7 @@ const EltonReader = class extends Plugin {
           fm["reading-updated"] = new Date(p.lastRead || Date.now()).toISOString().slice(0, 10);
         });
       } catch (e) {
-        console.warn("Book Reader: could not write progress into the book note", e);
+        console.warn("Qiaomu Book Reader: could not write progress into the book note", e);
       }
     }, 4000);
   }
@@ -4435,7 +4435,7 @@ const AiExplainModal = class extends Modal {
         onDelta,
       });
     } catch (e) {
-      console.error("Book Reader: AI chat failed", e);
+      console.error("Qiaomu Book Reader: AI chat failed", e);
       if (reasoning) {
         reasoningBox.open = false;
         reasoningSummary.setText(__ertr("思考过程"));
@@ -4732,7 +4732,7 @@ async function extractPdf(file, app, settings = {}, onProgress) {
     };
     await walk2(await doc.getOutline(), 0);
   } catch (e) {
-    console.warn("Book Reader: PDF outline unavailable", e);
+    console.warn("Qiaomu Book Reader: PDF outline unavailable", e);
   }
   const lazy = {
     _doc: doc,
@@ -5962,7 +5962,7 @@ function attachFolderSuggest(app, textComp) {
   try {
     if (FolderSuggest && textComp && textComp.inputEl) new FolderSuggest(app, textComp.inputEl);
   } catch (e) {
-    console.warn("Book Reader: folder suggest unavailable", e);
+    console.warn("Qiaomu Book Reader: folder suggest unavailable", e);
   }
 }
 function attachPathInput(app, textComp, commit) {
@@ -6462,7 +6462,7 @@ async function writeBookProperty(app, noteName, bookFile) {
       fm["book-reader-note"] = true;
     });
   } catch (e) {
-    console.warn("Book Reader: could not write the book property into the note", e);
+    console.warn("Qiaomu Book Reader: could not write the book property into the note", e);
   }
 }
 async function createNoteFromSelection(app, plugin, selText, bookFile, opts = {}) {
@@ -6748,7 +6748,7 @@ async function syncHighlightsToReadingNote(app, plugin, bookPath, highlights) {
     if (typeof app.vault.process === "function") await app.vault.process(note, update);
     else await app.vault.modify(note, update(await app.vault.read(note)));
   } catch (e) {
-    console.error("Book Reader: reading-note sync failed", e);
+    console.error("Qiaomu Book Reader: reading-note sync failed", e);
   }
 }
 async function exportHighlightsSeparate(app, plugin, bookFile, highlights) {
@@ -7502,7 +7502,7 @@ ${body}
 `);
     return f instanceof TFile ? f : null;
   } catch (e) {
-    console.warn("Book Reader: could not write the what's-new note", e);
+    console.warn("Qiaomu Book Reader: could not write the what's-new note", e);
     return null;
   }
 }
@@ -7802,7 +7802,7 @@ async function persistCurrentReaderPosition(reader) {
   try {
     await reader.plugin.saveProgress(reader.file.path, current, total, block);
   } catch (error) {
-    console.warn("Book Reader: could not save the final reading position", error);
+    console.warn("Qiaomu Book Reader: could not save the final reading position", error);
   }
 }
 async function loadReaderDocument(file, app, settings, onProgress) {
@@ -9346,7 +9346,7 @@ const LibraryModal = class extends Modal {
         const nm = (f && f.name) || (f && f.path) || "?";
         return `${nm} [${extOf(f) || "—"}${f && f.type ? ", " + f.type : ""}]`;
       }).join("; ");
-      console.warn("Book Reader: rejected on import —", rejected.map((f) => ({
+      console.warn("Qiaomu Book Reader: rejected on import —", rejected.map((f) => ({
         name: f && f.name, path: f && f.path, type: f && f.type, size: f && f.size, seenAs: extOf(f),
       })));
       new Notice(__ertr("Не подошли ({0}): {1}. Поддерживаются PDF, EPUB и FB2.", rejected.length, detail), 10000);
@@ -9367,7 +9367,7 @@ const LibraryModal = class extends Modal {
         await this.app.vault.createBinary(this._freeBookPath(dir, f.name), buf);
         ok++;
       } catch (err) {
-        console.warn("Book Reader: could not import", f && f.name, err);
+        console.warn("Qiaomu Book Reader: could not import", f && f.name, err);
         errors.push(f.name);
       }
     }
@@ -9505,7 +9505,7 @@ const LibraryModal = class extends Modal {
         this._thumbDirty = true;
         this.showImg(coverEl, ph, url);
       } catch (e) {
-        console.warn("Book Reader: cover failed for", file.path, e);
+        console.warn("Qiaomu Book Reader: cover failed for", file.path, e);
       }
     }).then(() => {
       // Persist once the chain goes idle (debounced), not after every single
@@ -11551,4 +11551,4 @@ const SettingsTab = class extends PluginSettingTab {
     about.createEl("a", { text: "swayinfo/elton-reader", href: "https://github.com/swayinfo/elton-reader" });
   }
 };
-export default EltonReader;
+export default QiaomuBookReader;

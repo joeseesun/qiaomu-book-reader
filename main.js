@@ -58068,12 +58068,12 @@ async function setupWorker(app) {
     workerReady = true;
     return;
   } catch (e) {
-    console.error("Book Reader: \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u043D\u044F\u0442\u044C \u0432\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u0439 pdf.worker", e);
+    console.error("Qiaomu Book Reader: could not start the embedded pdf.worker", e);
     new import_obsidian.Notice(__ertr("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u0447\u0442\u0435\u043D\u0438\u0435 PDF. \u041F\u0435\u0440\u0435\u0443\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0435 \u043F\u043B\u0430\u0433\u0438\u043D."));
   }
   workerReady = true;
 }
-var EltonReader = class extends import_obsidian.Plugin {
+var QiaomuBookReader = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
     this.settings = { ...DEFAULT };
@@ -58474,7 +58474,7 @@ var EltonReader = class extends import_obsidian.Plugin {
         return;
       }
     } catch (e) {
-      console.warn("Book Reader: thumb cache load failed", e);
+      console.warn("Qiaomu Book Reader: thumb cache load failed", e);
     }
     this.thumbCache = (d == null ? void 0 : d.thumbCacheVer) === 2 && (d == null ? void 0 : d.thumbCache) ? d.thumbCache : {};
     if (Object.keys(this.thumbCache).length) this._saveThumbCache();
@@ -58482,7 +58482,7 @@ var EltonReader = class extends import_obsidian.Plugin {
   _saveThumbCache() {
     this._thumbSaveChain = (this._thumbSaveChain || Promise.resolve()).then(
       () => this.app.vault.adapter.write(this._thumbCachePath(), JSON.stringify({ ver: 2, cache: this.thumbCache }))
-    ).catch((e) => console.warn("Book Reader: thumb cache save failed", e));
+    ).catch((e) => console.warn("Qiaomu Book Reader: thumb cache save failed", e));
     return this._thumbSaveChain;
   }
   // ── Daily reading-goal timer ───────────────────────────────────────────────
@@ -58794,7 +58794,7 @@ var EltonReader = class extends import_obsidian.Plugin {
           fm["reading-updated"] = new Date(p.lastRead || Date.now()).toISOString().slice(0, 10);
         });
       } catch (e) {
-        console.warn("Book Reader: could not write progress into the book note", e);
+        console.warn("Qiaomu Book Reader: could not write progress into the book note", e);
       }
     }, 4e3);
   }
@@ -60417,7 +60417,7 @@ var AiExplainModal = class extends import_obsidian.Modal {
         onDelta
       });
     } catch (e) {
-      console.error("Book Reader: AI chat failed", e);
+      console.error("Qiaomu Book Reader: AI chat failed", e);
       if (reasoning) {
         reasoningBox.open = false;
         reasoningSummary.setText(__ertr("\u601D\u8003\u8FC7\u7A0B"));
@@ -60696,7 +60696,7 @@ async function extractPdf(file, app, settings = {}, onProgress) {
     };
     await walk2(await doc.getOutline(), 0);
   } catch (e) {
-    console.warn("Book Reader: PDF outline unavailable", e);
+    console.warn("Qiaomu Book Reader: PDF outline unavailable", e);
   }
   const lazy = {
     _doc: doc,
@@ -61925,7 +61925,7 @@ function attachFolderSuggest(app, textComp) {
   try {
     if (FolderSuggest && textComp && textComp.inputEl) new FolderSuggest(app, textComp.inputEl);
   } catch (e) {
-    console.warn("Book Reader: folder suggest unavailable", e);
+    console.warn("Qiaomu Book Reader: folder suggest unavailable", e);
   }
 }
 function attachPathInput(app, textComp, commit) {
@@ -62402,7 +62402,7 @@ async function writeBookProperty(app, noteName, bookFile) {
       fm["book-reader-note"] = true;
     });
   } catch (e) {
-    console.warn("Book Reader: could not write the book property into the note", e);
+    console.warn("Qiaomu Book Reader: could not write the book property into the note", e);
   }
 }
 async function createNoteFromSelection(app, plugin, selText, bookFile, opts = {}) {
@@ -62701,7 +62701,7 @@ async function syncHighlightsToReadingNote(app, plugin, bookPath, highlights) {
     if (typeof app.vault.process === "function") await app.vault.process(note, update);
     else await app.vault.modify(note, update(await app.vault.read(note)));
   } catch (e) {
-    console.error("Book Reader: reading-note sync failed", e);
+    console.error("Qiaomu Book Reader: reading-note sync failed", e);
   }
 }
 async function exportHighlightsSeparate(app, plugin, bookFile, highlights) {
@@ -63446,7 +63446,7 @@ ${body}
 `);
     return f instanceof import_obsidian.TFile ? f : null;
   } catch (e) {
-    console.warn("Book Reader: could not write the what's-new note", e);
+    console.warn("Qiaomu Book Reader: could not write the what's-new note", e);
     return null;
   }
 }
@@ -63740,7 +63740,7 @@ async function persistCurrentReaderPosition(reader) {
   try {
     await reader.plugin.saveProgress(reader.file.path, current, total, block);
   } catch (error) {
-    console.warn("Book Reader: could not save the final reading position", error);
+    console.warn("Qiaomu Book Reader: could not save the final reading position", error);
   }
 }
 async function loadReaderDocument(file, app, settings, onProgress) {
@@ -65229,7 +65229,7 @@ var LibraryModal = class extends import_obsidian.Modal {
         const nm = f && f.name || f && f.path || "?";
         return `${nm} [${extOf(f) || "\u2014"}${f && f.type ? ", " + f.type : ""}]`;
       }).join("; ");
-      console.warn("Book Reader: rejected on import \u2014", rejected.map((f) => ({
+      console.warn("Qiaomu Book Reader: rejected on import \u2014", rejected.map((f) => ({
         name: f && f.name,
         path: f && f.path,
         type: f && f.type,
@@ -65255,7 +65255,7 @@ var LibraryModal = class extends import_obsidian.Modal {
         await this.app.vault.createBinary(this._freeBookPath(dir, f.name), buf);
         ok++;
       } catch (err) {
-        console.warn("Book Reader: could not import", f && f.name, err);
+        console.warn("Qiaomu Book Reader: could not import", f && f.name, err);
         errors.push(f.name);
       }
     }
@@ -65378,7 +65378,7 @@ var LibraryModal = class extends import_obsidian.Modal {
         this._thumbDirty = true;
         this.showImg(coverEl, ph, url);
       } catch (e) {
-        console.warn("Book Reader: cover failed for", file.path, e);
+        console.warn("Qiaomu Book Reader: cover failed for", file.path, e);
       }
     }).then(() => {
       window.clearTimeout(this._thumbSaveT);
@@ -67099,7 +67099,7 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
     about.createEl("a", { text: "swayinfo/elton-reader", href: "https://github.com/swayinfo/elton-reader" });
   }
 };
-var main_default = EltonReader;
+var main_default = QiaomuBookReader;
 /*! Bundled license information:
 
 jszip/dist/jszip.js:

@@ -73,6 +73,14 @@ test("reader persistence refuses to overwrite unreadable stores and reports real
   assert.match(source, /Попробовать снова/);
 });
 
+test("runtime diagnostics use the maintained plugin identity", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /console\.(?:error|warn|log)\("Book Reader:/);
+  assert.doesNotMatch(source, /\bEltonReader\b/);
+  assert.match(source, /const QiaomuBookReader = class extends Plugin/);
+  assert.match(source, /export default QiaomuBookReader/);
+});
+
 function luminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16) / 255);
   const linear = channels.map((value) => value <= 0.03928
