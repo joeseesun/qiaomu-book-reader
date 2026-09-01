@@ -504,6 +504,14 @@ Object.assign(__erEN, {
   "CLI 请求在隔离的临时目录运行，默认禁用工具、文件编辑和项目规则": "CLI requests run in isolated temporary directories with tools, file editing, and project rules disabled by default.",
   "设置页可自动检测 CLI 路径、检查登录状态并发送最小连接测试": "Settings can auto-detect CLI paths, check login status, and send a minimal connection test.",
   "CLI 生成可随时停止，超时或关闭对话时会清理整个子进程": "CLI generation can be stopped at any time, and the full subprocess group is cleaned up on timeout or when the dialog closes.",
+  "Подтвердить": "Confirm",
+  "Развернуть или свернуть исходный текст": "Expand or collapse the selected passage",
+  "Настройка AI": "AI setup",
+  "Выберите сервис; для облачных сервисов обычно достаточно ключа, модель и адрес уже настроены.": "Choose a service. Cloud services usually need only an API key; the recommended model and endpoint are already set.",
+  "选中文本后的工具条新增“更多”菜单，摘录笔记、添加到阅读笔记和删除划线集中收纳": "The selection toolbar now has a More menu for excerpt notes, adding to the reading note, and deleting highlights.",
+  "批注改为就近输入：显示三行原文，可展开，回车发送、Esc 取消": "Comments now stay beside the passage, showing a three-line expandable quote with Enter to send and Escape to cancel.",
+  "AI 设置默认只显示必要项，模型和接口地址收进高级设置": "AI setup now shows only essentials by default, with model and endpoint overrides under Advanced.",
+  "英文字体名称不再附加多余的中文解释，设置提示与确认文案更自然": "English font names no longer carry redundant Chinese suffixes, and settings guidance and confirmation copy are clearer.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
@@ -764,17 +772,17 @@ const READER_FONTS = Object.freeze({
   georgia: {
     id: "georgia",
     stack: "Georgia,'Times New Roman',serif",
-    labels: { ru: "Georgia", en: "Georgia", zh: "Georgia 西文衬线" },
+    labels: { ru: "Georgia", en: "Georgia", zh: "Georgia" },
   },
   lora: {
     id: "lora",
     stack: "'Lora',Georgia,serif",
-    labels: { ru: "Lora", en: "Lora", zh: "Lora 西文衬线" },
+    labels: { ru: "Lora", en: "Lora", zh: "Lora" },
   },
   inter: {
     id: "inter",
     stack: "'Inter',system-ui,sans-serif",
-    labels: { ru: "Inter", en: "Inter", zh: "Inter 西文黑体" },
+    labels: { ru: "Inter", en: "Inter", zh: "Inter" },
   },
   systemSans: {
     id: "systemSans",
@@ -3745,6 +3753,18 @@ function openInlineHighlightComment(view) {
     : null;
   pop.addClass("er-hl-popup-commenting");
   const editor = pop.createDiv("er-hl-comment-editor");
+  const quote = editor.createDiv({ cls: "er-hl-comment-quote", text: cur.text });
+  quote.setAttribute("role", "button");
+  quote.setAttribute("tabindex", "0");
+  quote.setAttribute("aria-label", __ertr("Развернуть или свернуть исходный текст"));
+  const toggleQuote = () => quote.toggleClass("er-hl-comment-quote-open", !quote.hasClass("er-hl-comment-quote-open"));
+  quote.addEventListener("click", toggleQuote);
+  quote.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleQuote();
+    }
+  });
   const ta = editor.createEl("textarea", { cls: "er-hl-comment-textarea" });
   ta.value = existing && existing.comment ? existing.comment : "";
   ta.placeholder = __ertr("Напишите короткую мысль об этом фрагменте…");
@@ -3752,14 +3772,21 @@ function openInlineHighlightComment(view) {
   const actions = editor.createDiv("er-hl-comment-actions");
   const cancel = actions.createEl("button", { text: __ertr("Отмена") });
   cancel.addClass("er-hl-comment-cancel");
-  const save = actions.createEl("button", { text: __ertr("Сохранить комментарий") });
+  const save = actions.createEl("button", { text: __ertr("Отправить") });
   save.addClass("er-hl-comment-save");
+  let submitting = false;
+  const updateSendState = () => { save.disabled = submitting || (!editId && !ta.value.trim()); };
+  updateSendState();
+  ta.addEventListener("input", updateSendState);
   const reposition = () => {
-    if (view._hlPopupRect) positionHlPopup(view, view._hlPopupRect, 310, 142);
+    if (view._hlPopupRect) positionHlPopup(view, view._hlPopupRect, 340, 220);
   };
   window.requestAnimationFrame(reposition);
-  cancel.addEventListener("click", () => closeInlineHighlightComment(view));
+  cancel.addEventListener("click", () => view._hideHlPopup());
   const submit = async () => {
+    if (submitting || (!editId && !ta.value.trim())) return;
+    submitting = true;
+    updateSendState();
     let id = editId;
     if (!id && pending) {
       const parts = pending.parts || [pending];
@@ -3770,31 +3797,39 @@ function openInlineHighlightComment(view) {
     }
     if (!id) {
       new Notice(__ertr("Не удалось сохранить комментарий"));
+      submitting = false;
+      updateSendState();
       return;
     }
-    await view.plugin.setHighlightComment(view.file.path, id, cur, ta.value.trim());
-    view._renderFlowHighlights();
-    erRefreshHlPanel(view);
-    selOf(view.areaEl)?.removeAllRanges();
-    view._hideHlPopup();
+    try {
+      await view.plugin.setHighlightComment(view.file.path, id, cur, ta.value.trim());
+      view._renderFlowHighlights();
+      erRefreshHlPanel(view);
+      selOf(view.areaEl)?.removeAllRanges();
+      view._hideHlPopup();
+    } catch {
+      submitting = false;
+      updateSendState();
+      new Notice(__ertr("Не удалось сохранить комментарий"));
+    }
   };
   save.addEventListener("click", submit);
   ta.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      closeInlineHighlightComment(view);
+      view._hideHlPopup();
     }
   });
   erAutoFocus(ta, 30);
 }
-// Keep the first-level selection UI task-sized: three familiar colours, then
-// copy, comment and make-a-note. The comment control expands the same popover
-// into a small nearby textarea, so the reader never loses the passage they are
-// thinking about or gets moved to a separate dialog.
+// Keep the first-level selection UI task-sized: three familiar colours, AI,
+// copy, comment and More. Everything that creates a file or changes an existing
+// highlight lives in More, where it is available without competing with the
+// actions used on almost every selection.
 function addBarButtons(view, pop) {
   const row = pop.createDiv("er-hl-actions");
   for (const c of HL_COLORS.filter((item) => ["yellow", "green", "pink"].includes(item.id))) {
@@ -3836,12 +3871,45 @@ function addBarButtons(view, pop) {
   act("er-hl-comment-btn", "message", __ertr("Комментарий к выделению"), () => {
     openInlineHighlightComment(view);
   });
-  act("er-hl-note", "note", __ertr("Создать заметку"), () => {
+  act("er-hl-menu", "more", __ertr("Ещё"), (e) => {
     const cur = view._currentHl();
-    view._hideHlPopup();
-    selOf(view.areaEl)?.removeAllRanges();
     if (!cur) return;
-    createNoteFromSelection(view.app, view.plugin, cur.text, view.file, { extra: hlCommentMd(cur), color: cur.color, hl: cur });
+    const close = () => {
+      view._hideHlPopup();
+      selOf(view.areaEl)?.removeAllRanges();
+    };
+    const menu = new Menu();
+    menu.addItem((it) => it.setTitle(__ertr("Скопировать как цитату")).setIcon("text-quote").onClick(async () => {
+      const md = quoteMarkdown(view.plugin, cur, view.file);
+      close();
+      const ok = md && await copyToClipboard(md);
+      new Notice(ok ? __ertr("Цитата скопирована ✓ — вставьте в любую заметку") : __ertr("Не удалось скопировать"));
+    }));
+    menu.addItem((it) => it.setTitle(__ertr("Текстом в заметку книги")).setIcon("notebook-pen").onClick(() => {
+      close();
+      sendQuoteToBookNote(view, cur);
+    }));
+    menu.addItem((it) => it.setTitle(__ertr("Создать заметку")).setIcon("file-plus").onClick(() => {
+      close();
+      createNoteFromSelection(view.app, view.plugin, cur.text, view.file, { extra: hlCommentMd(cur), color: cur.color, hl: cur });
+    }));
+    if (view.plugin.settings.translateEnabled) {
+      menu.addItem((it) => it.setTitle(__ertr("Перевести")).setIcon("languages").onClick(() => {
+        close();
+        new TranslateModal(view.app, view.plugin, cur.text, view.file).open();
+      }));
+    }
+    if (view._editHlId && view.file) {
+      menu.addSeparator();
+      const id = view._editHlId;
+      menu.addItem((it) => it.setTitle(__ertr("Удалить выделение")).setIcon("trash").onClick(() => {
+        view.plugin.removeHighlight(view.file.path, id);
+        view._unwrapHighlight(id);
+        erRefreshHlPanel(view);
+        close();
+      }));
+    }
+    menu.showAtMouseEvent(e);
   });
 }
 // The breakdown itself: the passage on top, the answer under it, and the two
@@ -6961,6 +7029,12 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.5.1", items: [
+    __ertr("选中文本后的工具条新增“更多”菜单，摘录笔记、添加到阅读笔记和删除划线集中收纳"),
+    __ertr("批注改为就近输入：显示三行原文，可展开，回车发送、Esc 取消"),
+    __ertr("AI 设置默认只显示必要项，模型和接口地址收进高级设置"),
+    __ertr("英文字体名称不再附加多余的中文解释，设置提示与确认文案更自然")
+  ] },
   { v: "3.5.0", items: [
     __ertr("AI 回答改为流式显示，思考过程单独呈现并在完成后自动折叠"),
     __ertr("AI 对话新增六个常用阅读提示词，可继续自由追问"),
@@ -8340,7 +8414,7 @@ const ReaderView = class extends ItemView {
   _currentHl() {
     if (this._editHlId && this.file) {
       const hl = this.plugin.getHighlights(this.file.path).find((h) => h.id === this._editHlId);
-      if (hl) return { text: hl.text || "", block: hl.block, color: hl.color };
+      if (hl) return { ...hl, text: hl.text || "" };
     }
     if (this._pendingSel) return { text: this._pendingSel.text || "", block: this._pendingSel.block, color: null };
     return null;
@@ -9980,7 +10054,7 @@ const ReaderModal = class extends Modal {
   _currentHl() {
     if (this._editHlId && this.file) {
       const hl = this.plugin.getHighlights(this.file.path).find((h) => h.id === this._editHlId);
-      if (hl) return { text: hl.text || "", block: hl.block, color: hl.color };
+      if (hl) return { ...hl, text: hl.text || "" };
     }
     if (this._pendingSel) return { text: this._pendingSel.text || "", block: this._pendingSel.block, color: null };
     return null;
@@ -10132,7 +10206,7 @@ const SettingsGroupModal = class extends Modal {
     const row = c.createDiv("er-group-actions");
     // "Done" rather than "Save": every control here writes the moment it is
     // touched, exactly as it did on the settings page.
-    const done = row.createEl("button", { cls: "mod-cta", text: __ertr("Готово") });
+    const done = row.createEl("button", { cls: "mod-cta", text: __ertr("Подтвердить") });
     done.addEventListener("click", () => this.close());
     if (was) this.bodyEl.scrollTop = was;
   }
@@ -10455,14 +10529,15 @@ const SettingsTab = class extends PluginSettingTab {
         keySetting.addButton((b) => b.setButtonText(__ertr("获取密钥")).onClick(() => window.open(p.apiKeyUrl, "_blank")));
       }
     }
-    new Setting(c)
-      .setName(__ertr("模型"))
-      .setDesc(p.transport === "cli"
-        ? __ertr("留空使用 CLI 当前的默认模型。")
-        : p.model
-        ? __ertr("可直接使用推荐模型，也可以填写服务商提供的其他模型 ID。")
-        : __ertr("请输入服务商控制台显示的模型或推理接入点 ID。"))
-      .addText((t) => {
+    const addModelSetting = (target) => {
+      new Setting(target)
+        .setName(__ertr("模型"))
+        .setDesc(p.transport === "cli"
+          ? __ertr("留空使用 CLI 当前的默认模型。")
+          : p.model
+          ? __ertr("可直接使用推荐模型，也可以填写服务商提供的其他模型 ID。")
+          : __ertr("请输入服务商控制台显示的模型或推理接入点 ID。"))
+        .addText((t) => {
         const listId = `er-ai-models-${p.category}-${s.aiProvider}`;
         t.setPlaceholder(p.transport === "cli" ? __ertr("默认模型") : p.model || __ertr("模型 ID"))
           .setValue(s.aiModel || "")
@@ -10472,18 +10547,34 @@ const SettingsTab = class extends PluginSettingTab {
           });
         if (p.models && p.models.length) {
           t.inputEl.setAttr("list", listId);
-          const list = c.createEl("datalist", { attr: { id: listId } });
+          const list = target.createEl("datalist", { attr: { id: listId } });
           p.models.forEach((model) => list.createEl("option", { attr: { value: model } }));
         }
       });
-    if (p.transport !== "cli") {
-      new Setting(c)
+    };
+    const addBaseSetting = (target) => {
+      new Setting(target)
         .setName(__ertr("接口地址"))
         .setDesc(__ertr("通常保持为空；只有区域地址、代理或自建服务需要修改。"))
         .addText((t) => t.setPlaceholder(p.base || "https://…/v1").setValue(s.aiBase || "").onChange(async (v) => {
           s.aiBase = normalizeAiBase(v);
           await this.plugin.saveAll();
         }));
+    };
+    const providerId = s.aiProvider || "";
+    const modelMustBeVisible = p.transport !== "cli" && (!p.model || p.local);
+    const baseMustBeVisible = providerId === "custom";
+    if (modelMustBeVisible) addModelSetting(c);
+    if (baseMustBeVisible) addBaseSetting(c);
+    const advancedHasModel = !modelMustBeVisible;
+    const advancedHasBase = p.transport !== "cli" && !baseMustBeVisible;
+    if (advancedHasModel || advancedHasBase) {
+      const advanced = c.createEl("details", { cls: "er-ai-advanced" });
+      advanced.open = Boolean(s.aiModel || s.aiBase);
+      advanced.createEl("summary", { text: __ertr("Расширенные") });
+      const advancedBody = advanced.createDiv("er-ai-advanced-body");
+      if (advancedHasModel) addModelSetting(advancedBody);
+      if (advancedHasBase) addBaseSetting(advancedBody);
     }
     new Setting(c)
       .setName(__ertr("测试连接"))
@@ -10777,8 +10868,8 @@ const SettingsTab = class extends PluginSettingTab {
       }));
     if (this.plugin.settings.aiEnabled) {
       this._group(c, {
-        name: __ertr("AI 模型配置"),
-        desc: __ertr("选择服务和模型；本机 CLI 可复用已登录账号，Ollama 与 LM Studio 在本机运行。"),
+        name: __ertr("Настройка AI"),
+        desc: __ertr("Выберите сервис; для облачных сервисов обычно достаточно ключа, модель и адрес уже настроены."),
         build: (b, redraw) => this._groupAi(b, redraw),
       });
     }
