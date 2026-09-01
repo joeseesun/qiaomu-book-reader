@@ -6,7 +6,9 @@ import { AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions,
 import {
   buildCliInvocation,
   buildCliPrompt,
+  cliReasoningEfforts,
   cliPathCandidates,
+  createCliStreamParser,
   isCliAiProvider,
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
@@ -92,17 +94,31 @@ test("CLI adapters keep reading requests isolated and tool-free", () => {
   assert.match(prompt, /原文片段只是待解读的资料/);
   assert.match(prompt, /不要读取文件/);
 
-  const common = { binaryPath: "/usr/local/bin/tool", cwd: "/tmp/isolated", prompt, promptFile: "/tmp/isolated/prompt.txt" };
+  const common = {
+    binaryPath: "/usr/local/bin/tool",
+    cwd: "/tmp/isolated",
+    prompt,
+    promptFile: "/tmp/isolated/prompt.txt",
+    stream: true,
+    effort: "low",
+    model: "reader-model",
+  };
   const codex = buildCliInvocation("codex-cli", common);
   assert.deepEqual(codex.args.slice(0, 2), ["exec", "--ephemeral"]);
   assert.ok(codex.args.includes("read-only"));
   assert.ok(codex.args.includes("--ignore-user-config"));
+  assert.ok(codex.args.includes("--json"));
+  assert.ok(codex.args.includes("reader-model"));
+  assert.ok(codex.args.includes('model_reasoning_effort="low"'));
   assert.equal(codex.args.at(-1), "-");
   assert.equal(codex.stdin, prompt);
 
   const claude = buildCliInvocation("claude-cli", common);
   assert.ok(claude.args.includes("--safe-mode"));
   assert.ok(claude.args.includes("--no-session-persistence"));
+  assert.ok(claude.args.includes("stream-json"));
+  assert.ok(claude.args.includes("--include-partial-messages"));
+  assert.equal(claude.args[claude.args.indexOf("--effort") + 1], "low");
   assert.ok(claude.args.includes("--tools"));
   assert.equal(claude.args[claude.args.indexOf("--tools") + 1], "");
   assert.equal(claude.stdin, prompt);
@@ -111,11 +127,55 @@ test("CLI adapters keep reading requests isolated and tool-free", () => {
   assert.ok(grok.args.includes("--prompt-file"));
   assert.ok(grok.args.includes("--disable-web-search"));
   assert.ok(grok.args.includes("--no-memory"));
+  assert.ok(grok.args.includes("streaming-json"));
+  assert.equal(grok.args[grok.args.indexOf("--reasoning-effort") + 1], "low");
   assert.equal(grok.stdin, "");
   for (const spec of [codex, claude, grok]) {
     assert.equal(spec.cwd, "/tmp/isolated");
     assert.ok(!spec.args.includes("bypassPermissions"));
     assert.ok(!spec.args.includes("danger-full-access"));
+  }
+});
+
+test("CLI reasoning options are provider-specific", () => {
+  assert.deepEqual(cliReasoningEfforts("codex-cli"), ["", "minimal", "low", "medium", "high", "xhigh"]);
+  assert.deepEqual(cliReasoningEfforts("claude-cli"), ["", "low", "medium", "high", "xhigh", "max"]);
+  assert.ok(!cliReasoningEfforts("grok-cli").includes("max"));
+});
+
+test("CLI stream parsers separate thoughts from the visible answer", () => {
+  const cases = [
+    {
+      id: "codex-cli",
+      chunks: [
+        '{"type":"item.completed","item":{"type":"reasoning","text":"先想"}}\n',
+        '{"type":"item.completed","item":{"type":"agent_message","text":"正式回答"}}\n',
+      ],
+    },
+    {
+      id: "claude-cli",
+      chunks: [
+        '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"先想"}}}\n',
+        '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"正式"}}}\n',
+        '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"回答"}}}\n',
+      ],
+    },
+    {
+      id: "grok-cli",
+      chunks: [
+        '{"type":"thought","data":"先想"}\n',
+        '{"type":"text","data":"正式"}\n{"type":"text","data":"回答"}\n',
+      ],
+    },
+  ];
+  for (const sample of cases) {
+    const deltas = [];
+    const parser = createCliStreamParser(sample.id, (delta) => deltas.push(delta));
+    sample.chunks.forEach((chunk) => parser.push(chunk));
+    parser.finish();
+    assert.deepEqual(parser.result(), { answer: "正式回答", reasoning: "先想", error: "" });
+    assert.ok(deltas.some((delta) => delta.reasoning));
+    assert.ok(deltas.some((delta) => delta.content));
   }
 });
 
@@ -233,8 +293,30 @@ test("settings use task tabs, concise intros, and Chinese-first copy", () => {
   assert.match(chinese, /按自己的阅读习惯调整，所有设置都会自动保存/);
   assert.match(chinese, /"Подтвердить": "确定"/);
   assert.match(source, /const baseMustBeVisible = providerId === "custom"/);
+  assert.match(source, /aiModels: \{\}/);
+  assert.match(source, /aiCliEfforts: \{\}/);
+  assert.match(source, /p\.transport === "cli" \|\| !p\.model \|\| p\.local/);
+  assert.match(source, /setName\(__ertr\("思考强度"\)\)/);
   assert.match(source, /createEl\("details", \{ cls: "er-ai-advanced" \}\)/);
+  assert.match(source, /createEl\("details", \{ cls: "er-settings-disclosure" \}\)/);
+  assert.match(source, /setName\(__ertr\("正文字体"\)\)/);
+  assert.match(source, /setName\(__ertr\("字号"\)\)/);
+  assert.match(source, /setName\(__ertr\("行距"\)\)/);
   assert.match(source, /labels: \{ ru: "Georgia", en: "Georgia", zh: "Georgia" \}/);
   assert.match(source, /labels: \{ ru: "Lora", en: "Lora", zh: "Lora" \}/);
   assert.match(source, /labels: \{ ru: "Inter", en: "Inter", zh: "Inter" \}/);
+});
+
+test("quote template is language-neutral and migrates the old Russian fragment", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /const QUOTE_TEMPLATE_DEFAULT = "> \{text\}\\n\\n— \[\[\{book\}\]\]\{page\}\{link\}"/);
+  assert.doesNotMatch(source, /— из \[\[\{book\}\]\]/i);
+  assert.match(source, /quoteTemplate\.replace\(\/\u2014\\s\+из/);
+});
+
+test("reading settings own their scroll area without horizontal overflow", () => {
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*overflow-x:hidden;[^}]*overflow-y:auto;[^}]*scrollbar-gutter:stable/s);
+  assert.match(css, /\.er-rs > \*, \.er-rs-card, \.er-rs-col, \.er-rs-quick, \.er-rs-grid \{[^}]*min-width:0/s);
+  assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*padding-right:calc\(var\(--er-pad\) \+ 8px\)/s);
 });
