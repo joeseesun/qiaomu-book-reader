@@ -55507,6 +55507,7 @@ Object.assign(ER_ZH_CN, {
   "\u9605\u8BFB\u8FDB\u5EA6\u5168\u81EA\u52A8\u4FDD\u5B58\uFF0C\u4E0D\u518D\u663E\u793A\u591A\u4F59\u7684\u6062\u590D\u70B9\u4E0E\u91CD\u7ED8\u6309\u94AE": "\u9605\u8BFB\u8FDB\u5EA6\u4F1A\u81EA\u52A8\u4FDD\u5B58\uFF0C\u4E0D\u518D\u663E\u793A\u591A\u4F59\u7684\u6062\u590D\u70B9\u548C\u91CD\u7ED8\u6309\u94AE\u3002",
   "\u9605\u8BFB\u5668\u65B0\u589E\u9605\u8BFB\u7B14\u8BB0\u6309\u94AE\uFF1A\u6CA1\u6709\u5C31\u521B\u5EFA\uFF0C\u5DF2\u6709\u5C31\u5728\u539F\u4E66\u65C1\u5206\u5C4F\u6253\u5F00": "\u65B0\u589E\u9605\u8BFB\u7B14\u8BB0\u6309\u94AE\uFF1A\u6CA1\u6709\u7B14\u8BB0\u5C31\u81EA\u52A8\u521B\u5EFA\uFF0C\u5DF2\u6709\u7B14\u8BB0\u5C31\u5728\u539F\u4E66\u65C1\u5206\u5C4F\u6253\u5F00\u3002",
   "\u81EA\u52A8\u521B\u5EFA\u7684\u9605\u8BFB\u7B14\u8BB0\u4E0D\u518D\u91CD\u590D\u663E\u793A\u4E66\u540D\u4E00\u7EA7\u6807\u9898": "\u81EA\u52A8\u521B\u5EFA\u7684\u9605\u8BFB\u7B14\u8BB0\u4E0D\u518D\u91CD\u590D\u663E\u793A\u4E66\u540D\u4E00\u7EA7\u6807\u9898\u3002",
+  "\u4FEE\u590D\u65E7\u9605\u8BFB\u7B14\u8BB0\u7684\u91CD\u590D\u4E66\u540D\u6807\u9898\u8FC1\u79FB": "\u4FEE\u590D\u65E7\u9605\u8BFB\u7B14\u8BB0\u4E2D\u91CD\u590D\u4E66\u540D\u6807\u9898\u672A\u88AB\u6B63\u786E\u6E05\u7406\u7684\u95EE\u9898\u3002",
   "Book Reader \u043E\u0431\u043D\u043E\u0432\u043B\u0451\u043D \u0434\u043E {0}": "Qiaomu Book Reader \u5DF2\u66F4\u65B0\u81F3 {0}",
   "Book Reader {0} \u2014 \u0447\u0442\u043E \u043D\u043E\u0432\u043E\u0433\u043E": "Qiaomu Book Reader {0} \u2014 \u66F4\u65B0\u5185\u5BB9",
   "\u041A\u043D\u0438\u0436\u043D\u0430\u044F \u0447\u0438\u0442\u0430\u043B\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u0438\u043B\u0430\u0441\u044C \u0434\u043E \u0432\u0435\u0440\u0441\u0438\u0438 {0}. \u0427\u0442\u043E \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u043E\u0441\u044C:": "Qiaomu Book Reader \u5DF2\u66F4\u65B0\u81F3 {0}\u3002\u672C\u6B21\u66F4\u65B0\uFF1A",
@@ -55812,7 +55813,8 @@ Object.assign(__erEN, {
   "\u7B80\u4F53\u4E2D\u6587\u73B0\u5728\u662F\u65B0\u5B89\u88C5\u548C\u65E7\u7248\u5347\u7EA7\u540E\u7684\u9ED8\u8BA4\u754C\u9762\u8BED\u8A00": "Simplified Chinese is now the default interface for new installs and legacy upgrades.",
   "\u9605\u8BFB\u8FDB\u5EA6\u5168\u81EA\u52A8\u4FDD\u5B58\uFF0C\u4E0D\u518D\u663E\u793A\u591A\u4F59\u7684\u6062\u590D\u70B9\u4E0E\u91CD\u7ED8\u6309\u94AE": "Reading progress is saved automatically; the redundant restore-point and redraw buttons are gone.",
   "\u9605\u8BFB\u5668\u65B0\u589E\u9605\u8BFB\u7B14\u8BB0\u6309\u94AE\uFF1A\u6CA1\u6709\u5C31\u521B\u5EFA\uFF0C\u5DF2\u6709\u5C31\u5728\u539F\u4E66\u65C1\u5206\u5C4F\u6253\u5F00": "The reader now has a reading-note button: it creates the note when needed or opens it beside the book.",
-  "\u81EA\u52A8\u521B\u5EFA\u7684\u9605\u8BFB\u7B14\u8BB0\u4E0D\u518D\u91CD\u590D\u663E\u793A\u4E66\u540D\u4E00\u7EA7\u6807\u9898": "Automatically created reading notes no longer repeat the book title as an H1 heading."
+  "\u81EA\u52A8\u521B\u5EFA\u7684\u9605\u8BFB\u7B14\u8BB0\u4E0D\u518D\u91CD\u590D\u663E\u793A\u4E66\u540D\u4E00\u7EA7\u6807\u9898": "Automatically created reading notes no longer repeat the book title as an H1 heading.",
+  "\u4FEE\u590D\u65E7\u9605\u8BFB\u7B14\u8BB0\u7684\u91CD\u590D\u4E66\u540D\u6807\u9898\u8FC1\u79FB": "Fixed migration of duplicate book-title headings in existing reading notes."
 });
 var __erLang = "zh";
 function __erSetLang(v) {
@@ -57094,16 +57096,18 @@ var EltonReader = class extends import_obsidian.Plugin {
       this.settings.iconBacklinksMigrated = true;
       await this._saveLocalData();
     }
-    if (!this.settings.readingNoteTitlesMigratedV2) {
+    if (!this.settings.readingNoteTitlesMigratedV3) {
       const names = new Set(Object.values(this.settings.bookNoteLinks || {}).filter(Boolean));
       for (const name of names) {
         const note = resolveBookNote(this.app, name);
-        if (!(note instanceof import_obsidian.TFile) || !isMarkedReadingNote(this.app, note)) continue;
+        if (!(note instanceof import_obsidian.TFile)) continue;
         const before = await this.app.vault.read(note);
+        const markedInText = /^---\s*\n[\s\S]*?\n(?:type:\s*(?:reading-note|book-note)|book-reader-note:\s*true)\s*\n[\s\S]*?\n---(?:\n|$)/im.test(before);
+        if (!isMarkedReadingNote(this.app, note) && !markedInText) continue;
         const after = stripGeneratedReadingNoteTitle(before, note.basename);
         if (after !== before) await this.app.vault.modify(note, after);
       }
-      this.settings.readingNoteTitlesMigratedV2 = true;
+      this.settings.readingNoteTitlesMigratedV3 = true;
       await this._saveLocalData();
     }
     if (!this.settings.figuresShownByDefault) {
@@ -61553,6 +61557,9 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 var WHATS_NEW = [
+  { v: "3.2.2", items: [
+    __ertr("\u4FEE\u590D\u65E7\u9605\u8BFB\u7B14\u8BB0\u7684\u91CD\u590D\u4E66\u540D\u6807\u9898\u8FC1\u79FB")
+  ] },
   { v: "3.2.1", items: [
     __ertr("\u7B80\u4F53\u4E2D\u6587\u73B0\u5728\u662F\u65B0\u5B89\u88C5\u548C\u65E7\u7248\u5347\u7EA7\u540E\u7684\u9ED8\u8BA4\u754C\u9762\u8BED\u8A00"),
     __ertr("\u9605\u8BFB\u8FDB\u5EA6\u5168\u81EA\u52A8\u4FDD\u5B58\uFF0C\u4E0D\u518D\u663E\u793A\u591A\u4F59\u7684\u6062\u590D\u70B9\u4E0E\u91CD\u7ED8\u6309\u94AE"),
