@@ -13,6 +13,34 @@ import {
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
+import { createSerialTaskQueue, parseJsonRecord } from "../src/storage.js";
+
+test("JSON stores reject arrays and invalid content instead of treating them as empty data", () => {
+  assert.deepEqual(parseJsonRecord('{"book": {"pct": 0.5}}'), { book: { pct: 0.5 } });
+  assert.throws(() => parseJsonRecord("[]"), /must contain a JSON object/);
+  assert.throws(() => parseJsonRecord("not-json"), SyntaxError);
+});
+
+test("serial task queue preserves order and recovers after a failed save", async () => {
+  const queue = createSerialTaskQueue();
+  const calls = [];
+  const first = queue.run(async () => { calls.push("first"); throw new Error("disk full"); });
+  const second = queue.run(async () => { calls.push("second"); return 2; });
+  await assert.rejects(first, /disk full/);
+  assert.equal(await second, 2);
+  assert.deepEqual(calls, ["first", "second"]);
+});
+
+test("reader persistence refuses to overwrite unreadable stores and reports real save failures", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /this\._blockedStores\.add\(path5\)/);
+  assert.match(source, /if \(this\._blockedStores\.has\(path5\)\) return Promise\.resolve\(false\)/);
+  assert.match(source, /results\.some\(\(result\) => result === false\)/);
+  assert.match(source, /const saved = await this\._persistHighlights/);
+  assert.match(source, /if \(!saved\) \{[\s\S]*Не удалось сохранить комментарий/);
+  assert.match(source, /function renderReaderLoadError/);
+  assert.match(source, /Попробовать снова/);
+});
 
 function luminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16) / 255);

@@ -6,7 +6,7 @@
  * (pdf.js, epub.js, JSZip, localForage) come from npm and are bundled at build
  * time by esbuild — see esbuild.config.mjs.
  */
-import { AbstractInputSuggest, FuzzySuggestModal, ItemView, MarkdownRenderer, Menu, Modal, Notice, Platform, Plugin, PluginSettingTab, Scope, SecretComponent, Setting, TFile, TFolder, normalizePath, requestUrl } from "obsidian";
+import { AbstractInputSuggest, FuzzySuggestModal, ItemView, MarkdownRenderer, Menu, Modal, Notice, Platform, Plugin, PluginSettingTab, Scope, SecretComponent, Setting, TFile, TFolder, normalizePath, requestUrl, setIcon } from "obsidian";
 import * as pdfjsLib from "pdfjs-dist";
 import ePub from "epubjs";
 import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "./ai-providers.js";
@@ -14,6 +14,7 @@ import { createOpenAiSseParser } from "./ai-stream.js";
 import { cliReasoningEfforts, probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
+import { cloneJson, createSerialTaskQueue, parseJsonRecord } from "./storage.js";
 
 // ---- i18n (RU source / EN / Simplified Chinese) ----
 const __erEN = {"Пожелания и ошибки — в телеграм-бота":"Feedback and bugs — in the Telegram bot","Всё, что хочется поменять или починить, теперь собирается в одном месте — в телеграм-боте @book_in_obsidian_bot.":"Everything you would like changed or fixed is now collected in one place — the Telegram bot @book_in_obsidian_bot.","Ни аккаунта на GitHub, ни формы не нужно: заметили ошибку, не хватает возможности, неудобно на телефоне — просто отправьте боту обычное сообщение.":"No GitHub account and no form needed: found a bug, missing a feature, something awkward on the phone — just send the bot an ordinary message.","Читаю всё подряд; из этих сообщений и складывается список того, что делать дальше.":"I read every one of them, and that is what the plan for the next versions is made of.","Пожелания и ошибки":"Feedback and bugs","Всё, что хочется поменять или починить, собирается в телеграм-боте @book_in_obsidian_bot. Напишите ему обычным сообщением — ни аккаунта на GitHub, ни формы не нужно.":"Everything you would like changed or fixed is collected in the Telegram bot @book_in_obsidian_bot. Send it an ordinary message — no GitHub account and no form needed.","Написать в бота":"Message the bot","Обратная связь: ":"Feedback: "," — версия {0}. Автор: Elton.":" — version {0}. Author: Elton.","Пожелания и ошибки теперь собираются в телеграм-боте @book_in_obsidian_bot — просто напишите ему сообщение":"Feedback and bugs are now collected in the Telegram bot @book_in_obsidian_bot — just send it a message","Разбор фрагмента стал диалогом: свой вопрос, свой системный промпт, название книги уходит фоном":"Explaining a passage is a conversation now: your own question, your own system prompt, and the book's title is sent as background context","Читалка подстраивается под устройство: у телефона, планшета и компьютера своя раскладка":"The reader adapts to the device: phone, tablet and desktop each get their own layout","Тема читалки и библиотеки меняется мгновенно, появилась подстройка под тему Obsidian":"Reader and library themes switch instantly, and can follow your Obsidian theme","Движок PDF обновлён — открытие книг стало надёжнее":"The PDF engine has been updated — opening books is more reliable","стр. {0}":"p. {0}","разв. {0}":"spr. {0}","Введите хотя бы два символа":"Type at least two characters","Что найти в книге…":"What to find in the book…","Фильтр по названию…":"Filter by title…","В этой книге не нашлось ни оглавления, ни заголовков.":"No contents and no headings were found in this book.","Каким цветом подсветить фрагмент, если вы написали к нему комментарий, не выбрав цвет вручную. Комментарий может храниться только при выделении, поэтому оно создаётся само.":"Which colour to use when you comment on a passage without picking a colour first. A comment can only be stored on a highlight, so one is created for you.","Цвет выделения по умолчанию":"Default highlight colour","Не удалось сохранить комментарий":"Could not save the comment","Найдено: {0}. Слово подсвечено в тексте.":"Found: {0}. The word is highlighted in the text.","Снять подсветку":"Clear highlight","Эта страница слишком тяжёлая, чтобы нарисовать её":"This page is too heavy to draw","Найденное слово подсвечивается прямо в тексте, чтобы не искать его глазами в абзаце":"The matched word is painted right in the text, so you don't have to hunt for it in the paragraph","Найденное слово подсвечивается жёлтым прямо в тексте книги, поэтому искать его глазами в абзаце не нужно. Через несколько секунд подсветка гаснет сама, чтобы не мешать чтению; убрать сразу — «Снять подсветку» в панели поиска.":"The matched word is painted yellow right in the book's text — and stays painted after you close the panel, so you don't have to hunt for it in the paragraph. Turn it off with \"Clear highlight\" in the search panel.","Поиск по всему тексту книги — список совпадений с фрагментом вокруг каждого, клик переходит к месту.":"Search across the whole book's text — a list of matches with context around each, click to jump to that spot.","Поиск":"Search","Экспорт цитат группирует их по главам и подписывает номер страницы":"Quote export now groups by chapter and labels the page number","Оглавление наконец работает — брало данные, но не показывало их; починил, добавил номер страницы, живой номер разворота и фильтр для длинных списков":"Contents finally works — it had the data but never showed it; fixed, plus page numbers, a live spread number and a filter for long lists","Комментарий к выделению — короткая мысль остаётся при цитате, а не улетает в отдельный файл":"Comment on a highlight — a short thought stays with the quote instead of flying into a separate file","Поиск по всей книге — значок лупы вверху читалки, со списком совпадений и переходом к месту":"Search the whole book — magnifier icon at the top, with a match list and jump-to-spot","Если пунктов много (в технических книгах бывает 300–400), сверху появляется поле фильтра — начните печатать название главы.":"When there are many entries (technical books can have 300–400), a filter field appears at the top — start typing a chapter name.","У каждого пункта — номер страницы книги и номер текущего разворота, который пересчитывается на лету: он меняется при изменении ширины окна или открытии боковых панелей, поэтому его нельзя один раз сохранить.":"Each entry shows the book's own page number and the current spread number, recomputed live — it changes with window width or a sidebar opening, so it can't be stored once and reused.","Плагин ищет оглавление в таком порядке: сначала настоящие закладки из PDF, потом заголовки в тексте, потом печатное содержание книги (та страница со списком глав и точками), и в последнюю очередь — жирные абзацы, если больше зацепиться не за что.":"The plugin looks for a contents source in this order: real PDF bookmarks first, then headings in the text, then the book's own printed contents page (the one with the dotted leaders), and as a last resort, bold paragraphs if nothing else is there to go on.","Оглавление: откуда оно берётся":"Contents: where it comes from","Ищет по части слова: запрос «систем» найдёт и «система», и «системы», и «системный».":"Matches partial words: searching \"system\" finds \"system\", \"systems\" and \"systemic\".","Клик по результату — переход прямо к этому месту, на любом устройстве и при любой ширине окна.":"Click a result to jump straight to that spot, on any device and at any window width.","Значок лупы вверху читалки (или команда «Поиск по книге») открывает поиск по всему тексту — со списком совпадений и фрагментом текста вокруг каждого.":"The magnifier icon at the top of the reader (or the \"Search the book\" command) opens full-text search, with a list of matches and surrounding context for each.","Поиск по книге":"Search the book","Сохраняется по кнопке или Ctrl+Enter. Если очистить поле — комментарий удаляется, сама цитата остаётся.":"Saved with the button or Ctrl+Enter. Clearing the field removes the comment; the quote itself stays.","Пример: подчеркнули спорный тезис и приписали «а вот тут он сам себе противоречит» — эта строка видна в панели «Выделения» под цитатой и попадает в заметку книги при экспорте.":"Example: you highlight a shaky claim and jot \"he contradicts himself right here\" — it shows under the quote in the Highlights panel and travels with it on export.","У выделенного текста, кроме «Создать заметку», есть значок комментария — короткая мысль, которая остаётся ПРИ выделении, а не улетает в отдельный файл.":"Highlighted text has a comment icon besides \"Create a note\" — a short thought that stays WITH the highlight instead of flying off into a separate file.","Комментарий к выделению":"Comment on a highlight","В заметке цитаты собраны по главам, у каждой — номер страницы книги, а комментарий (если вы его оставили) идёт прямо под цитатой.":"In the note, quotes are grouped by chapter, each carries the book's page number, and your comment (if you left one) sits right under the quote.","Инструкция выросла до 21 экрана — теперь разбирает каждую настройку с примерами":"The guide has grown — it now walks through every setting with examples","Режим для e-ink читалок: без анимаций и теней, чистый чёрный на белом, крупнее кнопки":"E-ink reader mode: no animations or shadows, pure black on white, bigger buttons","Выделения переносятся выборочно: галочки, «выделить все», «только новые» — уже перенесённое не задваивается":"Highlights are exported selectively: tick boxes, \"select all\", \"new only\" — nothing already copied gets duplicated","Заметку из выделения можно сразу положить в нужную папку и проставить теги":"A note made from a highlight can go straight into the folder you want, with tags","Картинки из книг теперь показываются сразу — раньше их приходилось искать в другой читалке":"Pictures now show up straight away — previously you had to open another reader to find them","Картинки в книгах":"Pictures in books","Заметка из выделения: название, папка, теги":"A note from a highlight: title, folder, tags","Папка и теги запомнятся для следующей заметки. Сам фрагмент попадёт в текст целиком — название на это не влияет.":"The folder and tags are remembered for the next note. The passage itself goes into the note in full — the title does not affect that.","Например: идеи, психология":"For example: ideas, psychology","Теги":"Tags","Название":"Title","Новая заметка из выделения":"New note from a highlight","Для Obsidian на Android-читалке с электронными чернилами. Убирает анимации, плавные переходы, тени и размытие — они оставляют на таком экране следы. Чистый чёрный на белом, жёсткие рамки, крупнее кнопки, листание без скольжения.":"For Obsidian on an Android e-ink reader. Removes animations, fades, shadows and blur — they leave ghosting on such a screen. Pure black on white, hard borders, bigger buttons, page turns that jump instead of sliding.","Режим для e-ink читалок":"E-ink reader mode","Перенести выделения в заметки":"Move highlights into notes","Инструкция по плагину":"Plugin guide","Инструкция: разбор всех настроек по шагам":"Guide: every setting, step by step","Команды и горячие клавиши":"Commands and hotkeys","Как перенести выделения в заметки":"Moving highlights into notes","Вкладка «Данные»: где что лежит":"The Data tab: where things live","Вкладка «Перевод»":"The Translate tab","Заметка книги и шаблон":"The book note and the template","Куда складывать заметки":"Where notes are filed","Вкладка «Заметки»: название заметки":"The Notes tab: note titles","«Погружение» и цель чтения":"Immersive mode and the reading goal","«Выравнивание» и «Положение текста»":"Alignment and text position","Настройка «Листание страниц»":"The \"Turning pages\" setting","Вкладка «Чтение»: статистика":"The Reading tab: statistics","Дальше — разбор настроек":"Next: a tour of the settings","Что перенести в заметку":"What to copy into the note","Заметка «{0}» — {1} уже перенесено, отмечено {2} новых":"Note \"{0}\" — {1} already there, {2} new ones ticked","Заметка «{0}» — все {1} ещё не перенесены":"Note \"{0}\" — none of the {1} are there yet","Заметка книги не привязана — доступны только отдельные заметки":"No book note linked — separate notes only","Выделить все":"Select all","Снять все":"Clear all","Только новые":"New only","уже в заметке":"already in the note","Отмечено: {0} из {1}":"Ticked: {0} of {1}","В заметку книги":"Into the book note","Отдельными заметками":"As separate notes","Эта цитата уже есть в «{0}»":"That quote is already in \"{0}\"","Все выбранные цитаты уже есть в «{0}»":"All the selected quotes are already in \"{0}\"","Добавлено в «{0}»: {1}, пропущено уже имевшихся: {2}":"Added to \"{0}\": {1}; skipped as already present: {2}","Название подбирается автоматически: первое предложение фрагмента или его начало по границе слова. Выключено — в имя файла идёт весь фрагмент, как раньше.":"The title is chosen automatically: the passage's first sentence, or its opening cut on a word boundary. Off — the whole passage goes into the filename, as before.","Короткие названия без вопросов":"Short titles, no questions","Перед созданием заметки из выделения появится окно с коротким названием — его можно исправить или одной кнопкой вставить фрагмент целиком. Без этого имя файла берётся из самого фрагмента и выходит очень длинным.":"Before a note is created from a highlight, a dialog offers a short title you can edit, or insert the whole passage with one click. Without it the filename is taken from the passage itself and comes out very long.","Спрашивать название заметки":"Ask for the note title","Отмена":"Cancel","Сам фрагмент попадёт в текст заметки целиком — название на это не влияет.":"The passage itself goes into the note in full — the title does not affect that.","Взять весь фрагмент как название":"Use the whole passage as the title","Какую книгу открыть?":"Which book do you want to open?","Книга не найдена: {0}":"Book not found: {0}","Открыть книгу: {0}":"Open book: {0}","Открыть книгу…":"Open a book…","Продолжить чтение (последняя книга)":"Continue reading (last book)","Перестроение при сворачивании панелей стало плавным, а не рывком":"Re-layout when sidebars open or close now fades instead of jumping","Строки заполняют страницу до конца — больше нет пустых мест внизу колонки":"Lines fill the page to the bottom — no more blank gaps at the foot of a column","Листание строго вправо, без съезжания в угол, и текст стал чётким":"Page turns go straight sideways instead of drifting into the corner, and text is sharp","Статистика чтения: сколько всего прочитано, серия дней и график за две недели":"Reading stats: all-time total, day streak and a two-week chart","Книгу можно открыть командой — своя команда и горячая клавиша на каждую книгу":"Open a book by command — each book gets its own command and hotkey","Сколько минут в день вы хотите читать. Прогресс за сегодня — в карточке вверху этой вкладки.":"How many minutes a day you want to read. Today's progress is in the card at the top of this tab.","Откройте книгу и включите таймер ▶ — здесь появится история чтения.":"Open a book and start the timer ▶ — your reading history will appear here.","14 дней назад":"14 days ago","лучший день":"best day","в среднем за день":"daily average","дней с книгой":"days with a book","сегодня":"today","{0} дн. подряд":"{0}-day streak","за всё время с книгами":"all-time with books","{0} д":"{0} d","{0} д {1} ч":"{0} d {1} h","{0} ч":"{0} h","меньше минуты":"less than a minute","Положение на странице":"Position on the page","Положение текста на странице":"Text position on the page","Сверху":"Top","Снизу":"Bottom","Куда прижимать текст, если страница заполнена не до конца — например, в конце главы.":"Where to place the text when a page isn't filled — at the end of a chapter, for instance.","Если страница заполнена не до конца (например, в конце главы), текст можно не оставлять прижатым к верху. Меняется и на лету — в панели настроек чтения.":"When a page isn't filled (at the end of a chapter, for instance), the text needn't stay pinned to the top. Can also be changed on the fly from the reading-settings panel.","Чтение":"Reading","Заметки":"Notes","Данные":"Data","О плагине":"About","Очистка":"Cleanup","Шаблон":"Template","Цель чтения":"Reading goal","Что нового":"What's new","Показать":"Show","Список изменений последних версий.":"Changes from recent versions.","<b>Book Reader</b> — версия {0}. Автор: Elton Labs.":"<b>Book Reader</b> — version {0}. By Elton Labs.","Шрифт, размер и межстрочный интервал настраиваются прямо в книге — иконка ползунков вверху читалки.":"Font, size and line spacing are set inside the book — the sliders icon at the top of the reader.","Доп. настройки":"More settings","Память о книгах":"What the reader remembers","Забыть все книги":"Forget all books","Точно забыть?":"Really forget?","Готово — читалка снова спросит про заметку при открытии книги":"Done — the reader will ask about a note again when you open a book","Забыть настройки этой книги":"Forget this book's settings","Настройки книги сброшены — окно появится при следующем открытии":"Book settings cleared — the setup screen will appear next time you open it","Книг: {0}. Привязанные заметки, категории, шаблоны отдельных книг и отметки «про заметку уже спрашивали». Сами заметки НЕ удаляются — читалка просто забывает связи и спросит про заметку заново при открытии каждой книги.":"Books: {0}. Linked notes, categories, per-book templates and the \"already asked about a note\" marks. The notes themselves are NOT deleted — the reader just forgets the links and will ask about a note again when you open each book.","Заметка книги для ссылок":"Book note for links","Шаблон для этой книги":"Template for this book","Book Reader обновлён до {0}":"Book Reader updated to {0}","Понятно":"Got it","Открыть инструкцию":"Open the guide","Расширенные":"Advanced","Категория":"Category","Например: Психология, Бизнес":"e.g. Psychology, Business","Жанр или тема — по ней книги группируются в библиотеке. Несколько — через запятую. Можно оставить пустым.":"Genre or topic — books are grouped by it in the library. Separate several with commas. Can be left empty.","Жанр или тема — по ней книги группируются в библиотеке. Несколько — через запятую. Пусто — без категории.":"Genre or topic — books are grouped by it in the library. Separate several with commas. Empty means no category.","Цитаты и мысли из книги будут ссылаться на эту заметку.":"Quotes and thoughts from this book will link to this note.","Поиск заметки…":"Search notes…","Создать заметку…":"Create a note…","Создать заметку":"Create note","← Назад":"← Back","В хранилище пока нет заметок — создайте новую ниже":"No notes in the vault yet — create one below","Ничего не найдено":"Nothing found","Все":"All","Читаю":"Reading","Не начатые":"Not started","Прочитано":"Finished","Без папки":"No folder","Заметка для книги":"A note for this book","Куда собирать цитаты и мысли из этой книги? Выделенные фрагменты будут ссылаться на эту заметку.":"Where should quotes and thoughts from this book go? Highlights will link back to this note.","Создать заметку для книги":"Create a note for this book","Название заметки":"Note name","Папка":"Folder","Корень хранилища":"Vault root","Создать и начать читать":"Create and start reading","или":"or","Выбрать существующую заметку":"Pick an existing note","Читать без заметки":"Read without a note","В хранилище пока нет заметок — создайте новую":"There are no notes in the vault yet — create one","Больше не спрашивать — создавать заметку для каждой книги автоматически":"Don't ask again — create a note for every book automatically","Это всегда можно поменять потом — кнопка (i) вверху читалки или настройки плагина.":"You can change this later — the (i) button at the top of the reader, or the plugin settings.","+ Создать новую":"+ Create new","Заметка с этой страницы":"Note from this page","{0} — стр. {1}":"{0} — p. {1}","— из [[{0}]], стр. {1}":"— from [[{0}]], p. {1}","> *(страница-скан — текста для цитаты нет, впишите своими словами)*":"> *(scanned page — no text to quote, write it in your own words)*","Заметка создана: {0}":"Note created: {0}","Показывать картинки из книги":"Show pictures from the book","По умолчанию ВЫКЛ: если из страницы извлекается текст — показывается только чистый текст. Включите, чтобы над текстом показывались иллюстрации, схемы и графики: вырезаются сами картинки, а не скриншот всей страницы. На сканах (где текст извлечь нельзя) страница по-прежнему показывается целиком. Откройте книгу заново, чтобы применить.":"Off by default: when a page yields text, only the clean text is shown. Turn this on to also show the book's illustrations, diagrams and charts above the text — the pictures themselves are cropped out, not a screenshot of the whole page. Scanned pages (where no text can be extracted) are still shown in full. Reopen the book to apply.","Перевод":"Translation","Перевод выделенного":"Translating a selection","Оригинал":"Original","Переводим…":"Translating…","Перевести":"Translate","Копировать перевод":"Copy translation","В заметку":"To a note","Пустой ответ переводчика":"The translator returned nothing","Не удалось перевести. Нужен интернет — перевод идёт через Google Translate, и у него есть лимиты на частые запросы.":"Could not translate. An internet connection is required — translation goes through Google Translate, which rate-limits frequent requests.","Кнопка перевода в выделении":"Translate button in the selection popup","Добавляет кнопку перевода в панельку, которая появляется при выделении текста. Перевод открывается рядом с оригиналом, его можно скопировать или сохранить в заметку под цитатой. Откройте книгу заново, чтобы кнопка появилась.":"Adds a translate button to the popup that appears when you select text. The translation is shown next to the original; you can copy it or save it into a note under the quote. Reopen the book for the button to appear.","Это первая версия функции. Перевод идёт через бесплатный Google Translate: нужен интернет, есть лимиты на частые запросы, а выделенный фрагмент уходит на серверы Google. Для больших объёмов пока не рассчитано.":"This is an early version of the feature. Translation uses the free Google Translate: it needs internet, is rate-limited, and the selected fragment is sent to Google's servers. Not intended for large volumes yet.","Переводить на язык":"Translate into","Язык, на который переводить выделенный фрагмент. Исходный язык определяется автоматически.":"The language to translate the selected fragment into. The source language is detected automatically.","Русский":"Russian","Перевод — это отдельный сетевой запрос к Google. Если вам важно, чтобы текст книги никуда не уходил, оставьте функцию выключенной: всё остальное в читалке работает полностью офлайн.":"Translation is a separate network request to Google. If you need the book's text to stay on your device, leave this off: everything else in the reader works fully offline.","\n\n**Перевод:**\n{0}":"\n\n**Translation:**\n{0}","Читалка открывает три формата: EPUB (.epub), FB2 (.fb2) и PDF (.pdf).":"The reader opens three formats: EPUB (.epub), FB2 (.fb2) and PDF (.pdf).","1. Кладёте файл книги (.epub, .fb2 или .pdf) в хранилище и открываете его кликом.":"1. Put the book file (.epub, .fb2 or .pdf) in your vault and open it with a click.","Этот FB2 упакован в ZIP. Распакуйте архив и положите в хранилище сам файл .fb2.":"This FB2 is packed in a ZIP. Unpack the archive and put the .fb2 file itself into your vault.","Выравнивание текста":"Text alignment","Слева":"Left","По ширине":"Justify","По центру":"Center","Справа":"Right","{0} ч {1} мин":"{0} h {1} min","{0} мин":"{0} min","Своя заметка на каждую книгу":"A separate note per book","При первом открытии книги автоматически создаётся отдельная заметка с названием книги (в «Папке заметок-книг», иначе в «Папке для новых заметок») и привязывается к ней. Дальше все выделения из этой книги идут в её заметку. Выключено по умолчанию.":"On a book's first open, a dedicated note titled after the book is created (in the \"Book notes folder\", otherwise the \"New notes folder\") and linked to it. From then on every highlight from this book goes into its note. Off by default.","Заметка книги создана: {0}":"Book note created: {0}","Это первая версия функции — проверьте результат на паре книг. Заметка создаётся один раз при первом открытии книги.":"This is an early version of the feature — check the result on a couple of books first. The note is created once, on a book's first open.","Как выравнивается текст в колонке чтения. Можно менять и на лету — в панели настроек чтения (иконка ползунков) в самой книге. Откройте книгу заново, чтобы применить.":"How text is aligned in the reading column. You can also change it on the fly from the reading-settings panel (sliders icon) inside a book. Reopen the book to apply.","Сегодня прочитано: {0} мин. Всего за всё время: {1}. Кнопка ▶ вверху запускает обратный отсчёт до цели (пауза — ⏸).":"Read today: {0} min. All-time total: {1}. The ▶ button at the top starts the countdown toward the goal (pause — ⏸).","Сегодня прочитано: {0} мин. Всего за всё время: {1} мин.":"Read today: {0} min. All-time total: {1} min.","Жёлтый":"Yellow","Зелёный":"Green","Голубой":"Blue","Розовый":"Pink","Цель чтения на сегодня достигнута 🎉":"Today's reading goal reached 🎉","Таймер выключен — включите его в настройках чтения":"Timer is off — enable it in reading settings","Таймер сброшен":"Timer reset","Листание":"Page turning","Кнопками":"Buttons","По клику":"By click","«По клику»: клик по левой части страницы — назад, по правой — вперёд. Центр свободен для выделения текста.":"\"By click\": clicking the left part of the page goes back, the right part goes forward. The center stays free for selecting text.","Вкл":"On","Выкл":"Off","Тап по картинке — увеличить · фон или ✕ — закрыть":"Tap the image to zoom · background or ✕ to close","Elton Reader: используем pdf.worker.js из CDN (нужен интернет). Причина:":"Elton Reader: using pdf.worker.js from the CDN (internet required). Reason:","Elton Reader: could not register .pdf, use right-click → Открыть в Elton Reader":"Elton Reader: could not register .pdf, use right-click → Open in Elton Reader","Book Reader — Библиотека":"Book Reader — Library","Открыть библиотеку":"Open library","Открыть PDF в Book Reader":"Open PDF in Book Reader","Сохранить позицию чтения":"Save reading position","Экспортировать выделения в заметки":"Export highlights to notes","📖 Открыть в Book Reader":"📖 Open in Book Reader","Показать приветствие (онбординг)":"Show welcome (onboarding)","Заметка книги для ссылок — начните вводить название…":"Book note for links — start typing a name…","Шаблон заметки — начните вводить путь…":"Note template — start typing a path…","## Заметки из выделений":"## Notes from highlights","Заметка":"Note","Пустое выделение":"Empty highlight","Заметка создана":"Note created","Не удалось создать заметку":"Could not create the note","Нет выделений для экспорта":"No highlights to export","Книга":"Book","Не удалось экспортировать выделения":"Could not export highlights","Нет":"No","Да":"Yes","Для книги не привязана заметка — задайте её в настройках":"No note is linked to this book — set it in settings","## Цитаты":"## Quotes","Цитаты добавлены":"Quotes added","Да, открыть":"Yes, open","Не удалось добавить цитаты в заметку книги":"Could not add quotes to the book note","Как пользоваться Book Reader":"How to use Book Reader","Что делает каждая кнопка и зачем":"What each button does and why","Верхняя панель":"Top bar","Сохранить позицию":"Save position","Запоминает, где вы остановились, и ставит точку возврата (помечена 💾 в «Настройки → Вернуться к месту»). Это как «сохранение» в игре — нажмите перед закрытием книги, если хотите быть точно уверены, что место не потеряется.":"Remembers where you left off and drops a restore point (marked 💾 in \"Settings → Jump back\"). It's like a \"save\" in a game — press it before closing the book if you want to be completely sure your spot won't be lost.","Обновить":"Refresh","Перестраивает страницу заново, если вёрстка «поехала» — например, после смены размера окна или открытия/закрытия боковой панели или вкладки (текст может отобразиться криво). Текущую позицию при этом сохраняет.":"Rebuilds the page if the layout breaks — for example, after resizing the window or opening/closing a sidebar panel or tab (the text may look misaligned). Your current position is preserved.","Выделения":"Highlights","Открывает список всех ваших выделений в этой книге. Клик по строке — переход к этому месту. Сверху списка — кнопка экспорта в заметки.":"Opens the list of all your highlights in this book. Click a row to jump to that spot. Above the list is the export-to-notes button.","Содержание":"Contents","Оглавление книги — быстрый переход по главам.":"The book's table of contents — quickly jump between chapters.","Настройки":"Settings","Тема, шрифт, размер текста, число колонок и блок «Вернуться к месту» — список точек, к которым можно откатиться.":"Theme, font, text size, column count and the \"Jump back\" block — a list of points you can roll back to.","Справка":"Help","Это окно.":"This window.","Чтение и навигация":"Reading and navigation","Листать страницы":"Turn pages","Стрелки внизу экрана, клавиши ← → ↑ ↓ и пробел, либо свайп пальцем на телефоне. Каждое перелистывание автоматически сохраняет позицию — отдельно жать «Сохранить» не обязательно.":"The arrows at the bottom of the screen, the ← → ↑ ↓ keys and space, or a finger swipe on mobile. Every page turn saves your position automatically — you don't need to press \"Save\" separately.","Выделения и заметки":"Highlights and notes","Выделить текст":"Highlight text","Выделите фрагмент мышью или пальцем — всплывёт палитра цветов. Клик по уже готовому выделению — сменить цвет или удалить его.":"Select a fragment with the mouse or a finger — a color palette pops up. Click an existing highlight to change its color or remove it.","Создать заметку из выделения":"Create a note from a highlight","Правый клик по выделенному тексту → «Создать новую заметку». Заметка создаётся по вашему шаблону в выбранной папке, с цитатой и ссылкой на книгу.":"Right-click the highlighted text → \"Create new note\". The note is created from your template in the chosen folder, with the quote and a link to the book.","Экспортировать все выделения":"Export all highlights","Кнопка вверху панели «Выделения». Собирает все выделения книги разом. Спросит формат: одна общая заметка со всеми цитатами, отдельный файл на каждое выделение, либо вставить все цитаты текстом прямо в привязанную заметку книги.":"The button at the top of the \"Highlights\" panel. Collects all of the book's highlights at once. It asks for a format: one shared note with all quotes, a separate file per highlight, or inserting all quotes as text straight into the linked book note.","Куда вести ссылку «— из [[…]]» в заметках из выделений. Пусто — имя файла книги.":"Where the \"— from [[…]]\" link in highlight notes points. Empty — the book's file name.","Сначала откройте книгу…":"Open a book first…","Выбрать из списка…":"Choose from the list…","В хранилище нет заметок":"No notes in the vault","Свой шаблон только для этой книги (например, под жанр). Пусто — используется общий шаблон из настроек плагина.":"A template just for this book (for example, per genre). Empty — the shared template from the plugin settings is used.","Templates/Шаблон.md":"Templates/Template.md","Про автосохранение":"About autosave","Позиция сохраняется сама при каждом перелистывании и хранится в общем файле, который синхронизируется между устройствами (Obsidian Sync). Перестроение страницы (смена размера окна, панелей, масштаба) больше НЕ двигает и не пересохраняет прогресс — поэтому он не «уезжает» сам по себе.":"Your position is saved automatically on every page turn and kept in a shared file that syncs across devices (Obsidian Sync). Rebuilding the page (resizing the window, panels, zoom) no longer moves or re-saves progress — so it won't \"drift\" on its own.","Добро пожаловать в Book Reader!":"Welcome to Book Reader!","Это уютная читалка книг прямо внутри Obsidian. Читаете, выделяете важное и превращаете выделения в заметки — не выходя из хранилища.":"It's a cozy book reader right inside Obsidian. Read, highlight what matters and turn highlights into notes — without leaving your vault.","Пролистайте несколько экранов стрелкой → (или кнопкой «Далее»). Это займёт минуту, зато потом всё будет понятно.":"Flip through a few screens with the → arrow (or the \"Next\" button). It takes a minute, but then everything will be clear.","Какие форматы и как открыть книгу":"Which formats, and how to open a book","Читалка открывает два формата: EPUB (файлы .epub) и PDF (файлы .pdf).":"The reader opens two formats: EPUB (.epub files) and PDF (.pdf files).","Чтобы читать книгу, положите её файл в своё хранилище Obsidian и просто кликните по нему — она откроется в читалке.":"To read a book, put its file into your Obsidian vault and just click it — it opens in the reader.","На левой панели есть значок 📖 «Библиотека» — там все ваши книги с обложками в одном месте.":"In the left sidebar there's a 📖 \"Library\" icon — all your books with covers in one place.","Это самая первая версия":"This is the very first version","Пожалуйста, не загружайте сразу много книг. Начните с двух-трёх и проверьте, что всё работает стабильно именно на вашем устройстве.":"Please don't load a lot of books at once. Start with two or three and check that everything works reliably on your device.","Особенно аккуратно с очень большими PDF (сотни страниц или сканы картинок) — они тяжёлые и могут подтормаживать.":"Be especially careful with very large PDFs (hundreds of pages or scanned images) — they're heavy and may lag.","Плагин будет становиться лучше. А пока — по чуть-чуть и бережно 🙂":"The plugin will keep getting better. For now — little by little and gently 🙂","Выделения: цвета и действия":"Highlights: colors and actions","Выделите текст пальцем или мышью — появится палитра. Выберите цвет, и выделение сохранится.":"Select text with a finger or the mouse — a palette appears. Pick a color and the highlight is saved.","Нажмите на уже готовое выделение — откроется то же меню: сменить цвет, скопировать, поставить закладку «остановился здесь», создать заметку, отправить в заметку книги или удалить.":"Tap an existing highlight — the same menu opens: change color, copy, set a \"stopped here\" bookmark, create a note, send it to the book note, or delete.","Все выделения книги собраны в панели 🖍️ наверху — оттуда можно перейти к любому или экспортировать все сразу.":"All of the book's highlights are gathered in the 🖍️ panel at the top — from there you can jump to any of them or export them all at once.","Что такое «заметка книги»":"What a \"book note\" is","У каждой книги можно завести одну обычную заметку Obsidian — её «главную страницу», например «Мастер и Маргарита.md».":"For each book you can keep one ordinary Obsidian note — its \"home page\", for example \"The Master and Margarita.md\".","Когда вы создаёте заметку из выделения, в ней ставится ссылка на эту заметку книги. А ещё цитаты можно отправлять прямо в неё — так все мысли по книге собираются в одном месте.":"When you create a note from a highlight, it links back to this book note. You can also send quotes straight into it — so all your thoughts on the book gather in one place.","Это не обязательно настраивать прямо сейчас — привязать заметку книги можно в любой момент позже. Откройте книгу, нажмите значок ⓘ (справка) вверху читалки и заполните поле «Заметка книги для ссылок». Пока ничего не привязано, ссылки просто ведут на имя файла книги.":"You don't have to set this up right now — you can link a book note at any time later. Open the book, press the ⓘ (help) icon at the top of the reader and fill in the \"Book note for links\" field. Until something is linked, links simply point to the book's file name.","Где всё хранится":"Where everything is stored","Ваш прогресс чтения и выделения хранятся файлами прямо в хранилище (рядом с книгами или в отдельной папке — это настраивается). Ничего не спрятано «внутри плагина» — всё лежит у вас.":"Your reading progress and highlights are stored as files right in the vault (next to the books or in a separate folder — it's configurable). Nothing is hidden \"inside the plugin\" — it's all yours.","Заметки из выделений и заметки книги — это самые обычные .md заметки в вашей папке. Открывайте, редактируйте и связывайте их, как любые другие.":"Highlight notes and book notes are ordinary .md notes in your folder. Open, edit and link them like any others.","Про синхронизацию":"About syncing","Раз прогресс и выделения — это файлы в хранилище, они синхронизируются вместе с ним (Obsidian Sync, iCloud и т.п.).":"Since progress and highlights are files in the vault, they sync along with it (Obsidian Sync, iCloud, etc.).","Дайте синхронизации закончиться, прежде чем открывать ту же книгу на другом устройстве, и не читайте одну книгу на двух устройствах сразу — иначе позиция может «поспорить сама с собой».":"Let syncing finish before opening the same book on another device, and don't read one book on two devices at once — otherwise the position may \"argue with itself\".","На разных устройствах путь к папке с книгами бывает разным — проверьте папки в настройках плагина.":"The path to the books folder can differ across devices — check the folders in the plugin settings.","Пример: как это всё работает":"Example: how it all works","1. Кладёте файл книги (.epub или .pdf) в хранилище и открываете его кликом.":"1. Put a book file (.epub or .pdf) into the vault and open it with a click.","2. Читаете. Позиция сохраняется сама при каждом перелистывании — ничего нажимать не нужно.":"2. Read. Your position saves itself on every page turn — nothing to press.","3. Понравилась мысль — выделяете её и выбираете цвет. Выделение сохранилось.":"3. Like a thought — highlight it and pick a color. The highlight is saved.","4. (по желанию) Нажимаете ⓘ вверху и привязываете «заметку книги» — свою страницу для этой книги. Это можно сделать и потом.":"4. (optional) Press ⓘ at the top and link a \"book note\" — your page for this book. You can do this later too.","5. Нажимаете на выделение → «в заметку книги» — цитата улетает в эту страницу, и плагин предложит открыть её. Готово: все ваши цитаты в одном месте.":"5. Tap a highlight → \"to book note\" — the quote flies into that page, and the plugin offers to open it. Done: all your quotes in one place.","Готово — приятного чтения!":"All set — enjoy your reading!","Что настроить по желанию (не обязательно сразу): папку для книг и папку для заметок — в настройках плагина. Заметку книги — под значком ⓘ прямо во время чтения.":"What to set up if you like (not required right away): the books folder and the notes folder — in the plugin settings. The book note — under the ⓘ icon while reading.","Что можно вообще не трогать: прогресс и выделения работают сразу и сохраняются сами.":"What you can leave alone entirely: progress and highlights work right away and save themselves.","Полная справка по каждой кнопке — значок ⓘ в читалке. Этот экран приветствия можно снова открыть в настройках плагина.":"Full help for every button — the ⓘ icon in the reader. You can reopen this welcome screen in the plugin settings.","Нажмите «Начать читать» и откройте свою первую книгу 📖":"Press \"Start reading\" and open your first book 📖","‹ Назад":"‹ Back","Начать читать":"Start reading","Далее ›":"Next ›","Пропустить":"Skip","Загружаем книгу…":"Loading the book…","Ошибка при открытии файла":"Error opening the file","Сбросить таймер":"Reset timer","Таймер: сколько осталось до цели — старт/пауза":"Timer: time left to the goal — start/pause","Обновить (перерисовать вид)":"Refresh (redraw the view)","Оглавление":"Table of contents","Настройки чтения":"Reading settings","Создать новую заметку":"Create new note","Текстом в заметку книги":"As text into the book note","Нечего сохранять":"Nothing to save","Книга не открыта":"No book is open","Тема":"Theme","Тёмная":"Dark","Светлая":"Light","Сепия":"Sepia","Размер шрифта":"Font size","Шрифт":"Font","Межстрочный":"Line spacing","Страниц рядом":"Pages side by side","1 страница":"1 page","2 страницы":"2 pages","Вернуться к месту":"Jump back","Действия":"Actions","Точек пока нет":"No points yet","Недоступно":"Unavailable","Нечего обновлять":"Nothing to refresh","Обновлено":"Refreshed","Копировать текст":"Copy text","Скопировано ✓":"Copied ✓","Не удалось скопировать":"Could not copy","Остановился здесь":"Stopped here","Экспортировать в заметку книги":"Export to the book note","Выделение не найдено":"Highlight not found","Пока нет выделений.\nВыделите текст и выберите цвет.":"No highlights yet.\nSelect text and pick a color.","Удалить":"Delete","Закрыть":"Close","Библиотека":"Library","Поиск книги…":"Search a book…","Меньше обложки":"Smaller covers","Больше обложки":"Larger covers","Нет книг":"No books","Все папки vault":"All vault folders","книг":"books","книги":"books","книга":"book","Вид обложки":"Cover fit","Не читалась":"Not started","Ещё":"More","Перейти к странице":"Go to page","Перейти":"Go","Приветствие и инструкция":"Welcome and guide","Показать вводный экран с объяснением форматов, заметки книги, хранения данных и синхронизации.":"Show the intro screen explaining formats, the book note, data storage and syncing.","Открыть приветствие":"Open welcome","Папка с книгами":"Books folder","Пусто = весь vault":"Empty = the whole vault","Папка данных чтения":"Reading-data folder","Где хранятся прогресс чтения, выделения и резервные копии (reading-progress.json, reading-highlights.json). Пусто — рядом с книгами (в «Папке с книгами»). Файлы синхронизируются вместе с хранилищем.":"Where reading progress, highlights and rescue backups are kept (reading-progress.json, reading-highlights.json). Empty — next to the books (in the \"Books folder\"). The files sync along with the vault.","Рядом с книгами":"Next to the books","Заметки из выделений":"Notes from highlights","Шаблон заметки":"Note template","Путь к вашему шаблону (Templater), который применяется к новой заметке из выделения. Пусто — заметка создаётся без шаблона, только с цитатой. Пример: 0. Files/4. Templates/Шаблон стандартный.md":"Path to your (Templater) template applied to each new highlight note. Empty — the note is created without a template, with just the quote. Example: 0. Files/4. Templates/Default template.md","Папка для новых заметок":"Folder for new notes","Куда сохранять заметки, создаваемые из выделений. Пусто — корень хранилища.":"Where to save notes created from highlights. Empty — the vault root.","Папка заметок-книг (для ссылок)":"Book-notes folder (for links)","Из этой папки берётся список при выборе заметки книги, куда ведёт ссылка «— из [[…]]». Пусто — можно выбрать любую заметку хранилища.":"The list for choosing a book note (where the \"— from [[…]]\" link points) is taken from this folder. Empty — you can pick any note in the vault.","3. Resources/База книг":"3. Resources/Book base","Совет: шаблон можно переопределить для отдельной книги — откройте книгу, нажмите (i) вверху и укажите свой шаблон в поле «Шаблон для этой книги» (удобно, если у разных жанров разное оформление).":"Tip: the template can be overridden per book — open the book, press (i) at the top and set your template in the \"Template for this book\" field (handy if different genres need different formatting).","Сохранять цвет выделений при экспорте":"Keep highlight color on export","Каждая цитата оборачивается в цветной <mark> — цвет выделения виден в готовой заметке (в режиме чтения и live preview, без плагинов). Выключите, если хотите обычные цитаты без HTML.":"Each quote is wrapped in a colored <mark> — the highlight color shows in the finished note (in reading mode and live preview, no plugins needed). Turn it off if you want plain quotes without HTML.","Дублировать страницу картинкой, если есть текст":"Duplicate the page as an image when text exists","По умолчанию ВЫКЛ: если из страницы извлекается текст — показывается только чистый текст, без скриншота. Картинка показывается лишь когда текст извлечь нельзя (сканы, схемы, обложки). Включите, если хотите ВИДЕТЬ оригинальный рисунок страницы над текстом (например, для книг-скетчноутов). Откройте книгу заново, чтобы применить.":"OFF by default: if text can be extracted from the page, only the clean text is shown, without a screenshot. The image is shown only when text can't be extracted (scans, diagrams, covers). Turn it on if you want to SEE the original page image above the text (for example, for sketchnote books). Reopen the book to apply.","Листание страниц":"Page turning","«Кнопками» — стрелки/клавиши/свайп. «По клику» — клик по левой/правой части страницы листает назад/вперёд (центр свободен для выделения текста).":"\"Buttons\" — arrows/keys/swipe. \"By click\" — clicking the left/right part of the page turns back/forward (the center stays free for selecting text).","По клику мышкой":"By mouse click","Таймер цели чтения":"Reading-goal timer","Обратный отсчёт до дневной цели (например, 15 минут) — сколько ещё осталось прочитать. Запускается ВРУЧНУЮ кнопкой ▶ вверху читалки, рядом с «Сохранить» (пауза — ⏸).":"A countdown to your daily goal (for example, 15 minutes) — how much is left to read. Started MANUALLY with the ▶ button at the top of the reader, next to \"Save\" (pause — ⏸).","Цель на день, минут":"Daily goal, minutes","Погружение (Immersive)":"Immersive","Панели сверху и снизу мягко притухают через пару секунд без движения мыши и мгновенно возвращаются при движении — чтобы ничто не отвлекало от текста.":"The top and bottom bars gently dim after a couple of seconds without mouse movement and instantly return when you move — so nothing distracts from the text.","Кэш обложек":"Cover cache","Очистить":"Clear","Кэш очищен":"Cache cleared","Прогресс":"Progress","Прогресс очищен":"Progress cleared","Очистить все":"Clear all","Выделения очищены":"Highlights cleared","Синхронизация между устройствами":"Syncing across devices","Способ синхронизации":"Sync method","Подсказывает плагину, насколько свежо перечитывать файлы прогресса при открытии книги.":"Tells the plugin how eagerly to re-read the progress files when opening a book.","Авто (рекомендуется)":"Auto (recommended)","iCloud / Google Drive / папка":"iCloud / Google Drive / folder","Без синхронизации":"No syncing","Облачные папки (iCloud/Drive) обновляются с задержкой. Если на одном устройстве вы только читаете — конфликтов не будет: плагин перечитывает прогресс при каждом открытии книги и аккуратно сливает выделения.":"Cloud folders (iCloud/Drive) update with a delay. If you only read on one device there will be no conflicts: the plugin re-reads progress every time a book is opened and carefully merges highlights.","✓ Цель достигнута — {0} мин сегодня":"✓ Goal reached — {0} min today","⏱ {0} из {1} мин · {2}%":"⏱ {0} of {1} min · {2}%","{0} мин/день":"{0} min/day","Сегодня прочитано: {0} мин. Кнопка ▶ вверху запускает обратный отсчёт до цели (пауза — ⏸).":"Read today: {0} min. The ▶ button at the top starts the countdown to the goal (pause — ⏸).","\n\n— из [[{0}]]":"\n\n— from [[{0}]]","Выделения — {0}":"Highlights — {0}","---\ncreated: {0}\nsource: \"[[{1}]]\"\ntags: [выделения]\n---\n\n# {2}\n\n{3}\n\n— из [[{4}]]\n":"---\ncreated: {0}\nsource: \"[[{1}]]\"\ntags: [highlights]\n---\n\n# {2}\n\n{3}\n\n— from [[{4}]]\n","Экспортировано выделений: {0}":"Highlights exported: {0}","Создаю заметки: {0}…":"Creating notes: {0}…","Создано заметок: {0}, ошибок: {1}":"Notes created: {0}, errors: {1}","Создано заметок: {0}":"Notes created: {0}","Заметка книги не найдена: {0}":"Book note not found: {0}","Добавлено цитат в «{0}»: {1}":"Quotes added to \"{0}\": {1}","Открыть заметку «{0}» в отдельной вкладке?":"Open the note \"{0}\" in a separate tab?","Отдельная заметка на каждое ({0})":"A separate note for each ({0})","Текстом в заметку книги ({0})":"As text into the book note ({0})","Нет заметок в «{0}»":"No notes in \"{0}\"","Заметка книги: {0}":"Book note: {0}","Шаблон книги: {0}":"Book template: {0}","Экран {0}":"Screen {0}","Готовим книгу… {0}%":"Preparing the book… {0}%","Выделить: {0}":"Highlight: {0}","Сохранено ✓ — {0}%":"Saved ✓ — {0}%","Разворот {0} из {1}":"Spread {0} of {1}","Вернулись к {0}%":"Jumped back to {0}%","Закладка «остановился здесь» — {0}%":"\"Stopped here\" bookmark — {0}%","{0}<span>Экспортировать в заметки ({1})</span>":"{0}<span>Export to notes ({1})</span>","<p style=\"padding:40px;color:var(--er-muted);margin:auto;\">Ошибка: {0}</p>":"<p style=\"padding:40px;color:var(--er-muted);margin:auto;\">Error: {0}</p>","{0}<span>Справка</span>":"{0}<span>Help</span>","Сегодня прочитано: {0} мин.":"Read today: {0} min.","Сохранено: {0}":"Saved: {0}","Книг: {0}":"Books: {0}","Всего: {0}":"Total: {0}","Прогресс чтения и выделения хранятся <b>файлами прямо в хранилище</b>, рядом с книгами:":"Reading progress and highlights are stored <b>as files right in the vault</b>, next to the books:","Поэтому они переезжают между ПК и телефоном <b>любым</b> способом, которым вы синхронизируете само хранилище ":"So they travel between PC and phone by <b>any</b> means you use to sync the vault itself ","(Obsidian Sync, iCloud, Google Drive, Remotely Save и т.п.). Привязка к месту — по номеру абзаца, ":"(Obsidian Sync, iCloud, Google Drive, Remotely Save, etc.). The position is anchored by paragraph number, ","так что ПК и телефон находят одну и ту же точку при любом размере экрана.<br>":"so PC and phone find the same spot at any screen size.<br>","Настройки оформления и кэш обложек — локальные (в <code>data.json</code> плагина) и намеренно не синхронизируются.":"Appearance settings and the cover cache are local (in the plugin's <code>data.json</code>) and are intentionally not synced.","Добавить книгу":"Add a book","Отпустите файлы, чтобы добавить их в библиотеку":"Drop the files to add them to your library","Поддерживаются только файлы PDF, EPUB и FB2":"Only PDF, EPUB and FB2 files are supported","Файлы не выбраны":"No files selected","Добавлено книг: {0}":"Books added: {0}","пропущено: {0}":"skipped: {0}","Не удалось добавить: {0}":"Could not add: {0}","Абзацы в PDF сохраняются как в оригинале — текст больше не склеивается в сплошную стену":"PDF paragraphs are kept as in the original — the text no longer glues into one solid wall","Библиотека: кнопка «Добавить книгу» и перетаскивание файлов (PDF, EPUB, FB2) прямо в окно":"Library: an \"Add a book\" button and drag-and-drop of files (PDF, EPUB, FB2) straight into the window","PDF-движок встроен в плагин — книги открываются офлайн, ничего не подгружается из интернета":"The PDF engine is now bundled in — books open offline, nothing is fetched from the internet","В списке выделений комментарий больше не ломает цитату — он аккуратно встаёт под ней":"In the highlights list a comment no longer breaks the quote — it sits neatly underneath it"};
@@ -21,6 +22,24 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "阅读进度、设置与划线写入改为顺序保存，避免连续操作互相覆盖": "Reading progress, settings, and highlights now save in order so rapid actions cannot overwrite one another.",
+  "检测到损坏的阅读数据时停止覆盖并保留原文件副本": "Unreadable reading data is no longer overwritten, and the original content is preserved in a backup copy.",
+  "开书失败新增可重试的错误页，不再停在空白加载状态": "Book-opening failures now show a retryable error page instead of leaving a blank loading state.",
+  "书库和阅读器主要操作支持键盘聚焦，设置可被 Obsidian 搜索": "Primary library and reader actions are keyboard-focusable, and Obsidian can now search the plugin settings.",
+  "Назад": "Back",
+  "Далее": "Next",
+  "Настройки Qiaomu Book Reader": "Qiaomu Book Reader settings",
+  "Чтение, темы, шрифты, заметки, AI, перевод, папки, синхронизация и данные.": "Reading, themes, fonts, notes, AI, translation, folders, syncing, and data.",
+  "Файл {0} повреждён. Плагин прекратил перезаписывать его и сохранил копию: {1}": "The {0} file is unreadable. The plugin stopped overwriting it and preserved a copy at: {1}",
+  "Файл {0} не удалось прочитать. Плагин прекратил перезаписывать его; сначала сделайте резервную копию или восстановите файл.": "The {0} file could not be read. The plugin stopped overwriting it; make a backup or restore the file first.",
+  "Не удалось сохранить место чтения. Проверьте доступ к хранилищу — текущая позиция осталась в памяти.": "Could not save your reading position. Check vault access; the current position is still kept in memory.",
+  "Не удалось сохранить настройки плагина. Проверьте доступ к хранилищу.": "Could not save the plugin settings. Check vault access.",
+  "Не удалось сохранить выделение. Оно осталось на экране, но после перезапуска может исчезнуть.": "Could not save the highlight. It remains on screen, but may disappear after a restart.",
+  "Не удалось открыть эту книгу": "Could not open this book",
+  "Файл может быть повреждён, защищён паролем или ещё не загружен синхронизацией.": "The file may be damaged, password-protected, or not fully downloaded by sync yet.",
+  "Технические подробности": "Technical details",
+  "Попробовать снова": "Try again",
+  "Вернуться в библиотеку": "Back to library",
   "AI 解读": "AI insight",
   "选中文字后的工具条新增 AI 解读按钮，可直接围绕当前片段提问": "The selection toolbar now includes an AI insight button for asking about the current passage.",
   "服务拒绝处理该请求（403）。可能是内容限制或账号权限问题，不代表密钥错误。": "The service refused the request (403). This may be a content restriction or an account permission issue, not an invalid API key.",
@@ -1686,6 +1705,10 @@ const EltonReader = class extends Plugin {
     this.thumbCache = {};
     this.highlights = {};
     this.progressBackups = {};
+    this._progressQueue = createSerialTaskQueue();
+    this._localDataQueue = createSerialTaskQueue();
+    this._corruptStoreNotices = new Set();
+    this._blockedStores = new Set();
   }
   async onload() {
     await this.loadAll();
@@ -1855,6 +1878,19 @@ const EltonReader = class extends Plugin {
         new WhatsNewModal(this.app, this, news, noteFile).open();
       });
     }
+  }
+  onunload() {
+    window.clearTimeout(this._bookCmdTimer);
+    for (const timer of Object.values(this._fmTimers || {})) window.clearTimeout(timer);
+    this._fmTimers = {};
+    this.flushReadingTime();
+    const pending = [
+      this._progressQueue?.drain?.(),
+      this._localDataQueue?.drain?.(),
+      this._hlChain,
+      this._thumbSaveChain,
+    ].filter(Boolean);
+    void Promise.allSettled(pending);
   }
   async openFile(file) {
     // A dialog on the phone, a tab everywhere else — and the dialog is not a
@@ -2053,9 +2089,9 @@ const EltonReader = class extends Plugin {
     // next to the books even before a book is opened in this session.
     this._lastBookPath = (d == null ? void 0 : d.lastBookPath) || "";
     // Load progress from vault file (syncs via Obsidian Sync)
-    this.progress = await this._loadProgressFromVault();
+    this.progress = (await this._loadProgressFromVault()) || {};
     // Highlights live next to progress so they also sync via Obsidian Sync
-    this.highlights = await this._loadHighlightsFromVault();
+    this.highlights = (await this._loadHighlightsFromVault()) || {};
     // One-time repair. Older builds set "already asked about this book" BEFORE
     // the reader answered — and back then the prompt couldn't create a note at
     // all, and gave up silently when no book-notes folder was configured. Those
@@ -2066,8 +2102,7 @@ const EltonReader = class extends Plugin {
     if (!this.settings.promptedRepaired) {
       const asked = this.settings.bookNotePrompted || {};
       const links = this.settings.bookNoteLinks || {};
-      let freed = 0;
-      for (const k of Object.keys(asked)) if (!links[k]) { delete asked[k]; freed++; }
+      for (const k of Object.keys(asked)) if (!links[k]) delete asked[k];
       this.settings.promptedRepaired = true;
       // Previously logged how many books were repaired. It ran once per install
       // and told the reader nothing they could act on, so it only added noise to
@@ -2151,7 +2186,21 @@ const EltonReader = class extends Plugin {
   }
   _saveLocalData() {
     captureDeviceProfile(this.settings);
-    return this.saveData({ settings: this.settings, progressBackups: this.progressBackups, highlightsBackups: this.highlightsBackups, lastBookPath: this._lastBookPath || "" });
+    const snapshot = cloneJson({
+      settings: this.settings,
+      progressBackups: this.progressBackups,
+      highlightsBackups: this.highlightsBackups,
+      lastBookPath: this._lastBookPath || "",
+    });
+    return this._localDataQueue.run(() => this.saveData(snapshot)).then(() => true).catch((error) => {
+      console.error("Qiaomu Book Reader: could not save plugin data", error);
+      const now = Date.now();
+      if (!this._lastLocalDataErrorNotice || now - this._lastLocalDataErrorNotice > 15000) {
+        this._lastLocalDataErrorNotice = now;
+        new Notice(__ertr("Не удалось сохранить настройки плагина. Проверьте доступ к хранилищу."), 8000);
+      }
+      return false;
+    });
   }
   // ── Cover thumbnail cache (separate, device-local, NOT synced) ─────────────
   _thumbCachePath() { return erPath(`${this.manifest.dir}/thumb-cache.json`); }
@@ -2306,7 +2355,7 @@ const EltonReader = class extends Plugin {
           catch { /* a broken template must not stop the note being created */ }
         }
         note = await this.app.vault.create(path5, body).catch((e) => {
-          console.error("Elton Reader: create book note failed", e);
+          console.error("Qiaomu Book Reader: create book note failed", e);
           return null;
         });
       }
@@ -2319,7 +2368,7 @@ const EltonReader = class extends Plugin {
       new Notice(__ertr("Не удалось создать заметку"));
       return null;
     } catch (e) {
-      console.error("Elton Reader: create book note failed", e);
+      console.error("Qiaomu Book Reader: create book note failed", e);
       new Notice(__ertr("Не удалось создать заметку"));
       return null;
     }
@@ -2347,29 +2396,54 @@ const EltonReader = class extends Plugin {
     if (list.length > 30) list.shift();
   }
   async _loadProgressFromVault() {
-    try {
-      const path5 = this._progressFilePath();
-      const exists = await this.app.vault.adapter.exists(path5);
-      if (!exists) return {};
-      const raw = await this.app.vault.adapter.read(path5);
-      return JSON.parse(raw);
-    } catch (e) {
-      console.error("Elton Reader: could not load progress file", e);
-      return {};
-    }
+    return this._loadJsonStore(this._progressFilePath(), __ertr("Прогресс"));
   }
-  async _saveProgressToVault() {
-    try {
-      const path5 = this._progressFilePath();
+  _saveProgressToVault() {
+    const path5 = this._progressFilePath();
+    if (this._blockedStores.has(path5)) return Promise.resolve(false);
+    const snapshot = cloneJson(this.progress || {});
+    return this._progressQueue.run(async () => {
       const folder = path5.substring(0, path5.lastIndexOf("/"));
       if (folder) {
         const folderExists = await this.app.vault.adapter.exists(folder);
         if (!folderExists) await this.app.vault.createFolder(folder).catch(() => {});
       }
-      await this.app.vault.adapter.write(path5, JSON.stringify(this.progress, null, 2));
-      this._writeRescue(false);
+      await this.app.vault.adapter.write(path5, JSON.stringify(snapshot, null, 2));
+      await this._writeRescue(false);
+      return true;
+    });
+  }
+  async _loadJsonStore(path5, label) {
+    const adapter = this.app.vault.adapter;
+    if (!await adapter.exists(path5)) return {};
+    let raw = "";
+    try {
+      raw = await adapter.read(path5);
+      const value = parseJsonRecord(raw, label);
+      this._blockedStores.delete(path5);
+      return value;
     } catch (e) {
-      console.error("Elton Reader: could not save progress file", e);
+      console.error(`Qiaomu Book Reader: could not load ${label}`, e);
+      this._blockedStores.add(path5);
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const backupPath = `${path5}.corrupt-${stamp}.bak`;
+      let backupSaved = false;
+      try {
+        if (raw) {
+          await adapter.write(backupPath, raw);
+          backupSaved = true;
+        }
+      } catch (backupError) {
+        console.error("Qiaomu Book Reader: could not preserve the unreadable data file", backupError);
+      }
+      if (!this._corruptStoreNotices.has(path5)) {
+        this._corruptStoreNotices.add(path5);
+        const message = backupSaved
+          ? __ertr("Файл {0} повреждён. Плагин прекратил перезаписывать его и сохранил копию: {1}", label, backupPath)
+          : __ertr("Файл {0} не удалось прочитать. Плагин прекратил перезаписывать его; сначала сделайте резервную копию или восстановите файл.", label);
+        new Notice(message, 10000);
+      }
+      return null;
     }
   }
   // Safety net: keep a dated copy of progress + highlights + the plugin's own
@@ -2407,7 +2481,7 @@ const EltonReader = class extends Plugin {
       const dataPath = erPath(`${this.manifest.dir}/data.json`);
       if (await ad.exists(dataPath)) await ad.write(erPath(`${dir}/plugin-data.json`), await ad.read(dataPath));
     } catch (e) {
-      console.error("Elton Reader: rescue backup failed", e);
+      console.error("Qiaomu Book Reader: rescue backup failed", e);
     }
   }
   saveProgress(path5, spread, total, block) {
@@ -2429,7 +2503,18 @@ const EltonReader = class extends Plugin {
     // Device-independent anchor: global index of the first visible paragraph.
     if (typeof block === "number" && block >= 0) entry.block = block;
     this.progress[path5] = entry;
-    const persisted = Promise.all([this._saveProgressToVault(), this._saveLocalData()]);
+    const persisted = Promise.all([this._saveProgressToVault(), this._saveLocalData()]).then((results) => {
+      if (results.some((result) => result === false)) throw new Error("reading progress store is locked");
+      return true;
+    }).catch((error) => {
+      console.error("Qiaomu Book Reader: could not save reading progress", error);
+      const now2 = Date.now();
+      if (!this._lastProgressErrorNotice || now2 - this._lastProgressErrorNotice > 15000) {
+        this._lastProgressErrorNotice = now2;
+        new Notice(__ertr("Не удалось сохранить место чтения. Проверьте доступ к хранилищу — текущая позиция осталась в памяти."), 8000);
+      }
+      return false;
+    });
     this._syncProgressFrontmatter(path5);
     return persisted;
   }
@@ -2487,7 +2572,8 @@ const EltonReader = class extends Plugin {
   // Re-reads progress from vault file — call before opening a book
   // to get fresh data after Obsidian Sync may have updated the file.
   async refreshProgress() {
-    this.progress = await this._loadProgressFromVault();
+    const fresh = await this._loadProgressFromVault();
+    if (fresh) this.progress = fresh;
   }
   // ── Highlights ────────────────────────────────────────
   _highlightsFilePath() {
@@ -2495,33 +2581,23 @@ const EltonReader = class extends Plugin {
     return erPath(folder ? `${folder}/reading-highlights.json` : "reading-highlights.json");
   }
   async _loadHighlightsFromVault() {
-    try {
-      const path5 = this._highlightsFilePath();
-      const exists = await this.app.vault.adapter.exists(path5);
-      if (!exists) return {};
-      const raw = await this.app.vault.adapter.read(path5);
-      return JSON.parse(raw);
-    } catch (e) {
-      console.error("Elton Reader: could not load highlights file", e);
-      return {};
-    }
+    return this._loadJsonStore(this._highlightsFilePath(), __ertr("Выделения"));
   }
   async _saveHighlightsToVault() {
-    try {
-      const path5 = this._highlightsFilePath();
-      const folder = path5.substring(0, path5.lastIndexOf("/"));
-      if (folder) {
-        const folderExists = await this.app.vault.adapter.exists(folder);
-        if (!folderExists) await this.app.vault.createFolder(folder).catch(() => {});
-      }
-      await this.app.vault.adapter.write(path5, JSON.stringify(this.highlights, null, 2));
-      this._writeRescue(true);
-    } catch (e) {
-      console.error("Elton Reader: could not save highlights file", e);
+    const path5 = this._highlightsFilePath();
+    if (this._blockedStores.has(path5)) throw new Error("highlight store is locked after a read failure");
+    const folder = path5.substring(0, path5.lastIndexOf("/"));
+    if (folder) {
+      const folderExists = await this.app.vault.adapter.exists(folder);
+      if (!folderExists) await this.app.vault.createFolder(folder).catch(() => {});
     }
+    await this.app.vault.adapter.write(path5, JSON.stringify(this.highlights, null, 2));
+    await this._writeRescue(true);
+    return true;
   }
   async refreshHighlights() {
-    this.highlights = await this._loadHighlightsFromVault();
+    const fresh = await this._loadHighlightsFromVault();
+    if (fresh) this.highlights = fresh;
   }
   getHighlights(path5) {
     let _a;
@@ -2532,17 +2608,17 @@ const EltonReader = class extends Plugin {
   addHighlight(path5, hl) {
     if (!this.highlights[path5]) this.highlights[path5] = [];
     this.highlights[path5].push(hl);
-    this._persistHighlights(path5, (disk) => {
+    void this._persistHighlights(path5, (disk) => {
       if (!disk[path5]) disk[path5] = [];
       if (!disk[path5].some((x) => x.id === hl.id)) disk[path5].push(hl);
-    });
+    }).then((saved) => { if (!saved) this._reportHighlightSaveError(); });
   }
   removeHighlight(path5, id) {
     const list = this.highlights[path5];
     if (list) this.highlights[path5] = list.filter((h) => h.id !== id);
-    this._persistHighlights(path5, (disk) => {
+    void this._persistHighlights(path5, (disk) => {
       if (disk[path5]) disk[path5] = disk[path5].filter((h) => h.id !== id);
-    });
+    }).then((saved) => { if (!saved) this._reportHighlightSaveError(); });
   }
   // Attach (or clear) the margin note on a highlight. `id` may be null when the
   // reader commented on a plain selection that was never saved — in that case the
@@ -2555,10 +2631,14 @@ const EltonReader = class extends Plugin {
     if (!target) { new Notice(__ertr("Сначала выделите фрагмент цветом")); return false; }
     const value = String(text || "").trim();
     if (value) target.comment = value; else delete target.comment;
-    await this._persistHighlights(path5, (disk) => {
+    const saved = await this._persistHighlights(path5, (disk) => {
       const d = (disk[path5] || []).find((x) => x.id === target.id);
       if (d) { if (value) d.comment = value; else delete d.comment; }
     });
+    if (!saved) {
+      this._reportHighlightSaveError();
+      return false;
+    }
     new Notice(value ? __ertr("Комментарий сохранён") : __ertr("Комментарий удалён"));
     return true;
   }
@@ -2568,12 +2648,18 @@ const EltonReader = class extends Plugin {
       const h = list.find((x) => x.id === id);
       if (h) h.color = color;
     }
-    this._persistHighlights(path5, (disk) => {
+    void this._persistHighlights(path5, (disk) => {
       if (disk[path5]) {
         const h = disk[path5].find((x) => x.id === id);
         if (h) h.color = color;
       }
-    });
+    }).then((saved) => { if (!saved) this._reportHighlightSaveError(); });
+  }
+  _reportHighlightSaveError() {
+    const now = Date.now();
+    if (this._lastHighlightErrorNotice && now - this._lastHighlightErrorNotice < 15000) return;
+    this._lastHighlightErrorNotice = now;
+    new Notice(__ertr("Не удалось сохранить выделение. Оно осталось на экране, но после перезапуска может исчезнуть."), 8000);
   }
   // Crash-/sync-safe persistence for incremental highlight edits.
   // Re-reads the on-disk file (which may already contain highlights written by
@@ -2582,16 +2668,13 @@ const EltonReader = class extends Plugin {
   // Sync. Mutations are serialized through a promise chain to avoid lost updates.
   _persistHighlights(path5, applyFn) {
     this._lastBookPath = path5;
-    this._hlChain = (this._hlChain || Promise.resolve()).then(async () => {
+    const operation = (this._hlChain || Promise.resolve()).then(async () => {
       let disk = {};
-      try {
-        const fp = this._highlightsFilePath();
-        if (await this.app.vault.adapter.exists(fp)) {
-          disk = JSON.parse(await this.app.vault.adapter.read(fp));
-        }
-      } catch (e) {
-        console.error("Elton Reader: could not re-read highlights, falling back to memory", e);
-        disk = JSON.parse(JSON.stringify(this.highlights || {}));
+      const fp = this._highlightsFilePath();
+      if (await this.app.vault.adapter.exists(fp)) {
+        const fresh = await this._loadJsonStore(fp, __ertr("Выделения"));
+        if (!fresh) throw new Error("highlight store is unreadable");
+        disk = fresh;
       }
       if (!disk || typeof disk !== "object") disk = {};
       applyFn(disk);
@@ -2609,8 +2692,13 @@ const EltonReader = class extends Plugin {
       if (this.settings.quotesToBookNote === true) {
         await syncHighlightsToReadingNote(this.app, this, path5, disk[path5] || []);
       }
-    }).catch((e) => console.error("Elton Reader: highlight persist failed", e));
-    return this._hlChain;
+      return true;
+    });
+    this._hlChain = operation.catch(() => {});
+    return operation.catch((e) => {
+      console.error("Qiaomu Book Reader: highlight persist failed", e);
+      return false;
+    });
   }
   // Rolling local snapshots of a book's highlights (kept in data.json), so an
   // accidental loss/overwrite can always be restored on this device.
@@ -2641,7 +2729,6 @@ const Paginator = class {
       && this.clip.parentElement === container
       && this._html === html);
     if (!переклад) container.empty();
-    const t = erTheme(settings);
     // Vertical placement is decided per spread from real geometry, so both the
     // setting and the measurements are reset whenever the book is re-laid out.
     this._vAlign = settings.vAlign || "top";
@@ -3562,7 +3649,7 @@ const TranslateModal = class extends Modal {
       tr = await translateText(this.text, this.plugin.settings.translateTo || "zh-CN");
       outEl.setText(tr || __ertr("Пустой ответ переводчика"));
     } catch (e) {
-      console.error("Elton Reader: translate failed", e);
+      console.error("Qiaomu Book Reader: translate failed", e);
       const why = e && e.erReason;
       outEl.setText(
         why === "limit"
@@ -3776,7 +3863,7 @@ async function createNoteFromPdfPage(view, pageNo, btn) {
       await openNoteBesideBook(app, plugin, note);
     }
   } catch (e) {
-    console.error("Elton Reader: note from PDF page failed", e);
+    console.error("Qiaomu Book Reader: note from PDF page failed", e);
     new Notice(__ertr("Не удалось создать заметку"));
   }
 }
@@ -5919,7 +6006,7 @@ ${link}
     if (typeof app.vault.process === "function") await app.vault.process(noteFile, add);
     else await app.vault.modify(noteFile, add(await app.vault.read(noteFile)));
   } catch (e) {
-    console.error("Elton Reader: append to book note failed", e);
+    console.error("Qiaomu Book Reader: append to book note failed", e);
   }
 }
 const RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
@@ -6468,7 +6555,7 @@ ${quote}
     }
     return newFile;
   } catch (e) {
-    console.error("Elton Reader: note creation failed", e);
+    console.error("Qiaomu Book Reader: note creation failed", e);
     if (!silent) new Notice(__ertr("Не удалось создать заметку"));
     return null;
   }
@@ -6562,7 +6649,7 @@ function deleteBookFromVault(app, plugin, file, after) {
         new Notice(__ertr("Книга удалена: {0}", file.basename));
         if (typeof after === "function") after();
       } catch (e) {
-        console.error("Elton Reader: delete book failed", e);
+        console.error("Qiaomu Book Reader: delete book failed", e);
         new Notice(__ertr("Не удалось удалить книгу"));
       }
     }
@@ -6841,7 +6928,7 @@ ${heading}
       }).open();
     }
   } catch (e) {
-    console.error("Elton Reader: append quotes to book note failed", e);
+    console.error("Qiaomu Book Reader: append quotes to book note failed", e);
     new Notice(__ertr("Не удалось добавить цитаты в заметку книги"));
   }
 }
@@ -7263,6 +7350,12 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.8.0", items: [
+    __ertr("阅读进度、设置与划线写入改为顺序保存，避免连续操作互相覆盖"),
+    __ertr("检测到损坏的阅读数据时停止覆盖并保留原文件副本"),
+    __ertr("开书失败新增可重试的错误页，不再停在空白加载状态"),
+    __ertr("书库和阅读器主要操作支持键盘聚焦，设置可被 Obsidian 搜索")
+  ]},
   { v: "3.7.0", items: [
     __ertr("CLI AI 现在为 Codex、Claude Code 和 Grok 分别记住模型与思考强度"),
     __ertr("Claude Code 与 Grok 支持逐字流式输出，思考过程与正式回答分开显示"),
@@ -7711,6 +7804,39 @@ async function persistCurrentReaderPosition(reader) {
     console.warn("Book Reader: could not save the final reading position", error);
   }
 }
+async function loadReaderDocument(file, app, settings, onProgress) {
+  if (file.extension === "epub") {
+    return { html: await extractEpub(file, app), lazy: null, outline: null };
+  }
+  if (file.extension === "fb2") {
+    return { html: await extractFb2(file, app), lazy: null, outline: null };
+  }
+  return extractPdf(file, app, settings, onProgress);
+}
+function renderReaderLoadError(reader, error, retry) {
+  const area = reader.areaEl;
+  if (!area) return;
+  area.empty();
+  const state = area.createDiv("er-load-state");
+  const icon = state.createDiv("er-load-state-icon");
+  setIcon(icon, "book-x");
+  state.createEl("h3", { text: __ertr("Не удалось открыть эту книгу") });
+  state.createEl("p", { text: __ertr("Файл может быть повреждён, защищён паролем или ещё не загружен синхронизацией.") });
+  const message = String((error == null ? void 0 : error.message) || error || "Unknown error").trim();
+  if (message) {
+    const details = state.createEl("details", { cls: "er-load-state-details" });
+    details.createEl("summary", { text: __ertr("Технические подробности") });
+    details.createEl("code", { text: message.slice(0, 500) });
+  }
+  const actions = state.createDiv("er-load-state-actions");
+  const retryButton = actions.createEl("button", { cls: "mod-cta", text: __ertr("Попробовать снова") });
+  retryButton.addEventListener("click", () => void retry());
+  const libraryButton = actions.createEl("button", { text: __ertr("Вернуться в библиотеку") });
+  libraryButton.addEventListener("click", () => {
+    if (reader instanceof ReaderModal) reader.close();
+    void reader.plugin.openLibrary();
+  });
+}
 const ReaderView = class extends ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -7795,11 +7921,11 @@ const ReaderView = class extends ItemView {
     this.registerEvent(this.app.workspace.on("layout-change", recheck));
     this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
       if (leaf === this.leaf) recheck();
+      else this._hideHlPopup();
     }));
   }
   async openFile(file) {
     let _a2, _b;
-    let _a;
     this.file = file;
     this.ext = file.extension === "epub" ? "epub" : file.extension === "fb2" ? "fb2" : "pdf";
     this.bookHtml = "";
@@ -7817,16 +7943,12 @@ const ReaderView = class extends ItemView {
     await new Promise((r) => window.requestAnimationFrame(r));
     await new Promise((r) => window.requestAnimationFrame(r));
     try {
-      if (this.ext === "epub") {
-        this.bookHtml = await extractEpub(file, this.app);
-      } else if (this.ext === "fb2") {
-        this.bookHtml = await extractFb2(file, this.app);
-      } else {
-        const res = await extractPdf(file, this.app, this.plugin.settings, (i, n) => loadText.setText(__ertr("Готовим книгу… {0}%", Math.round(i / n * 100))));
-        this.bookHtml = res.html;
-        this._pdfLazy = res.lazy;
-        this._pdfOutline = res.outline;
-      }
+      const result = await loadReaderDocument(file, this.app, this.plugin.settings, (i, n) => {
+        loadText.setText(__ertr("Готовим книгу… {0}%", Math.round(i / n * 100)));
+      });
+      this.bookHtml = result.html;
+      this._pdfLazy = result.lazy;
+      this._pdfOutline = result.outline;
       this.tocItems = buildTocItems(this.bookHtml, this._pdfOutline);
       this.buildTocPanel();
       await this.plugin.refreshProgress();
@@ -7842,8 +7964,8 @@ const ReaderView = class extends ItemView {
       updateGoalBar(this);
       updateTimerBtn(this);
     } catch (e) {
-      console.error("Elton Reader:", e);
-      new Notice(__ertr("Ошибка при открытии файла"));
+      console.error("Qiaomu Book Reader: could not open file", e);
+      renderReaderLoadError(this, e, () => this.openFile(file));
     }
   }
   // On a book's first open, offer to pick its index note (from the configured
@@ -8024,7 +8146,7 @@ const ReaderView = class extends ItemView {
     const pb = root.createDiv("er-pbar");
     this.pbarFill = pb.createDiv("er-pbar-fill");
     const top = root.createDiv("er-top");
-    const lb = top.createDiv("er-ibtn");
+    const lb = top.createEl("button", { cls: "er-ibtn", attr: { "aria-label": __ertr("Библиотека") } });
     svgIcon(lb, "arrow-left");
     lb.addEventListener("click", () => this.plugin.openLibrary());
     this.titleEl = top.createDiv("er-top-title");
@@ -8043,37 +8165,37 @@ const ReaderView = class extends ItemView {
     this.timerBtnEl.setAttribute("aria-label", __ertr("Таймер: сколько осталось до цели — старт/пауза"));
     this.timerBtnEl.addEventListener("click", () => toggleTimerSession(this));
     updateTimerBtn(this);
-    const noteBtn = tr.createDiv("er-ibtn");
+    const noteBtn = tr.createEl("button", { cls: "er-ibtn" });
     svgIcon(noteBtn, "note");
     noteBtn.setAttribute("aria-label", __ertr("Заметка книги"));
     noteBtn.addEventListener("click", () => openOrCreateBookNoteBeside(this.plugin, this.file));
-    const hlBtn = tr.createDiv("er-ibtn");
+    const hlBtn = tr.createEl("button", { cls: "er-ibtn" });
     svgIcon(hlBtn, "highlighter");
     hlBtn.setAttribute("aria-label", __ertr("Выделения"));
     hlBtn.addEventListener("click", () => this.togglePanel("highlights"));
-    const findBtn = tr.createDiv("er-ibtn");
+    const findBtn = tr.createEl("button", { cls: "er-ibtn" });
     svgIcon(findBtn, "search");
     findBtn.setAttribute("aria-label", __ertr("Поиск по книге"));
     findBtn.addEventListener("click", () => {
       this.togglePanel("find");
       if (this._findInput) erAutoFocus(this._findInput, 60);
     });
-    const tocBtn = tr.createDiv("er-ibtn");
+    const tocBtn = tr.createEl("button", { cls: "er-ibtn" });
     svgIcon(tocBtn, "list");
     tocBtn.setAttribute("aria-label", __ertr("Оглавление"));
     tocBtn.addEventListener("click", () => this.togglePanel("toc"));
-    const setBtn = tr.createDiv("er-ibtn");
+    const setBtn = tr.createEl("button", { cls: "er-ibtn" });
     svgIcon(setBtn, "sliders");
     setBtn.setAttribute("aria-label", __ertr("Настройки чтения"));
     setBtn.addEventListener("click", () => new ReadSettingsModal(this.app, this).open());
     this.areaEl = root.createDiv("er-area");
     if ((this.plugin.settings.navMode || "buttons") === "click") root.addClass("er-navclick");
     const bot = root.createDiv("er-bot");
-    const pv = bot.createDiv("er-navbtn");
+    const pv = bot.createEl("button", { cls: "er-navbtn", attr: { "aria-label": __ertr("Назад") } });
     svgIcon(pv, "chevron-left");
     pv.addEventListener("click", () => this.nav("prev"));
     const center = bot.createDiv("er-bot-center");
-    this.locEl = center.createDiv("er-loc er-loc-clickable");
+    this.locEl = center.createEl("button", { cls: "er-loc er-loc-clickable" });
     this.locEl.setAttribute("aria-label", __ertr("Перейти к странице"));
     this.locEl.addEventListener("click", () => {
       if (!this.file || !this.pager || !this.pager.total) return;
@@ -8085,7 +8207,7 @@ const ReaderView = class extends ItemView {
     });
     this.pctEl = center.createDiv("er-pct");
     this.pctEl.setText("0%");
-    const nx = bot.createDiv("er-navbtn");
+    const nx = bot.createEl("button", { cls: "er-navbtn", attr: { "aria-label": __ertr("Далее") } });
     svgIcon(nx, "chevron-right");
     nx.addEventListener("click", () => this.nav("next"));
     this.overlayEl = root.createDiv("er-overlay");
@@ -8173,7 +8295,6 @@ const ReaderView = class extends ItemView {
       menu.showAtMouseEvent(e);
     });
     this.registerDomEvent(docOf(this.containerEl), "keydown", (e) => {
-      let _a;
       if (!this.bookHtml)
         return;
       const ae = docOf(this.areaEl).activeElement;
@@ -8980,9 +9101,8 @@ const LibraryModal = class extends Modal {
       if (this._grid) this._grid.style.gridTemplateColumns = `repeat(auto-fill,minmax(${px}px,1fr))`;
     };
     const mkSz = (label, d, aria) => {
-      const b = sizeWrap.createDiv("er-lib-szbtn");
+      const b = sizeWrap.createEl("button", { cls: "er-lib-szbtn", attr: { type: "button", "aria-label": aria } });
       b.setText(label);
-      b.setAttribute("aria-label", aria);
       b.addEventListener("click", async () => {
         this.plugin.settings.libCoverSize = Math.max(110, Math.min(300, (this.plugin.settings.libCoverSize || 176) + d));
         applySize();
@@ -9279,6 +9399,8 @@ const LibraryModal = class extends Modal {
     const prog = this.plugin.getProgress(file.path);
     const pct = (_a = prog == null ? void 0 : prog.percent) != null ? _a : 0;
     const card = grid.createDiv("er-lib-card");
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", file.basename);
     const cover = card.createDiv("er-lib-cover");
     const fits = ((_b = this.plugin.settings.coverFits) != null ? _b : (this.plugin.settings.coverFits = {}));
     if (fits[file.path] === "fill") cover.addClass("er-fit-fill");
@@ -9286,10 +9408,19 @@ const LibraryModal = class extends Modal {
     ph.createDiv("er-lib-ph-ext").setText(file.extension.toUpperCase());
     ph.createDiv("er-lib-ph-init").setText(file.basename.slice(0, 2).toUpperCase());
     this.loadThumb(file, cover, ph);
+    const openBook = () => {
+      this.close();
+      void this.plugin.openFile(file);
+    };
+    const openCover = cover.createEl("button", {
+      cls: "er-lib-open-cover",
+      attr: { type: "button", "aria-label": __ertr("Открыть книгу: {0}", file.basename) },
+    });
+    openCover.addEventListener("click", openBook);
     // Hover button: switch this cover between "\u0432\u043F\u0438\u0441\u0430\u0442\u044C" (whole cover visible,
     // contain) and "\u0437\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u044C" (fill the box, cover). Applied as inline
     // background-size so it survives theme CSS.
-    const fitBtn = cover.createDiv("er-lib-fitbtn");
+    const fitBtn = cover.createEl("button", { cls: "er-lib-fitbtn", attr: { type: "button" } });
     fitBtn.setAttribute("aria-label", __ertr("\u0412\u0438\u0434 \u043E\u0431\u043B\u043E\u0436\u043A\u0438"));
     const applyFit = () => {
       const fill = cover.hasClass("er-fit-fill");
@@ -9310,7 +9441,9 @@ const LibraryModal = class extends Modal {
       s.createDiv("er-lib-strip-fill").style.width = `${pct}%`;
     }
     const info = card.createDiv("er-lib-info");
-    info.createDiv("er-lib-book-title").setText(file.basename);
+    const titleButton = info.createEl("button", { cls: "er-lib-book-title er-lib-title-button", attr: { type: "button" } });
+    titleButton.setText(file.basename);
+    titleButton.addEventListener("click", openBook);
     const meta = info.createDiv("er-lib-book-meta");
     if (prog == null ? void 0 : prog.lastRead) {
       meta.setText(`${pct}% \xB7 ${new Date(prog.lastRead).toLocaleDateString(__erLocale(), { day: "numeric", month: "short" })}`);
@@ -9333,14 +9466,10 @@ const LibraryModal = class extends Modal {
       menu.showAtMouseEvent(e);
     };
     card.addEventListener("contextmenu", bookMenu);
-    const moreBtn = cover.createDiv("er-lib-morebtn");
+    const moreBtn = cover.createEl("button", { cls: "er-lib-morebtn", attr: { type: "button" } });
     moreBtn.setAttribute("aria-label", __ertr("Действия с книгой"));
     svgIcon(moreBtn, "more");
     moreBtn.addEventListener("click", bookMenu);
-    card.addEventListener("click", () => {
-      this.close();
-      this.plugin.openFile(file);
-    });
   }
   async loadThumb(file, coverEl, ph) {
     // A cover named in the book's note wins over everything.
@@ -9679,7 +9808,7 @@ const ReaderModal = class extends Modal {
     const pb = root.createDiv("er-pbar");
     this.pbarFill = pb.createDiv("er-pbar-fill");
     const top = root.createDiv("er-top");
-    const lb  = top.createDiv("er-ibtn");
+    const lb  = top.createEl("button", { cls: "er-ibtn", attr: { type: "button" } });
     svgIcon(lb, "arrow-left");
     lb.setAttribute("aria-label", __ertr("Закрыть книгу"));
     lb.addEventListener("click", () => this.close());
@@ -9700,7 +9829,7 @@ const ReaderModal = class extends Modal {
     // actions now live inside ONE «⋯» button that opens a native menu, so the top
     // bar keeps only the timer, «⋯» and the reading-settings ⚙ — the book title
     // finally has room to breathe.
-    const moreBtn = tr.createDiv("er-ibtn er-b-more");
+    const moreBtn = tr.createEl("button", { cls: "er-ibtn er-b-more", attr: { type: "button" } });
     svgIcon(moreBtn, "more-horizontal");
     moreBtn.setAttribute("aria-label", __ertr("Ещё"));
     moreBtn.addEventListener("click", (e) => {
@@ -9731,11 +9860,11 @@ const ReaderModal = class extends Modal {
     if ((this.plugin.settings.navMode || "buttons") === "click") root.addClass("er-navclick");
     // Bottom reading-goal progress bar removed by request; the ▶ timer stays in the top bar.
     const bot = root.createDiv("er-bot");
-    const pv  = bot.createDiv("er-navbtn");
+    const pv  = bot.createEl("button", { cls: "er-navbtn", attr: { type: "button", "aria-label": __ertr("Назад") } });
     svgIcon(pv, "chevron-left");
     pv.addEventListener("click", () => this._nav("prev"));
     const center = bot.createDiv("er-bot-center");
-    this.locEl = center.createDiv("er-loc er-loc-clickable");
+    this.locEl = center.createEl("button", { cls: "er-loc er-loc-clickable", attr: { type: "button" } });
     this.locEl.setAttribute("aria-label", __ertr("Перейти к странице"));
     this.locEl.addEventListener("click", () => {
       if (!this.file || !this.pager || !this.pager.total) return;
@@ -9747,7 +9876,7 @@ const ReaderModal = class extends Modal {
     });
     this.pctEl = center.createDiv("er-pct");
     this.pctEl.setText("0%");
-    const nx = bot.createDiv("er-navbtn");
+    const nx = bot.createEl("button", { cls: "er-navbtn", attr: { type: "button", "aria-label": __ertr("Далее") } });
     svgIcon(nx, "chevron-right");
     nx.addEventListener("click", () => this._nav("next"));
     this.overlayEl = root.createDiv("er-overlay");
@@ -9873,16 +10002,12 @@ const ReaderModal = class extends Modal {
     try {
       this._pdfLazy?.destroy?.();
       this._pdfLazy = null;
-      if (this.ext === "epub") {
-        this.bookHtml = await extractEpub(this.file, this.app);
-      } else if (this.ext === "fb2") {
-        this.bookHtml = await extractFb2(this.file, this.app);
-      } else {
-        const res = await extractPdf(this.file, this.app, this.plugin.settings, (i, n) => loadText.setText(__ertr("Готовим книгу… {0}%", (Math.round(i / n * 100)))));
-        this.bookHtml = res.html;
-        this._pdfLazy = res.lazy;
-        this._pdfOutline = res.outline;
-      }
+      const result = await loadReaderDocument(this.file, this.app, this.plugin.settings, (i, n) => {
+        loadText.setText(__ertr("Готовим книгу… {0}%", Math.round(i / n * 100)));
+      });
+      this.bookHtml = result.html;
+      this._pdfLazy = result.lazy;
+      this._pdfOutline = result.outline;
       // TOC anchored to the global block index \u2192 tap jumps to that page.
       this.tocItems = buildTocItems(this.bookHtml, this._pdfOutline);
       this._buildTocPanel();
@@ -9917,9 +10042,8 @@ const ReaderModal = class extends Modal {
       // at all before, so a phone-only reader had no way into this.
       this._maybePromptBookNote(this.file);
     } catch (e) {
-      console.error("ReaderModal:", e);
-      this.areaEl.empty();
-      this.areaEl.createEl("p", { cls: "er-load-error", text: __ertr("Ошибка: {0}", e.message) });
+      console.error("Qiaomu Book Reader: could not open file in the mobile reader", e);
+      renderReaderLoadError(this, e, () => this._loadBook());
     }
   }
   // First open of a book \u2192 the setup screen (create / pick / skip). Same rules as
@@ -10478,6 +10602,19 @@ const SettingsTab = class extends PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
   }
+  getSettingDefinitions() {
+    return [{
+      name: __ertr("Настройки Qiaomu Book Reader"),
+      desc: __ertr("Чтение, темы, шрифты, заметки, AI, перевод, папки, синхронизация и данные."),
+      searchable: true,
+      render: (setting) => {
+        const c = setting.settingEl;
+        c.empty();
+        c.addClass("er-settings-definition");
+        this._render(c);
+      },
+    }];
+  }
   // Rebuild the page (needed when labels themselves change, e.g. the UI language)
   // while keeping the reader where they were — a plain display() drops the scroll
   // position back to the top, which felt like the settings "forgot" the place.
@@ -10485,7 +10622,8 @@ const SettingsTab = class extends PluginSettingTab {
     const el = this.containerEl;
     const scroller = el.scrollHeight > el.clientHeight ? el : (el.closest(".vertical-tab-content") || el.parentElement || el);
     const y = scroller.scrollTop;
-    this.display();
+    if (typeof this.update === "function") this.update();
+    else this.display();
     scroller.scrollTop = y;
     window.requestAnimationFrame(() => { scroller.scrollTop = y; });
   }
@@ -10494,7 +10632,9 @@ const SettingsTab = class extends PluginSettingTab {
   // reader only ever faces the handful of options that belong to what they came
   // to do — instead of scanning ~20 unrelated rows to find one.
   display() {
-    const { containerEl: c } = this;
+    this._render(this.containerEl);
+  }
+  _render(c) {
     c.empty();
     c.addClass("er-settings-root");
     const TABS = [
@@ -10529,7 +10669,7 @@ const SettingsTab = class extends PluginSettingTab {
       const el = bar.createDiv("er-set-tab");
       el.setText(t.label);
       if (t.id === this._tab) el.addClass("er-set-tab-on");
-      el.addEventListener("click", () => { this._tab = t.id; this.display(); });
+      el.addEventListener("click", () => { this._tab = t.id; this._redraw(); });
     });
     const body = c.createDiv("er-set-body");
     body.dataset.tab = this._tab;
