@@ -698,6 +698,11 @@ export const ER_ZH_CN = {
 // key coverage; these reviewed overrides replace literal machine translations
 // with the terms Chinese reading and note-taking apps actually use.
 Object.assign(ER_ZH_CN, {
+  "Китайский (упрощённый)": "简体中文",
+  "Английский": "英语",
+  "Немецкий": "德语",
+  "Французский": "法语",
+  "Испанский": "西班牙语",
   "Режим мышления": "思考模式",
   "Включите для более глубокого анализа; выключите, если важнее скорость ответа.": "开启后会进行更深入的分析；更重视响应速度时可以关闭。",
   "Настройки применяются сразу и сохраняются автоматически.": "调整会立即显示，并自动保存。",

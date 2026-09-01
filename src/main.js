@@ -23,6 +23,11 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "Китайский (упрощённый)": "Simplified Chinese",
+  "Английский": "English",
+  "Немецкий": "German",
+  "Французский": "French",
+  "Испанский": "Spanish",
   "Режим мышления": "Thinking mode",
   "Включите для более глубокого анализа; выключите, если важнее скорость ответа.": "Turn it on for deeper analysis, or off when response speed matters more.",
   "阅读进度、设置与划线写入改为顺序保存，避免连续操作互相覆盖": "Reading progress, settings, and highlights now save in order so rapid actions cannot overwrite one another.",
@@ -842,6 +847,15 @@ const DEFAULT = {
   // После обновления список изменений сохраняется заметкой в хранилище.
   whatsNewNote: true
 };
+
+const TRANSLATION_LANGUAGE_CHOICES = Object.freeze([
+  ["zh-CN", "Китайский (упрощённый)"],
+  ["ru", "Русский"],
+  ["en", "Английский"],
+  ["de", "Немецкий"],
+  ["fr", "Французский"],
+  ["es", "Испанский"],
+]);
 const THEMES = READER_THEMES;
 function readerThemeLabel(id) {
   return __ertr((THEMES[id] && THEMES[id].label) || id);
@@ -11368,15 +11382,11 @@ const SettingsTab = class extends PluginSettingTab {
     new Setting(c)
       .setName(__ertr("Переводить на язык"))
       .setDesc(__ertr("Язык, на который переводить выделенный фрагмент. Исходный язык определяется автоматически."))
-      .addDropdown((d) => d
-        .addOption("zh-CN", "简体中文")
-        .addOption("ru", __ertr("Русский"))
-        .addOption("en", "English")
-        .addOption("de", "Deutsch")
-        .addOption("fr", "Français")
-        .addOption("es", "Español")
-        .setValue(this.plugin.settings.translateTo || "zh-CN")
-        .onChange(async (v) => { this.plugin.settings.translateTo = v; await this.plugin.saveAll(); }));
+      .addDropdown((d) => {
+        TRANSLATION_LANGUAGE_CHOICES.forEach(([value, label]) => d.addOption(value, __ertr(label)));
+        d.setValue(this.plugin.settings.translateTo || "zh-CN")
+          .onChange(async (v) => { this.plugin.settings.translateTo = v; await this.plugin.saveAll(); });
+      });
     c.createEl("div", { cls: "er-set-note", text: __ertr("Перевод — это отдельный сетевой запрос к Google. Если вам важно, чтобы текст книги никуда не уходил, оставьте функцию выключенной: всё остальное в читалке работает полностью офлайн.") });
   }
   // ── Данные ────────────────────────────────────────────────────────────────

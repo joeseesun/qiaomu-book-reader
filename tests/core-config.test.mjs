@@ -98,6 +98,14 @@ test("Russian UI never leaks Chinese-first source keys", () => {
   );
 });
 
+test("translation target labels follow the plugin interface language", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /const TRANSLATION_LANGUAGE_CHOICES = Object\.freeze/);
+  assert.match(source, /\["zh-CN", "Китайский \(упрощённый\)"\]/);
+  assert.match(source, /TRANSLATION_LANGUAGE_CHOICES\.forEach\(\(\[value, label\]\) => d\.addOption\(value, __ertr\(label\)\)\)/);
+  assert.doesNotMatch(source, /\.addOption\("zh-CN", "简体中文"\)/);
+});
+
 function luminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16) / 255);
   const linear = channels.map((value) => value <= 0.03928
