@@ -164,6 +164,12 @@ if (!source.includes('createDiv({ cls: "er-hl-comment-quote", text: cur.text })'
 if (!source.includes('const baseMustBeVisible = providerId === "custom"') || !source.includes('createEl("details", { cls: "er-ai-advanced" })')) {
   errors.push("Built-in AI endpoint and model overrides are not hidden behind advanced settings");
 }
+if (!source.includes("const DEFAULT_AI_QUICK_PROMPTS") || !source.includes("const AiPromptLibraryModal = class extends Modal") || !source.includes("this._send(item.prompt)")) {
+  errors.push("AI quick prompts do not separate editable labels from the actual prompt text");
+}
+if (!source.includes("bookNoteAppendPromptSeen !== true") || !source.includes("bookNoteAppendPromptSeen = true")) {
+  errors.push("Book-note append still asks whether to open the note every time");
+}
 for (const font of ["Georgia", "Lora", "Inter"]) {
   if (!source.includes(`labels: { ru: "${font}", en: "${font}", zh: "${font}" }`)) {
     errors.push(`English font label has an unnecessary Chinese suffix: ${font}`);

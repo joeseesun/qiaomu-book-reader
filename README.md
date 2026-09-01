@@ -18,7 +18,7 @@
 | 专用阅读笔记 | 每本书自动关联一篇 Markdown 笔记，汇总划线与评论 |
 | 精确返回原文 | 笔记中的 `↩` 可跳回原书对应段落 |
 | 自动进度 | 翻页、滚动和关闭书籍时自动保存，不需要手动点击保存 |
-| 可选 AI 阅读 | 流式回答、折叠思考过程、常用阅读提示词；支持 CLI、国产模型与本地模型 |
+| 可选 AI 阅读 | 流式回答、折叠思考过程、可自定义快捷提示词；支持 CLI、国产模型与本地模型 |
 
 ## 安装
 
@@ -46,7 +46,7 @@
 
 ## AI 辅助阅读
 
-AI 默认关闭。启用后，可以围绕选中的原文通俗解释、提炼要点、补充背景、分析论证并继续追问。支持流式回答；模型提供思考过程时会单独显示，回答完成后自动折叠，不与正式回答混在一起。
+AI 默认关闭。启用后，可以围绕选中的原文通俗解释、举例、提炼要点、联系实际、换角度分析或生成测试题，并继续自由追问。快捷提示词支持在插件设置中新增、修改、删除和恢复默认，也可从 AI 对话框右上角直接管理。支持流式回答；模型提供思考过程时会单独显示，回答完成后自动折叠，不与正式回答混在一起。
 
 - 本机账号：Codex CLI、Claude Code CLI、Grok CLI。安装并登录一次后，插件可直接复用账号，无需再填 API 密钥。
 - 国产模型：DeepSeek、Kimi、通义千问、智谱 GLM、MiniMax。
@@ -109,7 +109,7 @@ Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. It 
 
 Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest).
 
-Reading works fully offline. Optional AI reading assistance supports signed-in Codex CLI, Claude Code CLI and Grok CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI providers are desktop-only and still send the selected passage to their cloud service. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
+Reading works fully offline. Optional AI reading assistance includes editable quick prompts and supports signed-in Codex CLI, Claude Code CLI and Grok CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI providers are desktop-only and still send the selected passage to their cloud service. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
 
 Maintained by [Qiaomu](https://qiaomu.ai). Third-party notices and upstream attribution are preserved in [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
 

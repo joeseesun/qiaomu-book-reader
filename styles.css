@@ -1499,6 +1499,14 @@ body:not(.is-mobile) .er-bot {
 }
 .er-ai-head { flex: 0 0 auto; display: flex; align-items: flex-start; gap: var(--size-4-2); }
 .er-ai-headtext { flex: 1 1 auto; min-width: 0; }
+.er-ai-modal .er-ai-prompt-settings {
+  flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  width:32px; height:32px; padding:0; border:0; box-shadow:none;
+  border-radius:50%; background:transparent; color:var(--text-muted); cursor:pointer;
+}
+.er-ai-modal .er-ai-prompt-settings:hover { background:var(--background-modifier-hover); color:var(--text-normal); }
+.er-ai-modal .er-ai-prompt-settings:active { transform:scale(.94); }
+.er-ai-modal .er-ai-prompt-settings svg { width:16px; height:16px; }
 /* Своя кнопка закрытия: родная на телефоне уходит под клавиатуру. */
 .er-ai-modal .er-ai-close {
   flex: 0 0 auto;
@@ -1601,6 +1609,57 @@ body:not(.is-mobile) .er-bot {
   transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .er-ai-modal .er-ai-chip:active { transform: scale(0.97); }
+.er-ai-prompts-empty {
+  grid-column:1 / -1; padding:var(--size-4-3); color:var(--text-muted);
+  font-size:var(--font-ui-smaller); line-height:1.5;
+}
+
+/* Quick-prompt manager. A prompt is a small named document, not another
+   settings row: label and full text need the width of the dialog and a clear
+   delete action. */
+.modal.er-ai-prompt-modal { width:min(100%,720px); max-width:100%; }
+.er-ai-prompt-modal .modal-content { display:flex; flex-direction:column; min-height:0; }
+.er-prompt-head { display:flex; align-items:flex-start; gap:var(--size-4-3); margin-bottom:var(--size-4-3); }
+.er-prompt-head-copy { flex:1 1 auto; min-width:0; }
+.er-prompt-head h3 { margin:0 0 var(--size-2-2); font-size:var(--font-ui-large); }
+.er-prompt-head-copy > div { color:var(--text-muted); font-size:var(--font-ui-small); line-height:1.5; }
+.er-ai-prompt-modal .er-prompt-add {
+  flex:0 0 auto; display:inline-flex; align-items:center; gap:6px;
+  min-height:34px; padding:6px 10px; border-radius:var(--radius-m); cursor:pointer;
+}
+.er-ai-prompt-modal .er-prompt-add svg { width:15px; height:15px; }
+.er-prompt-list {
+  flex:1 1 auto; min-height:120px; max-height:min(58vh,560px); overflow-y:auto;
+  display:flex; flex-direction:column; gap:var(--size-4-2); padding:2px var(--size-4-1) 2px 2px;
+}
+.er-prompt-row {
+  padding:var(--size-4-2); border:1px solid var(--background-modifier-border);
+  border-radius:var(--radius-m); background:var(--background-secondary);
+}
+.er-prompt-row-head { display:flex; align-items:center; gap:var(--size-4-2); margin-bottom:var(--size-4-2); }
+.er-ai-prompt-modal .er-prompt-name,
+.er-ai-prompt-modal .er-prompt-text {
+  box-sizing:border-box; width:100%; border:1px solid var(--background-modifier-border);
+  border-radius:var(--radius-s); background:var(--background-primary); color:var(--text-normal);
+}
+.er-ai-prompt-modal .er-prompt-name { flex:1 1 auto; min-width:0; height:34px; padding:5px 9px; font-weight:600; }
+.er-ai-prompt-modal .er-prompt-text { display:block; min-height:72px; max-height:180px; padding:8px 9px; resize:vertical; line-height:1.5; }
+.er-ai-prompt-modal .er-prompt-name:focus,
+.er-ai-prompt-modal .er-prompt-text:focus { outline:2px solid color-mix(in srgb,var(--interactive-accent) 46%,transparent); outline-offset:1px; border-color:var(--interactive-accent); }
+.er-ai-prompt-modal .er-prompt-delete {
+  flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  width:32px; height:32px; padding:0; border:0; box-shadow:none; border-radius:50%;
+  background:transparent; color:var(--text-muted); cursor:pointer;
+}
+.er-ai-prompt-modal .er-prompt-delete:hover { color:var(--text-error); background:var(--background-modifier-hover); }
+.er-ai-prompt-modal .er-prompt-delete svg { width:15px; height:15px; }
+.er-prompt-empty { margin:auto; padding:var(--size-4-6); color:var(--text-muted); text-align:center; line-height:1.5; }
+.er-prompt-foot {
+  display:flex; align-items:center; justify-content:space-between; gap:var(--size-4-2);
+  margin-top:var(--size-4-3); padding-top:var(--size-4-3); border-top:1px solid var(--background-modifier-border);
+}
+.er-prompt-actions { display:flex; gap:var(--size-4-2); }
+.er-prompt-restore { color:var(--text-muted); }
 /* Messages. The reader's own line is a bubble on the right; the answer is a card
    on the left, because it is long and a page of markdown inside a tight bubble
    is harder to read, not friendlier. */
@@ -1788,6 +1847,16 @@ body:not(.is-mobile) .er-bot {
    of being a slit between the quote and the buttons. */
 @media (pointer: coarse) {
   .modal.er-ai-modal { width: 100%; height: var(--er-sheet); }
+  .modal.er-ai-prompt-modal { width:100%; height:var(--er-sheet); }
+  .er-ai-prompt-modal .modal-content {
+    height:100%; padding:var(--er-pad);
+    padding-bottom:calc(var(--er-pad) + var(--er-safe-bottom));
+  }
+  .er-prompt-head { flex-wrap:wrap; }
+  .er-ai-prompt-modal .er-prompt-add { width:100%; justify-content:center; min-height:40px; }
+  .er-prompt-list { max-height:none; }
+  .er-prompt-foot { flex-wrap:wrap; }
+  .er-prompt-actions { margin-left:auto; }
   /* Content touched the edges on a phone: Obsidian gives a mobile modal no
      padding of its own, and height:100% squeezed out what was left. */
   .er-ai-modal .modal-content {

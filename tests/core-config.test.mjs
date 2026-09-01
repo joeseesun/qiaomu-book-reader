@@ -185,19 +185,32 @@ test("selection popup keeps primary actions compact and moves note tools into Mo
   assert.doesNotMatch(source, /brain-circuit/);
 });
 
-test("AI dialog offers reading prompts and keeps reasoning separate", () => {
+test("AI dialog offers editable quick prompts and keeps reasoning separate", () => {
   const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
-  for (const prompt of [
-    "Объясни простыми словами",
-    "Выдели ключевые идеи",
-    "Дай необходимый контекст",
-    "Проверь аргументацию",
-    "Свяжи с темой книги",
-    "Задай вопросы для размышления",
-  ]) assert.match(source, new RegExp(prompt));
+  const chinese = fs.readFileSync(new URL("../src/i18n-zh.js", import.meta.url), "utf8");
+  for (const label of ["解释一下", "举个例子", "总结要点", "对我有什么用", "换个角度看", "出题考考我"]) {
+    assert.match(chinese, new RegExp(label));
+  }
+  assert.match(source, /const DEFAULT_AI_QUICK_PROMPTS/);
+  assert.match(source, /const AiPromptLibraryModal = class extends Modal/);
+  assert.match(source, /new AiPromptLibraryModal\(this\.app, this\.plugin/);
+  assert.match(source, /chip\.addEventListener\("click", \(\) => this\._send\(item\.prompt\)\)/);
+  assert.match(source, /this\.plugin\.settings\.aiQuickPrompts = this\.usingDefaults \? null : clean/);
+  assert.match(source, /this\.items\.splice\(index, 1\)/);
   assert.match(source, /createEl\("details", \{ cls: "er-ai-reason" \}\)/);
   assert.match(source, /reasoningBox\.open = false/);
   assert.match(source, /onDelta/);
+});
+
+test("book-note append asks to open only once", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const start = source.indexOf("async function exportHighlightsToBookNote");
+  const end = source.indexOf("const HighlightExportModal", start);
+  const exportSource = source.slice(start, end);
+  assert.match(source, /bookNoteAppendPromptSeen: false/);
+  assert.match(exportSource, /bookNoteAppendPromptSeen !== true/);
+  assert.match(exportSource, /bookNoteAppendPromptSeen = true/);
+  assert.match(exportSource, /await plugin\._saveLocalData\(\)/);
 });
 
 test("reader themes stay on the page while navigation follows Obsidian", () => {
