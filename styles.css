@@ -98,14 +98,16 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-toc-panel { width:280px; }
 .er-pan-title { padding:18px 18px 12px; font-family:'Inter',system-ui,sans-serif; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--er-muted); border-bottom:1px solid var(--er-border); margin-bottom:4px; flex-shrink:0; background:var(--er-ui); position:sticky; top:0; z-index:1; }
 .er-pan-sec { font-family:'Inter',system-ui,sans-serif; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--er-muted); opacity:.65; padding:14px 16px 7px; }
-.er-theme-row { display:flex; gap:7px; padding:0 14px 4px; }
-.er-theme-btn { flex:1; padding:10px 4px; border-radius:8px; text-align:center; font-family:'Inter',system-ui,sans-serif; font-size:11px; font-weight:600; cursor:pointer; border:2px solid transparent; transition:border-color .15s,transform .1s; }
+.er-theme-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; padding:0 14px 4px; }
+.er-theme-btn { min-width:0; padding:10px 4px; border-radius:8px; text-align:center; font-family:'Inter',system-ui,sans-serif; font-size:11px; font-weight:600; cursor:pointer; border:2px solid transparent; transition:border-color .15s,transform .1s; }
 .er-theme-btn:active { transform:scale(.93); }
 /* Button for the auto theme shows the app own colours, not the plugin ones. */
 .er-theme-auto  { background:var(--background-primary); color:var(--text-normal); box-shadow:inset 0 0 0 1px var(--background-modifier-border); }
-.er-theme-dark  { background:#12121a; color:#ddd8f0; }
-.er-theme-light { background:#faf8f3; color:#1a1a2e; box-shadow:inset 0 0 0 1px #ddd9ce; }
-.er-theme-sepia { background:#f5efe3; color:#2c2416; box-shadow:inset 0 0 0 1px #cfc4a8; }
+.er-theme-paper { background:#f8f6f0; color:#24231f; box-shadow:inset 0 0 0 1px #dcd5c8; }
+.er-theme-warm { background:#f3ebdd; color:#30291f; box-shadow:inset 0 0 0 1px #d5c5ab; }
+.er-theme-celadon { background:#eaf0e8; color:#243029; box-shadow:inset 0 0 0 1px #c6d3c4; }
+.er-theme-night { background:#181a1b; color:#d9d7d1; box-shadow:inset 0 0 0 1px #383c3d; }
+.er-theme-eink { background:#fff; color:#000; box-shadow:inset 0 0 0 1px #000; }
 .er-theme-btn.active { border-color:var(--er-accent)!important; box-shadow:0 0 0 1px var(--er-accent)!important; }
 .er-sz-row { display:flex; align-items:center; gap:8px; padding:0 14px 4px; }
 .er-sz-label { flex:1; text-align:center; font-size:14px; font-weight:700; color:var(--er-text); font-family:'Inter',system-ui,sans-serif; }
@@ -1634,8 +1636,7 @@ body:not(.is-mobile) .er-bot {
   .er-ai-group:hover .er-ai-acts, .er-ai-acts:focus-within { opacity: 1; }
   .er-ai-modal .er-ai-act:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
 }
-/* Waiting for the answer: dots that bounce, one after another. Same indicator
-   as in Elton AI, so the two windows wait the same way. */
+/* Waiting for the answer: dots that bounce, one after another. */
 .er-ai-typing { display: flex; align-items: center; gap: var(--size-4-2); }
 .er-ai-typing-dots { display: flex; gap: 3px; }
 .er-ai-typing-dot {
@@ -1652,6 +1653,16 @@ body:not(.is-mobile) .er-bot {
   30% { opacity: 1; transform: translateY(-3px); }
 }
 .er-ai-typing-text { font-size: var(--font-ui-small); color: var(--text-muted); }
+.er-ai-provider-note {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+}
 /* The composer. One line and one round button: the word "Отправить" in a pill
    took a third of the row and said nothing an arrow does not. */
 .er-ai-bar {
