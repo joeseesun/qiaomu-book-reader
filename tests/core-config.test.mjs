@@ -164,14 +164,24 @@ test("AI prompt and context are Chinese-first", () => {
   assert.doesNotMatch(aiSource, /Из книги|Фрагмент|Перевод|По словам/);
 });
 
-test("selection popup exposes configured AI with the wand-sparkles icon", () => {
+test("selection popup keeps primary actions compact and moves note tools into More", () => {
   const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
   const start = source.indexOf("function addBarButtons");
   const end = source.indexOf("const AiExplainModal", start);
   const popupSource = source.slice(start, end);
   assert.match(popupSource, /view\.plugin\.settings\.aiEnabled && aiReady/);
   assert.match(popupSource, /act\("er-hl-ai", "wand-sparkles"/);
   assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file\)\.open\(\)/);
+  assert.match(popupSource, /act\("er-hl-menu", "more"/);
+  assert.match(popupSource, /setTitle\(__ertr\("Создать заметку"\)\)/);
+  assert.match(popupSource, /setTitle\(__ertr\("Удалить выделение"\)\)/);
+  assert.doesNotMatch(popupSource, /act\("er-hl-note"/);
+  assert.match(source, /createDiv\(\{ cls: "er-hl-comment-quote", text: cur\.text \}\)/);
+  assert.match(source, /e\.key === "Enter" && !e\.shiftKey/);
+  assert.match(source, /e\.key === "Escape"[\s\S]*view\._hideHlPopup\(\)/);
+  assert.match(css, /\.er-hl-popup-commenting \.er-hl-actions \{ display:none; \}/);
+  assert.match(css, /-webkit-line-clamp:3/);
   assert.doesNotMatch(source, /brain-circuit/);
 });
 
@@ -207,4 +217,11 @@ test("settings use task tabs, concise intros, and Chinese-first copy", () => {
   assert.match(chinese, /"Ширина строки": "每行字数"/);
   assert.match(chinese, /"Данные": "存储与同步"/);
   assert.match(chinese, /只改变书页；顶部和底部工具栏始终跟随 Obsidian/);
+  assert.match(chinese, /按自己的阅读习惯调整，所有设置都会自动保存/);
+  assert.match(chinese, /"Подтвердить": "确定"/);
+  assert.match(source, /const baseMustBeVisible = providerId === "custom"/);
+  assert.match(source, /createEl\("details", \{ cls: "er-ai-advanced" \}\)/);
+  assert.match(source, /labels: \{ ru: "Georgia", en: "Georgia", zh: "Georgia" \}/);
+  assert.match(source, /labels: \{ ru: "Lora", en: "Lora", zh: "Lora" \}/);
+  assert.match(source, /labels: \{ ru: "Inter", en: "Inter", zh: "Inter" \}/);
 });

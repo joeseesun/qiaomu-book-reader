@@ -56206,7 +56206,12 @@ Object.assign(ER_ZH_CN, {
   "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E": "\u5DF2\u91CD\u65B0\u6392\u7248"
 });
 Object.assign(ER_ZH_CN, {
-  "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0431\u0435\u0437 \u043B\u0438\u0448\u043D\u0438\u0445 \u0441\u043B\u043E\u0432: \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443 \u0438 \u043C\u0435\u043D\u044F\u0439\u0442\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0442\u043E, \u0447\u0442\u043E \u0432\u0430\u043C \u043D\u0443\u0436\u043D\u043E.": "\u6309\u4F7F\u7528\u573A\u666F\u8BBE\u7F6E\uFF1B\u6CA1\u95EE\u9898\u7684\u9009\u9879\u4E0D\u7528\u52A8\u3002",
+  "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0431\u0435\u0437 \u043B\u0438\u0448\u043D\u0438\u0445 \u0441\u043B\u043E\u0432: \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0437\u0430\u0434\u0430\u0447\u0443 \u0438 \u043C\u0435\u043D\u044F\u0439\u0442\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0442\u043E, \u0447\u0442\u043E \u0432\u0430\u043C \u043D\u0443\u0436\u043D\u043E.": "\u6309\u81EA\u5DF1\u7684\u9605\u8BFB\u4E60\u60EF\u8C03\u6574\uFF0C\u6240\u6709\u8BBE\u7F6E\u90FD\u4F1A\u81EA\u52A8\u4FDD\u5B58\u3002",
+  "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C": "\u786E\u5B9A",
+  "\u0413\u043E\u0442\u043E\u0432\u043E": "\u5B8C\u6210",
+  "\u0420\u0430\u0437\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0438\u043B\u0438 \u0441\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0438\u0441\u0445\u043E\u0434\u043D\u044B\u0439 \u0442\u0435\u043A\u0441\u0442": "\u5C55\u5F00\u6216\u6536\u8D77\u539F\u6587",
+  "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 AI": "AI \u8BBE\u7F6E",
+  "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441; \u0434\u043B\u044F \u043E\u0431\u043B\u0430\u0447\u043D\u044B\u0445 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u0432 \u043E\u0431\u044B\u0447\u043D\u043E \u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u043A\u043B\u044E\u0447\u0430, \u043C\u043E\u0434\u0435\u043B\u044C \u0438 \u0430\u0434\u0440\u0435\u0441 \u0443\u0436\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u044B.": "\u9009\u62E9\u670D\u52A1\u5373\u53EF\uFF1B\u4E91\u7AEF\u670D\u52A1\u901A\u5E38\u53EA\u9700\u586B\u5199\u5BC6\u94A5\uFF0C\u6A21\u578B\u548C\u63A5\u53E3\u5DF2\u4F7F\u7528\u63A8\u8350\u9ED8\u8BA4\u503C\u3002",
   "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043F\u043E\u0441\u043E\u0431 \u0447\u0442\u0435\u043D\u0438\u044F \u0438 \u043F\u0435\u0440\u0435\u043B\u0438\u0441\u0442\u044B\u0432\u0430\u043D\u0438\u044F. \u041E\u0441\u0442\u0430\u043B\u044C\u043D\u043E\u0435 \u0443\u0436\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043E \u0440\u0430\u0437\u0443\u043C\u043D\u043E.": "\u8BBE\u7F6E\u9605\u8BFB\u4E0E\u7FFB\u9875\u65B9\u5F0F\uFF0C\u5176\u4F59\u4FDD\u6301\u9ED8\u8BA4\u5373\u53EF\u3002",
   "\u041C\u0435\u043D\u044F\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u043A\u043D\u0438\u0433\u0438. \u041F\u0430\u043D\u0435\u043B\u0438 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F \u0432\u0441\u0435\u0433\u0434\u0430 \u0441\u043B\u0435\u0434\u0443\u044E\u0442 \u0442\u0435\u043C\u0435 Obsidian.": "\u53EA\u6539\u53D8\u4E66\u9875\uFF1B\u9876\u90E8\u548C\u5E95\u90E8\u5DE5\u5177\u680F\u59CB\u7EC8\u8DDF\u968F Obsidian\u3002",
   "\u041E\u0434\u043D\u0430 \u0437\u0430\u043C\u0435\u0442\u043A\u0430 \u0441\u043E\u0431\u0438\u0440\u0430\u0435\u0442 \u0432\u0441\u044E \u043A\u043D\u0438\u0433\u0443; \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0437\u0430\u043C\u0435\u0442\u043A\u0430 \u043D\u0443\u0436\u043D\u0430 \u0442\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0441\u0430\u043C\u043E\u0441\u0442\u043E\u044F\u0442\u0435\u043B\u044C\u043D\u043E\u0439 \u0438\u0434\u0435\u0438.": "\u6BCF\u672C\u4E66\u7528\u4E00\u7BC7\u9605\u8BFB\u7B14\u8BB0\u6C47\u603B\uFF1B\u72EC\u7ACB\u60F3\u6CD5\u518D\u5355\u72EC\u5EFA\u7B14\u8BB0\u3002",
@@ -56739,7 +56744,15 @@ Object.assign(__erEN, {
   "\u65B0\u589E Codex CLI\u3001Claude Code CLI \u548C Grok CLI\uFF0C\u53EF\u590D\u7528\u672C\u673A\u5DF2\u767B\u5F55\u8D26\u53F7": "Added Codex CLI, Claude Code CLI, and Grok CLI using existing local sign-ins.",
   "CLI \u8BF7\u6C42\u5728\u9694\u79BB\u7684\u4E34\u65F6\u76EE\u5F55\u8FD0\u884C\uFF0C\u9ED8\u8BA4\u7981\u7528\u5DE5\u5177\u3001\u6587\u4EF6\u7F16\u8F91\u548C\u9879\u76EE\u89C4\u5219": "CLI requests run in isolated temporary directories with tools, file editing, and project rules disabled by default.",
   "\u8BBE\u7F6E\u9875\u53EF\u81EA\u52A8\u68C0\u6D4B CLI \u8DEF\u5F84\u3001\u68C0\u67E5\u767B\u5F55\u72B6\u6001\u5E76\u53D1\u9001\u6700\u5C0F\u8FDE\u63A5\u6D4B\u8BD5": "Settings can auto-detect CLI paths, check login status, and send a minimal connection test.",
-  "CLI \u751F\u6210\u53EF\u968F\u65F6\u505C\u6B62\uFF0C\u8D85\u65F6\u6216\u5173\u95ED\u5BF9\u8BDD\u65F6\u4F1A\u6E05\u7406\u6574\u4E2A\u5B50\u8FDB\u7A0B": "CLI generation can be stopped at any time, and the full subprocess group is cleaned up on timeout or when the dialog closes."
+  "CLI \u751F\u6210\u53EF\u968F\u65F6\u505C\u6B62\uFF0C\u8D85\u65F6\u6216\u5173\u95ED\u5BF9\u8BDD\u65F6\u4F1A\u6E05\u7406\u6574\u4E2A\u5B50\u8FDB\u7A0B": "CLI generation can be stopped at any time, and the full subprocess group is cleaned up on timeout or when the dialog closes.",
+  "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C": "Confirm",
+  "\u0420\u0430\u0437\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0438\u043B\u0438 \u0441\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0438\u0441\u0445\u043E\u0434\u043D\u044B\u0439 \u0442\u0435\u043A\u0441\u0442": "Expand or collapse the selected passage",
+  "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 AI": "AI setup",
+  "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441; \u0434\u043B\u044F \u043E\u0431\u043B\u0430\u0447\u043D\u044B\u0445 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u0432 \u043E\u0431\u044B\u0447\u043D\u043E \u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u043A\u043B\u044E\u0447\u0430, \u043C\u043E\u0434\u0435\u043B\u044C \u0438 \u0430\u0434\u0440\u0435\u0441 \u0443\u0436\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u044B.": "Choose a service. Cloud services usually need only an API key; the recommended model and endpoint are already set.",
+  "\u9009\u4E2D\u6587\u672C\u540E\u7684\u5DE5\u5177\u6761\u65B0\u589E\u201C\u66F4\u591A\u201D\u83DC\u5355\uFF0C\u6458\u5F55\u7B14\u8BB0\u3001\u6DFB\u52A0\u5230\u9605\u8BFB\u7B14\u8BB0\u548C\u5220\u9664\u5212\u7EBF\u96C6\u4E2D\u6536\u7EB3": "The selection toolbar now has a More menu for excerpt notes, adding to the reading note, and deleting highlights.",
+  "\u6279\u6CE8\u6539\u4E3A\u5C31\u8FD1\u8F93\u5165\uFF1A\u663E\u793A\u4E09\u884C\u539F\u6587\uFF0C\u53EF\u5C55\u5F00\uFF0C\u56DE\u8F66\u53D1\u9001\u3001Esc \u53D6\u6D88": "Comments now stay beside the passage, showing a three-line expandable quote with Enter to send and Escape to cancel.",
+  "AI \u8BBE\u7F6E\u9ED8\u8BA4\u53EA\u663E\u793A\u5FC5\u8981\u9879\uFF0C\u6A21\u578B\u548C\u63A5\u53E3\u5730\u5740\u6536\u8FDB\u9AD8\u7EA7\u8BBE\u7F6E": "AI setup now shows only essentials by default, with model and endpoint overrides under Advanced.",
+  "\u82F1\u6587\u5B57\u4F53\u540D\u79F0\u4E0D\u518D\u9644\u52A0\u591A\u4F59\u7684\u4E2D\u6587\u89E3\u91CA\uFF0C\u8BBE\u7F6E\u63D0\u793A\u4E0E\u786E\u8BA4\u6587\u6848\u66F4\u81EA\u7136": "English font names no longer carry redundant Chinese suffixes, and settings guidance and confirmation copy are clearer."
 });
 var __erLang = "zh";
 function __erSetLang(v) {
@@ -56993,17 +57006,17 @@ var READER_FONTS = Object.freeze({
   georgia: {
     id: "georgia",
     stack: "Georgia,'Times New Roman',serif",
-    labels: { ru: "Georgia", en: "Georgia", zh: "Georgia \u897F\u6587\u886C\u7EBF" }
+    labels: { ru: "Georgia", en: "Georgia", zh: "Georgia" }
   },
   lora: {
     id: "lora",
     stack: "'Lora',Georgia,serif",
-    labels: { ru: "Lora", en: "Lora", zh: "Lora \u897F\u6587\u886C\u7EBF" }
+    labels: { ru: "Lora", en: "Lora", zh: "Lora" }
   },
   inter: {
     id: "inter",
     stack: "'Inter',system-ui,sans-serif",
-    labels: { ru: "Inter", en: "Inter", zh: "Inter \u897F\u6587\u9ED1\u4F53" }
+    labels: { ru: "Inter", en: "Inter", zh: "Inter" }
   },
   systemSans: {
     id: "systemSans",
@@ -59518,6 +59531,18 @@ function openInlineHighlightComment(view) {
   const existing = editId ? view.plugin.getHighlights(view.file.path).find((h) => h.id === editId) : null;
   pop.addClass("er-hl-popup-commenting");
   const editor = pop.createDiv("er-hl-comment-editor");
+  const quote = editor.createDiv({ cls: "er-hl-comment-quote", text: cur.text });
+  quote.setAttribute("role", "button");
+  quote.setAttribute("tabindex", "0");
+  quote.setAttribute("aria-label", __ertr("\u0420\u0430\u0437\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0438\u043B\u0438 \u0441\u0432\u0435\u0440\u043D\u0443\u0442\u044C \u0438\u0441\u0445\u043E\u0434\u043D\u044B\u0439 \u0442\u0435\u043A\u0441\u0442"));
+  const toggleQuote = () => quote.toggleClass("er-hl-comment-quote-open", !quote.hasClass("er-hl-comment-quote-open"));
+  quote.addEventListener("click", toggleQuote);
+  quote.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleQuote();
+    }
+  });
   const ta = editor.createEl("textarea", { cls: "er-hl-comment-textarea" });
   ta.value = existing && existing.comment ? existing.comment : "";
   ta.placeholder = __ertr("\u041D\u0430\u043F\u0438\u0448\u0438\u0442\u0435 \u043A\u043E\u0440\u043E\u0442\u043A\u0443\u044E \u043C\u044B\u0441\u043B\u044C \u043E\u0431 \u044D\u0442\u043E\u043C \u0444\u0440\u0430\u0433\u043C\u0435\u043D\u0442\u0435\u2026");
@@ -59525,15 +59550,24 @@ function openInlineHighlightComment(view) {
   const actions = editor.createDiv("er-hl-comment-actions");
   const cancel = actions.createEl("button", { text: __ertr("\u041E\u0442\u043C\u0435\u043D\u0430") });
   cancel.addClass("er-hl-comment-cancel");
-  const save = actions.createEl("button", { text: __ertr("\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439") });
+  const save = actions.createEl("button", { text: __ertr("\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C") });
   save.addClass("er-hl-comment-save");
+  let submitting = false;
+  const updateSendState = () => {
+    save.disabled = submitting || !editId && !ta.value.trim();
+  };
+  updateSendState();
+  ta.addEventListener("input", updateSendState);
   const reposition = () => {
-    if (view._hlPopupRect) positionHlPopup(view, view._hlPopupRect, 310, 142);
+    if (view._hlPopupRect) positionHlPopup(view, view._hlPopupRect, 340, 220);
   };
   window.requestAnimationFrame(reposition);
-  cancel.addEventListener("click", () => closeInlineHighlightComment(view));
+  cancel.addEventListener("click", () => view._hideHlPopup());
   const submit = async () => {
     var _a2;
+    if (submitting || !editId && !ta.value.trim()) return;
+    submitting = true;
+    updateSendState();
     let id = editId;
     if (!id && pending) {
       const parts = pending.parts || [pending];
@@ -59544,23 +59578,31 @@ function openInlineHighlightComment(view) {
     }
     if (!id) {
       new import_obsidian.Notice(__ertr("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439"));
+      submitting = false;
+      updateSendState();
       return;
     }
-    await view.plugin.setHighlightComment(view.file.path, id, cur, ta.value.trim());
-    view._renderFlowHighlights();
-    erRefreshHlPanel(view);
-    (_a2 = selOf(view.areaEl)) == null ? void 0 : _a2.removeAllRanges();
-    view._hideHlPopup();
+    try {
+      await view.plugin.setHighlightComment(view.file.path, id, cur, ta.value.trim());
+      view._renderFlowHighlights();
+      erRefreshHlPanel(view);
+      (_a2 = selOf(view.areaEl)) == null ? void 0 : _a2.removeAllRanges();
+      view._hideHlPopup();
+    } catch (e) {
+      submitting = false;
+      updateSendState();
+      new import_obsidian.Notice(__ertr("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439"));
+    }
   };
   save.addEventListener("click", submit);
   ta.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      closeInlineHighlightComment(view);
+      view._hideHlPopup();
     }
   });
   erAutoFocus(ta, 30);
@@ -59606,13 +59648,46 @@ function addBarButtons(view, pop) {
   act("er-hl-comment-btn", "message", __ertr("\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439 \u043A \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u044E"), () => {
     openInlineHighlightComment(view);
   });
-  act("er-hl-note", "note", __ertr("\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0437\u0430\u043C\u0435\u0442\u043A\u0443"), () => {
-    var _a2;
+  act("er-hl-menu", "more", __ertr("\u0415\u0449\u0451"), (e) => {
     const cur = view._currentHl();
-    view._hideHlPopup();
-    (_a2 = selOf(view.areaEl)) == null ? void 0 : _a2.removeAllRanges();
     if (!cur) return;
-    createNoteFromSelection(view.app, view.plugin, cur.text, view.file, { extra: hlCommentMd(cur), color: cur.color, hl: cur });
+    const close = () => {
+      var _a2;
+      view._hideHlPopup();
+      (_a2 = selOf(view.areaEl)) == null ? void 0 : _a2.removeAllRanges();
+    };
+    const menu = new import_obsidian.Menu();
+    menu.addItem((it) => it.setTitle(__ertr("\u0421\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043A\u0430\u043A \u0446\u0438\u0442\u0430\u0442\u0443")).setIcon("text-quote").onClick(async () => {
+      const md = quoteMarkdown(view.plugin, cur, view.file);
+      close();
+      const ok = md && await copyToClipboard(md);
+      new import_obsidian.Notice(ok ? __ertr("\u0426\u0438\u0442\u0430\u0442\u0430 \u0441\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0430 \u2713 \u2014 \u0432\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u0432 \u043B\u044E\u0431\u0443\u044E \u0437\u0430\u043C\u0435\u0442\u043A\u0443") : __ertr("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C"));
+    }));
+    menu.addItem((it) => it.setTitle(__ertr("\u0422\u0435\u043A\u0441\u0442\u043E\u043C \u0432 \u0437\u0430\u043C\u0435\u0442\u043A\u0443 \u043A\u043D\u0438\u0433\u0438")).setIcon("notebook-pen").onClick(() => {
+      close();
+      sendQuoteToBookNote(view, cur);
+    }));
+    menu.addItem((it) => it.setTitle(__ertr("\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0437\u0430\u043C\u0435\u0442\u043A\u0443")).setIcon("file-plus").onClick(() => {
+      close();
+      createNoteFromSelection(view.app, view.plugin, cur.text, view.file, { extra: hlCommentMd(cur), color: cur.color, hl: cur });
+    }));
+    if (view.plugin.settings.translateEnabled) {
+      menu.addItem((it) => it.setTitle(__ertr("\u041F\u0435\u0440\u0435\u0432\u0435\u0441\u0442\u0438")).setIcon("languages").onClick(() => {
+        close();
+        new TranslateModal(view.app, view.plugin, cur.text, view.file).open();
+      }));
+    }
+    if (view._editHlId && view.file) {
+      menu.addSeparator();
+      const id = view._editHlId;
+      menu.addItem((it) => it.setTitle(__ertr("\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0435")).setIcon("trash").onClick(() => {
+        view.plugin.removeHighlight(view.file.path, id);
+        view._unwrapHighlight(id);
+        erRefreshHlPanel(view);
+        close();
+      }));
+    }
+    menu.showAtMouseEvent(e);
   });
 }
 var AiExplainModal = class extends import_obsidian.Modal {
@@ -62693,6 +62768,12 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 var WHATS_NEW = [
+  { v: "3.5.1", items: [
+    __ertr("\u9009\u4E2D\u6587\u672C\u540E\u7684\u5DE5\u5177\u6761\u65B0\u589E\u201C\u66F4\u591A\u201D\u83DC\u5355\uFF0C\u6458\u5F55\u7B14\u8BB0\u3001\u6DFB\u52A0\u5230\u9605\u8BFB\u7B14\u8BB0\u548C\u5220\u9664\u5212\u7EBF\u96C6\u4E2D\u6536\u7EB3"),
+    __ertr("\u6279\u6CE8\u6539\u4E3A\u5C31\u8FD1\u8F93\u5165\uFF1A\u663E\u793A\u4E09\u884C\u539F\u6587\uFF0C\u53EF\u5C55\u5F00\uFF0C\u56DE\u8F66\u53D1\u9001\u3001Esc \u53D6\u6D88"),
+    __ertr("AI \u8BBE\u7F6E\u9ED8\u8BA4\u53EA\u663E\u793A\u5FC5\u8981\u9879\uFF0C\u6A21\u578B\u548C\u63A5\u53E3\u5730\u5740\u6536\u8FDB\u9AD8\u7EA7\u8BBE\u7F6E"),
+    __ertr("\u82F1\u6587\u5B57\u4F53\u540D\u79F0\u4E0D\u518D\u9644\u52A0\u591A\u4F59\u7684\u4E2D\u6587\u89E3\u91CA\uFF0C\u8BBE\u7F6E\u63D0\u793A\u4E0E\u786E\u8BA4\u6587\u6848\u66F4\u81EA\u7136")
+  ] },
   { v: "3.5.0", items: [
     __ertr("AI \u56DE\u7B54\u6539\u4E3A\u6D41\u5F0F\u663E\u793A\uFF0C\u601D\u8003\u8FC7\u7A0B\u5355\u72EC\u5448\u73B0\u5E76\u5728\u5B8C\u6210\u540E\u81EA\u52A8\u6298\u53E0"),
     __ertr("AI \u5BF9\u8BDD\u65B0\u589E\u516D\u4E2A\u5E38\u7528\u9605\u8BFB\u63D0\u793A\u8BCD\uFF0C\u53EF\u7EE7\u7EED\u81EA\u7531\u8FFD\u95EE"),
@@ -64055,7 +64136,7 @@ var ReaderView = class extends import_obsidian.ItemView {
   _currentHl() {
     if (this._editHlId && this.file) {
       const hl = this.plugin.getHighlights(this.file.path).find((h) => h.id === this._editHlId);
-      if (hl) return { text: hl.text || "", block: hl.block, color: hl.color };
+      if (hl) return { ...hl, text: hl.text || "" };
     }
     if (this._pendingSel) return { text: this._pendingSel.text || "", block: this._pendingSel.block, color: null };
     return null;
@@ -65578,7 +65659,7 @@ var ReaderModal = class extends import_obsidian.Modal {
   _currentHl() {
     if (this._editHlId && this.file) {
       const hl = this.plugin.getHighlights(this.file.path).find((h) => h.id === this._editHlId);
-      if (hl) return { text: hl.text || "", block: hl.block, color: hl.color };
+      if (hl) return { ...hl, text: hl.text || "" };
     }
     if (this._pendingSel) return { text: this._pendingSel.text || "", block: this._pendingSel.block, color: null };
     return null;
@@ -65719,7 +65800,7 @@ var SettingsGroupModal = class extends import_obsidian.Modal {
     this.bodyEl = c.createDiv("er-group-body");
     this.build(this.bodyEl, () => this.draw());
     const row = c.createDiv("er-group-actions");
-    const done = row.createEl("button", { cls: "mod-cta", text: __ertr("\u0413\u043E\u0442\u043E\u0432\u043E") });
+    const done = row.createEl("button", { cls: "mod-cta", text: __ertr("\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C") });
     done.addEventListener("click", () => this.close());
     if (was) this.bodyEl.scrollTop = was;
   }
@@ -65984,23 +66065,40 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
         keySetting.addButton((b) => b.setButtonText(__ertr("\u83B7\u53D6\u5BC6\u94A5")).onClick(() => window.open(p.apiKeyUrl, "_blank")));
       }
     }
-    new import_obsidian.Setting(c).setName(__ertr("\u6A21\u578B")).setDesc(p.transport === "cli" ? __ertr("\u7559\u7A7A\u4F7F\u7528 CLI \u5F53\u524D\u7684\u9ED8\u8BA4\u6A21\u578B\u3002") : p.model ? __ertr("\u53EF\u76F4\u63A5\u4F7F\u7528\u63A8\u8350\u6A21\u578B\uFF0C\u4E5F\u53EF\u4EE5\u586B\u5199\u670D\u52A1\u5546\u63D0\u4F9B\u7684\u5176\u4ED6\u6A21\u578B ID\u3002") : __ertr("\u8BF7\u8F93\u5165\u670D\u52A1\u5546\u63A7\u5236\u53F0\u663E\u793A\u7684\u6A21\u578B\u6216\u63A8\u7406\u63A5\u5165\u70B9 ID\u3002")).addText((t) => {
-      const listId = `er-ai-models-${p.category}-${s.aiProvider}`;
-      t.setPlaceholder(p.transport === "cli" ? __ertr("\u9ED8\u8BA4\u6A21\u578B") : p.model || __ertr("\u6A21\u578B ID")).setValue(s.aiModel || "").onChange(async (v) => {
-        s.aiModel = v.trim();
-        await this.plugin.saveAll();
+    const addModelSetting = (target) => {
+      new import_obsidian.Setting(target).setName(__ertr("\u6A21\u578B")).setDesc(p.transport === "cli" ? __ertr("\u7559\u7A7A\u4F7F\u7528 CLI \u5F53\u524D\u7684\u9ED8\u8BA4\u6A21\u578B\u3002") : p.model ? __ertr("\u53EF\u76F4\u63A5\u4F7F\u7528\u63A8\u8350\u6A21\u578B\uFF0C\u4E5F\u53EF\u4EE5\u586B\u5199\u670D\u52A1\u5546\u63D0\u4F9B\u7684\u5176\u4ED6\u6A21\u578B ID\u3002") : __ertr("\u8BF7\u8F93\u5165\u670D\u52A1\u5546\u63A7\u5236\u53F0\u663E\u793A\u7684\u6A21\u578B\u6216\u63A8\u7406\u63A5\u5165\u70B9 ID\u3002")).addText((t) => {
+        const listId = `er-ai-models-${p.category}-${s.aiProvider}`;
+        t.setPlaceholder(p.transport === "cli" ? __ertr("\u9ED8\u8BA4\u6A21\u578B") : p.model || __ertr("\u6A21\u578B ID")).setValue(s.aiModel || "").onChange(async (v) => {
+          s.aiModel = v.trim();
+          await this.plugin.saveAll();
+        });
+        if (p.models && p.models.length) {
+          t.inputEl.setAttr("list", listId);
+          const list = target.createEl("datalist", { attr: { id: listId } });
+          p.models.forEach((model) => list.createEl("option", { attr: { value: model } }));
+        }
       });
-      if (p.models && p.models.length) {
-        t.inputEl.setAttr("list", listId);
-        const list = c.createEl("datalist", { attr: { id: listId } });
-        p.models.forEach((model) => list.createEl("option", { attr: { value: model } }));
-      }
-    });
-    if (p.transport !== "cli") {
-      new import_obsidian.Setting(c).setName(__ertr("\u63A5\u53E3\u5730\u5740")).setDesc(__ertr("\u901A\u5E38\u4FDD\u6301\u4E3A\u7A7A\uFF1B\u53EA\u6709\u533A\u57DF\u5730\u5740\u3001\u4EE3\u7406\u6216\u81EA\u5EFA\u670D\u52A1\u9700\u8981\u4FEE\u6539\u3002")).addText((t) => t.setPlaceholder(p.base || "https://\u2026/v1").setValue(s.aiBase || "").onChange(async (v) => {
+    };
+    const addBaseSetting = (target) => {
+      new import_obsidian.Setting(target).setName(__ertr("\u63A5\u53E3\u5730\u5740")).setDesc(__ertr("\u901A\u5E38\u4FDD\u6301\u4E3A\u7A7A\uFF1B\u53EA\u6709\u533A\u57DF\u5730\u5740\u3001\u4EE3\u7406\u6216\u81EA\u5EFA\u670D\u52A1\u9700\u8981\u4FEE\u6539\u3002")).addText((t) => t.setPlaceholder(p.base || "https://\u2026/v1").setValue(s.aiBase || "").onChange(async (v) => {
         s.aiBase = normalizeAiBase(v);
         await this.plugin.saveAll();
       }));
+    };
+    const providerId = s.aiProvider || "";
+    const modelMustBeVisible = p.transport !== "cli" && (!p.model || p.local);
+    const baseMustBeVisible = providerId === "custom";
+    if (modelMustBeVisible) addModelSetting(c);
+    if (baseMustBeVisible) addBaseSetting(c);
+    const advancedHasModel = !modelMustBeVisible;
+    const advancedHasBase = p.transport !== "cli" && !baseMustBeVisible;
+    if (advancedHasModel || advancedHasBase) {
+      const advanced = c.createEl("details", { cls: "er-ai-advanced" });
+      advanced.open = Boolean(s.aiModel || s.aiBase);
+      advanced.createEl("summary", { text: __ertr("\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u044B\u0435") });
+      const advancedBody = advanced.createDiv("er-ai-advanced-body");
+      if (advancedHasModel) addModelSetting(advancedBody);
+      if (advancedHasBase) addBaseSetting(advancedBody);
     }
     new import_obsidian.Setting(c).setName(__ertr("\u6D4B\u8BD5\u8FDE\u63A5")).setDesc(p.transport === "cli" ? __ertr("\u5F00\u59CB\u6D4B\u8BD5\u4F1A\u590D\u7528 CLI \u8D26\u53F7\u53D1\u9001\u4E00\u6761\u4E0D\u542B\u4E66\u7C4D\u5185\u5BB9\u7684\u6700\u77ED\u6D88\u606F\uFF0C\u5E76\u53EF\u80FD\u6D88\u8017\u5C11\u91CF\u8D26\u53F7\u989D\u5EA6\u3002") : __ertr("\u53D1\u9001\u4E00\u6761\u4E0D\u542B\u4E66\u7C4D\u5185\u5BB9\u7684\u6700\u77ED\u6D4B\u8BD5\u6D88\u606F\u3002\u4E91\u7AEF\u670D\u52A1\u53EF\u80FD\u4EA7\u751F\u6781\u5C11\u91CF\u8D39\u7528\u3002")).addButton((b) => b.setButtonText(__ertr("\u5F00\u59CB\u6D4B\u8BD5")).setCta().onClick(async () => {
       b.setDisabled(true).setButtonText(__ertr("\u6D4B\u8BD5\u4E2D\u2026"));
@@ -66184,8 +66282,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
     }));
     if (this.plugin.settings.aiEnabled) {
       this._group(c, {
-        name: __ertr("AI \u6A21\u578B\u914D\u7F6E"),
-        desc: __ertr("\u9009\u62E9\u670D\u52A1\u548C\u6A21\u578B\uFF1B\u672C\u673A CLI \u53EF\u590D\u7528\u5DF2\u767B\u5F55\u8D26\u53F7\uFF0COllama \u4E0E LM Studio \u5728\u672C\u673A\u8FD0\u884C\u3002"),
+        name: __ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 AI"),
+        desc: __ertr("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441; \u0434\u043B\u044F \u043E\u0431\u043B\u0430\u0447\u043D\u044B\u0445 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u0432 \u043E\u0431\u044B\u0447\u043D\u043E \u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u043A\u043B\u044E\u0447\u0430, \u043C\u043E\u0434\u0435\u043B\u044C \u0438 \u0430\u0434\u0440\u0435\u0441 \u0443\u0436\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u044B."),
         build: (b, redraw) => this._groupAi(b, redraw)
       });
     }

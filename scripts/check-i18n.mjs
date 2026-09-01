@@ -155,6 +155,20 @@ if (!source.includes('["yellow", "green", "pink"].includes(item.id)')) {
 if (!source.includes('act("er-hl-comment-btn", "message"') || !source.includes('createEl("textarea", { cls: "er-hl-comment-textarea" })')) {
   errors.push("Selection popup does not provide an inline nearby comment editor");
 }
+if (!source.includes('act("er-hl-menu", "more"') || source.includes('act("er-hl-note", "note"')) {
+  errors.push("Selection popup must expose More and keep the separate-note action out of the primary row");
+}
+if (!source.includes('createDiv({ cls: "er-hl-comment-quote", text: cur.text })') || !source.includes('e.key === "Enter" && !e.shiftKey') || !source.includes('e.key === "Escape"')) {
+  errors.push("Inline comments must show the selected passage and support Enter to send plus Escape to cancel");
+}
+if (!source.includes('const baseMustBeVisible = providerId === "custom"') || !source.includes('createEl("details", { cls: "er-ai-advanced" })')) {
+  errors.push("Built-in AI endpoint and model overrides are not hidden behind advanced settings");
+}
+for (const font of ["Georgia", "Lora", "Inter"]) {
+  if (!source.includes(`labels: { ru: "${font}", en: "${font}", zh: "${font}" }`)) {
+    errors.push(`English font label has an unnecessary Chinese suffix: ${font}`);
+  }
+}
 if (!source.includes('const quick = c.createDiv("er-rs-quick")') || !source.includes('label: __ertr("Доп. настройки")')) {
   errors.push("Reading settings do not use primary controls with progressive disclosure");
 }

@@ -375,19 +375,31 @@ body:not(.is-mobile) .er-bot {
 /* One gap separating the colour swatches from the actions, instead of a margin
    on every other button. */
 .er-hl-copy { margin-left: 10px; }
+.er-hl-popup-commenting .er-hl-actions { display:none; }
 .er-hl-comment-editor {
-  width: 286px; max-width: min(286px, calc(100vw - 38px));
-  margin-top: 8px; padding-top: 8px;
-  border-top: 1px solid var(--er-border);
+  width: 320px; max-width: min(320px, calc(100vw - 38px));
+  display:flex; flex-direction:column; gap:9px;
 }
+.er-hl-comment-quote {
+  display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+  padding:8px 10px; border-radius:9px;
+  background:color-mix(in srgb,var(--er-text) 5%,transparent);
+  color:var(--er-muted); font-size:12px; line-height:1.5; cursor:pointer;
+  white-space:normal; overflow-wrap:anywhere;
+}
+.er-hl-comment-quote:hover { color:var(--er-text); background:color-mix(in srgb,var(--er-text) 8%,transparent); }
+.er-hl-comment-quote.er-hl-comment-quote-open { display:block; max-height:148px; overflow:auto; }
+.er-hl-comment-quote:focus-visible { outline:2px solid var(--er-accent); outline-offset:1px; }
+.er-hl-comment-quote::before { content:"“"; color:var(--er-accent); font-weight:700; margin-right:2px; }
+.er-hl-comment-quote::after { content:"”"; color:var(--er-accent); font-weight:700; margin-left:2px; }
 .er-hl-comment-textarea {
-  display:block; width:100%; min-height:68px; max-height:126px; resize:vertical;
+  display:block; width:100%; min-height:72px; max-height:132px; resize:vertical;
   box-sizing:border-box; padding:9px 10px; border-radius:9px;
   border:1px solid var(--er-border); background:var(--er-bg); color:var(--er-text);
   font:inherit; font-size:13px; line-height:1.45;
 }
 .er-hl-comment-textarea:focus { outline:2px solid color-mix(in srgb, var(--er-accent) 48%, transparent); outline-offset:1px; border-color:var(--er-accent); }
-.er-hl-comment-actions { display:flex; justify-content:flex-end; gap:7px; margin-top:7px; }
+.er-hl-comment-actions { display:flex; justify-content:flex-end; gap:7px; }
 .er-hl-comment-actions button {
   min-height:30px; padding:4px 10px; border-radius:8px; border:1px solid var(--er-border);
   font-size:12px; cursor:pointer;
@@ -1705,6 +1717,26 @@ body:not(.is-mobile) .er-bot {
   font-size: var(--font-ui-small);
   line-height: 1.5;
 }
+.er-ai-advanced {
+  margin: 2px 0 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+}
+.er-ai-advanced > summary {
+  padding: 9px 12px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  user-select: none;
+}
+.er-ai-advanced[open] > summary {
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+}
+.er-ai-advanced-body { padding: 2px 10px 6px; }
+.er-ai-advanced-body .setting-item:last-child { border-bottom: 0; }
 /* The composer. One line and one round button: the word "Отправить" in a pill
    took a third of the row and said nothing an arrow does not. */
 .er-ai-bar {
