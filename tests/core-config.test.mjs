@@ -13,7 +13,7 @@ import {
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
-import { createSerialTaskQueue, parseJsonRecord } from "../src/storage.js";
+import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
 
 test("JSON stores reject arrays and invalid content instead of treating them as empty data", () => {
   assert.deepEqual(parseJsonRecord('{"book": {"pct": 0.5}}'), { book: { pct: 0.5 } });
@@ -29,6 +29,37 @@ test("serial task queue preserves order and recovers after a failed save", async
   await assert.rejects(first, /disk full/);
   assert.equal(await second, 2);
   assert.deepEqual(calls, ["first", "second"]);
+});
+
+test("unreadable JSON stores preserve raw content without overwriting the source", async () => {
+  const files = new Map([["reading-progress.json", "{broken"]]);
+  const writes = [];
+  const adapter = {
+    async exists(file) { return files.has(file); },
+    async read(file) { return files.get(file); },
+    async write(file, value) { writes.push([file, value]); files.set(file, value); },
+  };
+  const now = new Date("2026-09-02T10:20:30.456Z");
+  const expectedBackup = corruptBackupPath("reading-progress.json", now);
+  const result = await readJsonRecordStore(adapter, "reading-progress.json", "progress", now);
+  assert.equal(result.status, "unreadable");
+  assert.equal(result.value, null);
+  assert.equal(result.backupPath, expectedBackup);
+  assert.equal(files.get("reading-progress.json"), "{broken");
+  assert.deepEqual(writes, [[expectedBackup, "{broken"]]);
+});
+
+test("read failures block the store without inventing a backup that was never written", async () => {
+  const adapter = {
+    async exists() { return true; },
+    async read() { throw new Error("sync placeholder unavailable"); },
+    async write() { throw new Error("must not write without raw content"); },
+  };
+  const result = await readJsonRecordStore(adapter, "reading-highlights.json", "highlights");
+  assert.equal(result.status, "unreadable");
+  assert.equal(result.value, null);
+  assert.equal(result.backupPath, "");
+  assert.match(result.error.message, /sync placeholder unavailable/);
 });
 
 test("reader persistence refuses to overwrite unreadable stores and reports real save failures", () => {
