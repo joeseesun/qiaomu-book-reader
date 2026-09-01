@@ -22,6 +22,8 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "Режим мышления": "Thinking mode",
+  "Включите для более глубокого анализа; выключите, если важнее скорость ответа.": "Turn it on for deeper analysis, or off when response speed matters more.",
   "阅读进度、设置与划线写入改为顺序保存，避免连续操作互相覆盖": "Reading progress, settings, and highlights now save in order so rapid actions cannot overwrite one another.",
   "检测到损坏的阅读数据时停止覆盖并保留原文件副本": "Unreadable reading data is no longer overwritten, and the original content is preserved in a backup copy.",
   "开书失败新增可重试的错误页，不再停在空白加载状态": "Book-opening failures now show a retryable error page instead of leaving a blank loading state.",
@@ -775,6 +777,10 @@ const DEFAULT = {
   // switch. A reader can move between Codex and Claude without losing either
   // selection. aiModel remains as a migration bridge for pre-3.7 installs.
   aiModels: {},
+  // Provider-specific reasoning switches. An absent DeepSeek entry keeps the
+  // service default (thinking enabled), while an explicit false survives
+  // switching to another provider and back.
+  aiThinking: {},
   aiCliEfforts: {},
   aiBase: "",
   // Optional per-provider executable overrides. Empty means auto-detect from
@@ -2000,6 +2006,7 @@ const EltonReader = class extends Plugin {
     this.settings = { ...DEFAULT, ...(_a = d == null ? void 0 : d.settings) != null ? _a : {} };
     this.settings.aiCliPaths = { ...(this.settings.aiCliPaths || {}) };
     this.settings.aiModels = { ...(this.settings.aiModels || {}) };
+    this.settings.aiThinking = { ...(this.settings.aiThinking || {}) };
     this.settings.aiCliEfforts = { ...(this.settings.aiCliEfforts || {}) };
     if (this.settings.aiProvider && this.settings.aiModel && !this.settings.aiModels[this.settings.aiProvider]) {
       this.settings.aiModels[this.settings.aiProvider] = this.settings.aiModel;
@@ -3390,6 +3397,8 @@ function aiConfig(plugin) {
     transport: p.transport || "http",
     base: normalizeAiBase(settings.aiBase || p.base),
     model: String(settings.aiModels && settings.aiModels[id] || settings.aiModel || p.model || "").trim(),
+    thinking: !p.supportsThinking || !settings.aiThinking
+      || settings.aiThinking[id] !== false,
     effort: String(settings.aiCliEfforts && settings.aiCliEfforts[id] || "").trim(),
     key: aiSecretValue(plugin),
     needsKey: p.needsKey,
@@ -3473,7 +3482,11 @@ function aiHttpError(status, provider) {
   return err;
 }
 async function aiExplainStream(cfg, messages, options) {
-  const body = buildAiRequestBody(cfg.id, cfg.model, messages, { ...options, stream: true });
+  const body = buildAiRequestBody(cfg.id, cfg.model, messages, {
+    ...options,
+    stream: true,
+    thinkingEnabled: cfg.thinking,
+  });
   const req = buildAiRequestOptions(cfg.base, cfg.key, body);
   const response = await window.fetch(req.url, {
     method: req.method,
@@ -3566,7 +3579,10 @@ async function aiExplain(text, plugin, turns, book, options = {}) {
       if (e?.erReason || e?.erReceived) throw e;
     }
   }
-  const body = buildAiRequestBody(cfg.id, cfg.model, messages, options);
+  const body = buildAiRequestBody(cfg.id, cfg.model, messages, {
+    ...options,
+    thinkingEnabled: cfg.thinking,
+  });
   const res = await requestUrl(buildAiRequestOptions(cfg.base, cfg.key, body));
   if (options.signal && options.signal.aborted) {
     const err = new Error("AI request cancelled");
@@ -10901,6 +10917,18 @@ const SettingsTab = class extends PluginSettingTab {
         keySetting.addButton((b) => b.setButtonText(__ertr("获取密钥")).onClick(() => window.open(p.apiKeyUrl, "_blank")));
       }
     }
+    if (p.supportsThinking) {
+      if (!s.aiThinking || typeof s.aiThinking !== "object") s.aiThinking = {};
+      new Setting(c)
+        .setName(__ertr("Режим мышления"))
+        .setDesc(__ertr("Включите для более глубокого анализа; выключите, если важнее скорость ответа."))
+        .addToggle((toggle) => toggle
+          .setValue(s.aiThinking[s.aiProvider] !== false)
+          .onChange(async (value) => {
+            s.aiThinking[s.aiProvider] = value;
+            await this.plugin.saveAll();
+          }));
+    }
     const addModelSetting = (target) => {
       new Setting(target)
         .setName(__ertr("模型"))
@@ -10967,7 +10995,10 @@ const SettingsTab = class extends PluginSettingTab {
     const advancedHasBase = p.transport !== "cli" && !baseMustBeVisible;
     if (advancedHasModel || advancedHasBase) {
       const advanced = c.createEl("details", { cls: "er-ai-advanced" });
-      advanced.open = Boolean(s.aiModel || s.aiBase);
+      const modelIsCustom = Boolean(s.aiModel && s.aiModel !== (p.model || ""));
+      const baseIsCustom = Boolean(s.aiBase
+        && normalizeAiBase(s.aiBase) !== normalizeAiBase(p.base || ""));
+      advanced.open = modelIsCustom || baseIsCustom;
       advanced.createEl("summary", { text: __ertr("Расширенные") });
       const advancedBody = advanced.createDiv("er-ai-advanced-body");
       if (advancedHasModel) addModelSetting(advancedBody);

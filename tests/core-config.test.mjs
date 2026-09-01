@@ -120,6 +120,9 @@ test("DeepSeek requests keep thinking separate and make connection checks short"
   assert.equal(normalBody.max_tokens, 2400);
   assert.deepEqual(normalBody.thinking, { type: "enabled" });
 
+  const fastBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages, { thinkingEnabled: false });
+  assert.deepEqual(fastBody.thinking, { type: "disabled" });
+
   const streamBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages, { stream: true });
   assert.equal(streamBody.stream, true);
 });
@@ -356,9 +359,12 @@ test("settings use task tabs, concise intros, and Chinese-first copy", () => {
   assert.match(chinese, /"Подтвердить": "确定"/);
   assert.match(source, /const baseMustBeVisible = providerId === "custom"/);
   assert.match(source, /aiModels: \{\}/);
+  assert.match(source, /aiThinking: \{\}/);
   assert.match(source, /aiCliEfforts: \{\}/);
   assert.match(source, /p\.transport === "cli" \|\| !p\.model \|\| p\.local/);
   assert.match(source, /setName\(__ertr\("思考强度"\)\)/);
+  assert.match(source, /setName\(__ertr\("Режим мышления"\)\)/);
+  assert.match(source, /advanced\.open = modelIsCustom \|\| baseIsCustom/);
   assert.match(source, /createEl\("details", \{ cls: "er-ai-advanced" \}\)/);
   assert.match(source, /createEl\("details", \{ cls: "er-settings-disclosure" \}\)/);
   assert.match(source, /setName\(__ertr\("正文字体"\)\)/);
