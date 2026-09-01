@@ -6,6 +6,12 @@
 
 export const CLI_AI_PROVIDER_IDS = Object.freeze(["codex-cli", "claude-cli", "grok-cli"]);
 
+export const CLI_REASONING_EFFORTS = Object.freeze({
+  "codex-cli": ["", "minimal", "low", "medium", "high", "xhigh"],
+  "claude-cli": ["", "low", "medium", "high", "xhigh", "max"],
+  "grok-cli": ["", "low", "medium", "high", "xhigh"],
+});
+
 const CLI_META = Object.freeze({
   "codex-cli": {
     binary: "codex",
@@ -31,6 +37,10 @@ export function isCliAiProvider(id) {
 
 export function cliMeta(id) {
   return CLI_META[id] || null;
+}
+
+export function cliReasoningEfforts(id) {
+  return CLI_REASONING_EFFORTS[id] || [""];
 }
 
 function cliError(reason, message, extra = {}) {
@@ -145,6 +155,10 @@ export function buildCliPrompt(messages) {
 export function buildCliInvocation(id, options) {
   const binaryPath = options.binaryPath;
   const model = String(options.model || "").trim();
+  const effort = cliReasoningEfforts(id).includes(String(options.effort || ""))
+    ? String(options.effort || "")
+    : "";
+  const stream = options.stream === true;
   const cwd = options.cwd;
   if (!binaryPath || !cwd) throw cliError("notconfigured", "CLI path or working directory is missing");
 
@@ -154,29 +168,118 @@ export function buildCliInvocation(id, options) {
       "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never",
     ];
     if (model) args.push("--model", model);
+    if (effort) args.push("--config", `model_reasoning_effort="${effort}"`);
+    if (stream) args.push("--json");
     args.push("-");
     return { command: binaryPath, args, stdin: options.prompt, cwd };
   }
   if (id === "claude-cli") {
     const args = [
-      "-p", "--output-format", "text", "--permission-mode", "plan", "--tools", "",
+      "-p", "--output-format", stream ? "stream-json" : "text", "--permission-mode", "plan", "--tools", "",
       "--no-session-persistence", "--safe-mode", "--disable-slash-commands", "--no-chrome",
     ];
+    if (stream) args.push("--include-partial-messages", "--verbose");
     if (model) args.push("--model", model);
+    if (effort) args.push("--effort", effort);
     return { command: binaryPath, args, stdin: options.prompt, cwd };
   }
   if (id === "grok-cli") {
     if (!options.promptFile) throw cliError("notconfigured", "Grok prompt file is missing");
     const args = [
       "--no-auto-update", "--prompt-file", options.promptFile,
-      "--output-format", "plain", "--permission-mode", "plan", "--tools", "",
+      "--output-format", stream ? "streaming-json" : "plain", "--permission-mode", "plan", "--tools", "",
       "--disable-web-search", "--no-subagents", "--no-memory", "--max-turns", "1",
       "--cwd", cwd, "--verbatim",
     ];
     if (model) args.push("--model", model);
+    if (effort) args.push("--reasoning-effort", effort);
     return { command: binaryPath, args, stdin: "", cwd };
   }
   throw cliError("notconfigured", "Unknown CLI provider");
+}
+
+function jsonLineStream(onValue) {
+  let buffer = "";
+  const consume = (line) => {
+    const clean = stripAnsi(line).trim();
+    if (!clean) return;
+    try { onValue(JSON.parse(clean)); } catch { /* ignore CLI diagnostics mixed into stdout */ }
+  };
+  return {
+    push(chunk) {
+      buffer += String(chunk || "").replace(/\r/g, "");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      lines.forEach(consume);
+    },
+    finish() {
+      consume(buffer);
+      buffer = "";
+    },
+  };
+}
+
+// Normalise three unrelated CLI event formats into the same answer/reasoning
+// deltas used by the HTTP SSE path. Claude and Grok expose token chunks. Stable
+// `codex exec --json` currently exposes completed message items rather than
+// token deltas, but still benefits from the same structured path and can show
+// reasoning/progress events without buffering terminal formatting.
+export function createCliStreamParser(id, onDelta) {
+  let answer = "";
+  let reasoning = "";
+  let streamError = "";
+  const emit = (content = "", thought = "") => {
+    if (content) answer += content;
+    if (thought) reasoning += thought;
+    if ((content || thought) && typeof onDelta === "function") {
+      onDelta({ content, reasoning: thought, answer, reasoningText: reasoning });
+    }
+  };
+  const appendSnapshot = (value, kind = "answer") => {
+    const text = String(value || "");
+    if (!text) return;
+    const current = kind === "reasoning" ? reasoning : answer;
+    const delta = text.startsWith(current) ? text.slice(current.length) : current ? "" : text;
+    if (kind === "reasoning") emit("", delta); else emit(delta, "");
+  };
+  const lines = jsonLineStream((event) => {
+    if (!event || typeof event !== "object") return;
+    if (id === "codex-cli") {
+      if (event.type === "item.completed" && event.item?.type === "agent_message") {
+        appendSnapshot(event.item.text, "answer");
+      } else if (event.type === "item.completed" && event.item?.type === "reasoning") {
+        const text = event.item.text || (Array.isArray(event.item.summary) ? event.item.summary.join("\n") : "");
+        appendSnapshot(text, "reasoning");
+      } else if (event.type === "turn.failed") {
+        streamError = event.error?.message || "Codex turn failed";
+      }
+      return;
+    }
+    if (id === "claude-cli") {
+      if (event.type === "stream_event" && event.event?.type === "content_block_delta") {
+        const delta = event.event.delta || {};
+        if (delta.type === "text_delta") emit(delta.text || "", "");
+        else if (delta.type === "thinking_delta") emit("", delta.thinking || "");
+      } else if (event.type === "result" && !answer) {
+        appendSnapshot(event.result, "answer");
+      } else if (event.type === "assistant" && !answer && Array.isArray(event.message?.content)) {
+        appendSnapshot(event.message.content.filter((part) => part?.type === "text").map((part) => part.text || "").join(""), "answer");
+      }
+      return;
+    }
+    if (id === "grok-cli") {
+      if (event.type === "text") emit(event.data || event.text || "", "");
+      else if (event.type === "thought") emit("", event.data || event.text || "");
+      else if (event.type === "response.output_text.delta") emit(event.delta || "", "");
+      else if (event.type === "response.reasoning_summary_text.delta" || event.type === "response.reasoning_text.delta") emit("", event.delta || "");
+      else if (event.type === "error") streamError = event.message || "Grok turn failed";
+    }
+  });
+  return {
+    push: (chunk) => lines.push(chunk),
+    finish: () => lines.finish(),
+    result: () => ({ answer: answer.trim(), reasoning: reasoning.trim(), error: streamError }),
+  };
 }
 
 function stripAnsi(value) {
@@ -263,8 +366,14 @@ function runProcess(spec, options = {}) {
       }
       return next;
     };
-    child.stdout.on("data", (chunk) => { stdout = collect(stdout, chunk); });
-    child.stderr.on("data", (chunk) => { stderr = collect(stderr, chunk); });
+    child.stdout.on("data", (chunk) => {
+      stdout = collect(stdout, chunk);
+      if (typeof options.onStdoutChunk === "function") options.onStdoutChunk(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = collect(stderr, chunk);
+      if (typeof options.onStderrChunk === "function") options.onStderrChunk(chunk);
+    });
     child.on("close", (code) => {
       if (stoppedForOutput) {
         finish(reject, cliError("outputtoolong", "CLI response was too long"));
@@ -331,7 +440,10 @@ export async function probeCliAi(id, options = {}) {
   if (id === "codex-cli") loggedIn = /logged in/i.test(result.stdout + result.stderr);
   else if (id === "claude-cli") {
     try { loggedIn = JSON.parse(result.stdout).loggedIn === true; } catch { loggedIn = false; }
-  } else if (id === "grok-cli") loggedIn = /available models|default model|logged in/i.test(result.stdout + result.stderr);
+  } else if (id === "grok-cli") {
+    const output = result.stdout + result.stderr;
+    loggedIn = !/not authenticated/i.test(output) && /available models|default model|logged in/i.test(output);
+  }
   if (!loggedIn) throw cliError("cliauth", "CLI is not logged in");
   return { binaryPath, loggedIn: true, loginCommand: cliMeta(id).loginCommand };
 }
@@ -349,19 +461,26 @@ export async function runCliAi(id, options = {}) {
       promptFile = path.join(tempDir, "prompt.txt");
       fs.writeFileSync(promptFile, prompt, { encoding: "utf8", mode: 0o600, flag: "wx" });
     }
+    const parser = typeof options.onDelta === "function" ? createCliStreamParser(id, options.onDelta) : null;
     const result = await runProcess(buildCliInvocation(id, {
       binaryPath,
       model: options.model,
+      effort: options.effort,
+      stream: !!parser,
       prompt,
       promptFile,
       cwd: tempDir,
     }), {
       timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
       signal: options.signal,
+      onStdoutChunk: parser ? (chunk) => parser.push(chunk) : null,
     });
-    const answer = stripAnsi(result.stdout);
+    if (parser) parser.finish();
+    const parsed = parser ? parser.result() : null;
+    if (parsed?.error) throw cliError("cli", parsed.error);
+    const answer = parsed?.answer || stripAnsi(result.stdout);
     if (!answer) throw cliError("empty", "CLI returned an empty response");
-    return { answer, binaryPath };
+    return { answer, reasoning: parsed?.reasoning || "", binaryPath };
   } finally {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* OS cleanup will follow */ }
   }

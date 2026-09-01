@@ -11,7 +11,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import ePub from "epubjs";
 import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "./ai-providers.js";
 import { createOpenAiSseParser } from "./ai-stream.js";
-import { probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
+import { cliReasoningEfforts, probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
 
@@ -545,6 +545,39 @@ Object.assign(__erEN, {
   "追加摘录后只在第一次询问是否打开阅读笔记，后续不再打断阅读": "After appending an excerpt, the reader asks whether to open the reading note only once and no longer interrupts later reading.",
   "AI 快捷提示词支持新增、修改、删除和恢复默认": "AI quick prompts can now be added, edited, deleted, and restored to defaults.",
   "AI 对话框新增提示词设置入口，并内置六个更贴近日常阅读的问题": "The AI dialog now links directly to prompt settings and includes six questions designed for everyday reading.",
+  "每个 CLI 单独记住模型。留空使用该 CLI 的默认模型，也可以直接输入本机支持的模型 ID。": "Each CLI remembers its own model. Leave empty for that CLI's default, or enter any model ID supported by your local installation.",
+  "跟随模型": "Model default",
+  "最快": "Minimal",
+  "快速": "Low",
+  "标准": "Medium",
+  "深入": "High",
+  "极深": "Extra high",
+  "最深": "Maximum",
+  "思考强度": "Reasoning effort",
+  "不同 CLI 没有统一的“思考开关”。选择“快速”可减少等待，复杂内容再提高强度；不支持的档位不会显示。": "CLIs do not share one universal thinking switch. Choose Low for faster responses and raise it for difficult passages; unsupported levels are hidden.",
+  "阅读器会在隔离的临时目录中运行 {0}，禁用工具、文件编辑和项目规则。Claude 与 Grok 会逐字显示；Codex 稳定命令行目前会在一条回答完成后返回结构化结果，选择更快的模型或更低思考强度可缩短等待。只有你主动使用 AI 时，所选原文、书名和问题才会发送给对应服务。": "The reader runs {0} in an isolated temporary directory with tools, file edits, and project rules disabled. Claude and Grok stream text token by token. The stable Codex CLI currently returns a structured result after each answer is complete; choosing a faster model or lower reasoning effort can shorten that wait. The passage, book title, and question are sent only when you actively use AI.",
+  "这里与阅读器内的“阅读设置”同步；改变的是书页，工具栏仍跟随 Obsidian。": "These controls stay in sync with Reading Settings inside the reader. They change the page, while the toolbars continue to follow Obsidian.",
+  "阅读外观": "Reading appearance",
+  "主题": "Theme",
+  "选择适合当前环境的书页背景。": "Choose a page background for your current environment.",
+  "正文字体": "Body font",
+  "用于书籍正文；中英文字体名称保持原名。": "Used for the book text. Chinese and English font names keep their native names.",
+  "字号": "Font size",
+  "阅读正文大小，与书内设置实时同步。": "The book text size, synced with the in-reader control.",
+  "行距": "Line spacing",
+  "中文长文通常使用 1.6–1.8 更舒适。": "Long-form Chinese text is usually most comfortable at 1.6–1.8.",
+  "紧凑 · 1.4": "Compact · 1.4",
+  "标准 · 1.6": "Standard · 1.6",
+  "舒适 · 1.8": "Comfortable · 1.8",
+  "宽松 · 2.1": "Spacious · 2.1",
+  "更多外观选项": "More appearance options",
+  "显示与设备": "Display and devices",
+  "版面细节": "Layout details",
+  "CLI AI 现在为 Codex、Claude Code 和 Grok 分别记住模型与思考强度": "CLI AI now remembers model and reasoning effort separately for Codex, Claude Code, and Grok.",
+  "Claude Code 与 Grok 支持逐字流式输出，思考过程与正式回答分开显示": "Claude Code and Grok now stream token by token, with reasoning kept separate from the final answer.",
+  "复制摘录默认格式已移除遗留的俄文字符": "Removed the leftover Russian word from the default copied-excerpt format.",
+  "“阅读设置”修复横向滚动和滚动条遮挡内容的问题": "Reading Settings no longer scrolls horizontally or lets its scrollbar cover controls.",
+  "插件“外观”页新增主题、字体、字号和行距，低频选项收进“更多外观选项”": "The Appearance page now includes theme, font, size, and line spacing, with infrequent controls folded into More appearance options.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
@@ -719,6 +752,11 @@ const DEFAULT = {
   aiSecret: "",
   aiKey: "",
   aiModel: "",
+  // Model and reasoning choices belong to the provider, not to the global AI
+  // switch. A reader can move between Codex and Claude without losing either
+  // selection. aiModel remains as a migration bridge for pre-3.7 installs.
+  aiModels: {},
+  aiCliEfforts: {},
   aiBase: "",
   // Optional per-provider executable overrides. Empty means auto-detect from
   // GUI PATH plus common macOS/Linux/Windows install locations.
@@ -1925,6 +1963,20 @@ const EltonReader = class extends Plugin {
     const d = await this.loadData();
     this.settings = { ...DEFAULT, ...(_a = d == null ? void 0 : d.settings) != null ? _a : {} };
     this.settings.aiCliPaths = { ...(this.settings.aiCliPaths || {}) };
+    this.settings.aiModels = { ...(this.settings.aiModels || {}) };
+    this.settings.aiCliEfforts = { ...(this.settings.aiCliEfforts || {}) };
+    if (this.settings.aiProvider && this.settings.aiModel && !this.settings.aiModels[this.settings.aiProvider]) {
+      this.settings.aiModels[this.settings.aiProvider] = this.settings.aiModel;
+    }
+    this.settings.aiModel = this.settings.aiProvider
+      ? this.settings.aiModels[this.settings.aiProvider] || ""
+      : "";
+    // The old built-in quote template accidentally exposed the Russian word
+    // "из" ("from") in every locale. Only rewrite that exact template fragment;
+    // a genuinely custom template otherwise remains untouched.
+    if (this.settings.quoteTemplate) {
+      this.settings.quoteTemplate = this.settings.quoteTemplate.replace(/—\s+из\s+(?=\[\[\{book\}\]\])/giu, "— ");
+    }
     let v33SettingsMigrated = false;
     // v3.3 replaces the old colour names with purpose-built reading themes.
     // Migrate both the shared appearance and any per-device profiles once.
@@ -3259,13 +3311,14 @@ function aiConfig(plugin) {
   const settings = plugin.settings;
   const id = settings.aiProvider || "";
   const p = aiProviderFor(id);
-  if (!p) return { id: "", provider: null, transport: "http", base: "", model: "", key: "", needsKey: false, cliPath: "" };
+  if (!p) return { id: "", provider: null, transport: "http", base: "", model: "", effort: "", key: "", needsKey: false, cliPath: "" };
   return {
     id,
     provider: p,
     transport: p.transport || "http",
     base: normalizeAiBase(settings.aiBase || p.base),
-    model: settings.aiModel || p.model,
+    model: String(settings.aiModels && settings.aiModels[id] || settings.aiModel || p.model || "").trim(),
+    effort: String(settings.aiCliEfforts && settings.aiCliEfforts[id] || "").trim(),
     key: aiSecretValue(plugin),
     needsKey: p.needsKey,
     cliPath: String(settings.aiCliPaths && settings.aiCliPaths[id] || "").trim(),
@@ -3414,12 +3467,11 @@ async function aiExplain(text, plugin, turns, book, options = {}) {
     const result = await runCliAi(cfg.id, {
       messages,
       model: cfg.model,
+      effort: cfg.effort,
       binaryPath: cfg.cliPath,
       signal: options.signal,
+      onDelta: options.onDelta,
     });
-    if (typeof options.onDelta === "function") {
-      options.onDelta({ content: result.answer, reasoning: "", answer: result.answer, reasoningText: "" });
-    }
     return result.answer;
   }
   if (cfg.needsKey && !cfg.key) {
@@ -6516,7 +6568,7 @@ function deleteBookFromVault(app, plugin, file, after) {
     }
   }).open();
 }
-const QUOTE_TEMPLATE_DEFAULT = "> {text}\n\n— из [[{book}]]{page}{link}";
+const QUOTE_TEMPLATE_DEFAULT = "> {text}\n\n— [[{book}]]{page}{link}";
 // Keep the backlink useful without inserting interface prose into the reader's
 // notes. The arrow is the complete visible label; old custom text settings are
 // intentionally ignored so copied quotations stay clean.
@@ -7211,6 +7263,13 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.7.0", items: [
+    __ertr("CLI AI 现在为 Codex、Claude Code 和 Grok 分别记住模型与思考强度"),
+    __ertr("Claude Code 与 Grok 支持逐字流式输出，思考过程与正式回答分开显示"),
+    __ertr("复制摘录默认格式已移除遗留的俄文字符"),
+    __ertr("“阅读设置”修复横向滚动和滚动条遮挡内容的问题"),
+    __ertr("插件“外观”页新增主题、字体、字号和行距，低频选项收进“更多外观选项”")
+  ]},
   { v: "3.6.0", items: [
     __ertr("追加摘录后只在第一次询问是否打开阅读笔记，后续不再打断阅读"),
     __ertr("AI 快捷提示词支持新增、修改、删除和恢复默认"),
@@ -10630,7 +10689,7 @@ const SettingsTab = class extends PluginSettingTab {
         }
         d.setValue(s.aiProvider || "").onChange(async (v) => {
           s.aiProvider = v;
-          s.aiModel = "";
+          s.aiModel = s.aiModels && s.aiModels[v] || "";
           s.aiBase = "";
           await this.plugin.saveAll();
           redraw();
@@ -10720,7 +10779,7 @@ const SettingsTab = class extends PluginSettingTab {
       new Setting(target)
         .setName(__ertr("模型"))
         .setDesc(p.transport === "cli"
-          ? __ertr("留空使用 CLI 当前的默认模型。")
+          ? __ertr("每个 CLI 单独记住模型。留空使用该 CLI 的默认模型，也可以直接输入本机支持的模型 ID。")
           : p.model
           ? __ertr("可直接使用推荐模型，也可以填写服务商提供的其他模型 ID。")
           : __ertr("请输入服务商控制台显示的模型或推理接入点 ID。"))
@@ -10730,6 +10789,8 @@ const SettingsTab = class extends PluginSettingTab {
           .setValue(s.aiModel || "")
           .onChange(async (v) => {
             s.aiModel = v.trim();
+            if (!s.aiModels || typeof s.aiModels !== "object") s.aiModels = {};
+            s.aiModels[s.aiProvider] = s.aiModel;
             await this.plugin.saveAll();
           });
         if (p.models && p.models.length) {
@@ -10738,6 +10799,28 @@ const SettingsTab = class extends PluginSettingTab {
           p.models.forEach((model) => list.createEl("option", { attr: { value: model } }));
         }
       });
+    };
+    const addCliReasoningSetting = (target) => {
+      if (!s.aiCliEfforts || typeof s.aiCliEfforts !== "object") s.aiCliEfforts = {};
+      const labels = {
+        "": __ertr("跟随模型"),
+        minimal: __ertr("最快"),
+        low: __ertr("快速"),
+        medium: __ertr("标准"),
+        high: __ertr("深入"),
+        xhigh: __ertr("极深"),
+        max: __ertr("最深"),
+      };
+      new Setting(target)
+        .setName(__ertr("思考强度"))
+        .setDesc(__ertr("不同 CLI 没有统一的“思考开关”。选择“快速”可减少等待，复杂内容再提高强度；不支持的档位不会显示。"))
+        .addDropdown((d) => {
+          cliReasoningEfforts(s.aiProvider).forEach((value) => d.addOption(value, labels[value] || value));
+          d.setValue(s.aiCliEfforts[s.aiProvider] || "").onChange(async (value) => {
+            s.aiCliEfforts[s.aiProvider] = value;
+            await this.plugin.saveAll();
+          });
+        });
     };
     const addBaseSetting = (target) => {
       new Setting(target)
@@ -10749,9 +10832,10 @@ const SettingsTab = class extends PluginSettingTab {
         }));
     };
     const providerId = s.aiProvider || "";
-    const modelMustBeVisible = p.transport !== "cli" && (!p.model || p.local);
+    const modelMustBeVisible = p.transport === "cli" || !p.model || p.local;
     const baseMustBeVisible = providerId === "custom";
     if (modelMustBeVisible) addModelSetting(c);
+    if (p.transport === "cli") addCliReasoningSetting(c);
     if (baseMustBeVisible) addBaseSetting(c);
     const advancedHasModel = !modelMustBeVisible;
     const advancedHasBase = p.transport !== "cli" && !baseMustBeVisible;
@@ -10815,7 +10899,7 @@ const SettingsTab = class extends PluginSettingTab {
     c.createEl("div", {
       cls: "er-set-note",
       text: p.transport === "cli"
-        ? __ertr("阅读器会在隔离的临时目录中运行 {0}，禁用工具、文件编辑和项目规则。只有你主动使用 AI 时，所选原文、书名和问题才会发送给对应服务。", p.label)
+        ? __ertr("阅读器会在隔离的临时目录中运行 {0}，禁用工具、文件编辑和项目规则。Claude 与 Grok 会逐字显示；Codex 稳定命令行目前会在一条回答完成后返回结构化结果，选择更快的模型或更低思考强度可缩短等待。只有你主动使用 AI 时，所选原文、书名和问题才会发送给对应服务。", p.label)
         : p.local
         ? __ertr("本地模型只在这台设备上运行；手机无法连接电脑的 localhost。")
         : __ertr("只有你主动使用 AI 时，选中的原文、书名和问题才会发送到 {0}。", cfg.base),
@@ -10824,9 +10908,66 @@ const SettingsTab = class extends PluginSettingTab {
   // Set once and forgotten: kept out of the tab so what remains there is only
   // what a reader reaches for mid-book. Same controls, same behaviour.
   _groupAppearance(c) {
-    this._sectionIntro(c, __ertr("Оформление"), __ertr("Меняется только страница книги. Панели управления всегда следуют теме Obsidian."));
-    c.createEl("h3", { text: __ertr("Режимы") });
+    const s = this.plugin.settings;
+    this._sectionIntro(c, __ertr("Оформление"), __ertr("这里与阅读器内的“阅读设置”同步；改变的是书页，工具栏仍跟随 Obsidian。"));
+    const applyAppearance = async (repaginate = true) => {
+      await this.plugin.saveAll();
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        const view = leaf.view;
+        if (!view) continue;
+        if (typeof view.applyVars === "function") view.applyVars();
+        else if (typeof view._applyTheme === "function") view._applyTheme();
+        if (repaginate && view.bookHtml && typeof view.repaginate === "function") await view.repaginate();
+        else if (repaginate && typeof view._applyContentStyle === "function") view._applyContentStyle();
+      }
+    };
+    c.createEl("h3", { text: __ertr("阅读外观") });
     new Setting(c)
+      .setName(__ertr("主题"))
+      .setDesc(__ertr("选择适合当前环境的书页背景。"))
+      .addDropdown((d) => {
+        READER_THEME_CHOICES.forEach((id) => d.addOption(id, readerThemeLabel(id)));
+        d.setValue(selectedReaderTheme(s)).onChange(async (id) => {
+          setReaderTheme(s, id);
+          await applyAppearance(false);
+        });
+      });
+    new Setting(c)
+      .setName(__ertr("正文字体"))
+      .setDesc(__ertr("用于书籍正文；中英文字体名称保持原名。"))
+      .addDropdown((d) => {
+        erReaderFonts().forEach((font) => d.addOption(font.id, erFontLabel(font)));
+        d.setValue(s.fontFamily || "georgia").onChange(async (font) => {
+          s.fontFamily = font;
+          await applyAppearance(true);
+        });
+      });
+    new Setting(c)
+      .setName(__ertr("字号"))
+      .setDesc(__ertr("阅读正文大小，与书内设置实时同步。"))
+      .addSlider((slider) => slider.setLimits(12, 32, 1).setValue(s.fontSize || 18).setDynamicTooltip().onChange(async (size) => {
+        s.fontSize = size;
+        await applyAppearance(true);
+      }));
+    new Setting(c)
+      .setName(__ertr("行距"))
+      .setDesc(__ertr("中文长文通常使用 1.6–1.8 更舒适。"))
+      .addDropdown((d) => d
+        .addOption("1.4", __ertr("紧凑 · 1.4"))
+        .addOption("1.6", __ertr("标准 · 1.6"))
+        .addOption("1.8", __ertr("舒适 · 1.8"))
+        .addOption("2.1", __ertr("宽松 · 2.1"))
+        .setValue(String(s.lineHeight || 1.8))
+        .onChange(async (value) => {
+          s.lineHeight = Number(value);
+          await applyAppearance(true);
+        }));
+
+    const advanced = c.createEl("details", { cls: "er-settings-disclosure" });
+    advanced.createEl("summary", { text: __ertr("更多外观选项") });
+    const body = advanced.createDiv("er-settings-disclosure-body");
+    body.createEl("h3", { text: __ertr("显示与设备") });
+    new Setting(body)
       .setName(__ertr("Свой вид на каждом устройстве"))
       .setDesc(__ertr("Размер шрифта, тема, шрифт, интервал, число колонок и выравнивание запоминаются отдельно для компьютера, планшета и телефона. Настройки хранятся в одном файле и синхронизируются, но каждое устройство читает свою часть, поэтому крупный шрифт на телефоне больше не делает его огромным на компьютере. Папки, шаблоны и прогресс чтения остаются общими. Это устройство: {0}.",
         __ertr({ desktop: "компьютер", tablet: "планшет", phone: "телефон" }[erDeviceKey()])))
@@ -10837,7 +10978,7 @@ const SettingsTab = class extends PluginSettingTab {
         await this.plugin.saveAll();
         this.display();
       }));
-    new Setting(c)
+    new Setting(body)
       .setName(__ertr("Режим для e-ink читалок"))
       .setDesc(__ertr("Для Obsidian на Android-читалке с электронными чернилами. Убирает анимации, плавные переходы, тени и размытие — они оставляют на таком экране следы. Чистый чёрный на белом, жёсткие рамки, крупнее кнопки, листание без скольжения."))
       .addToggle((t) => t.setValue(this.plugin.settings.einkMode === true).onChange(async (v) => {
@@ -10845,14 +10986,10 @@ const SettingsTab = class extends PluginSettingTab {
         // The e-ink palette is part of the mode; switching back restores light.
         if (v) this.plugin.settings.theme = "eink";
         else if (this.plugin.settings.theme === "eink") this.plugin.settings.theme = "auto";
-        await this.plugin.saveAll();
-        for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
-          const view = leaf.view;
-          if (view && view.applyVars) { view.applyVars(); if (view.bookHtml) view.repaginate(); }
-        }
+        await applyAppearance(true);
       }));
-    c.createEl("h3", { text: __ertr("Текст на странице") });
-    new Setting(c)
+    body.createEl("h3", { text: __ertr("版面细节") });
+    new Setting(body)
       .setName(__ertr("Выравнивание текста"))
       .setDesc(__ertr("Как выравнивается текст в колонке чтения. Можно менять и на лету — в панели настроек чтения (иконка ползунков) в самой книге. Откройте книгу заново, чтобы применить."))
       .addDropdown((d) => d
@@ -10861,8 +10998,8 @@ const SettingsTab = class extends PluginSettingTab {
         .addOption("center", __ertr("По центру"))
         .addOption("right", __ertr("Справа"))
         .setValue(this.plugin.settings.textAlign || "left")
-        .onChange(async (v) => { this.plugin.settings.textAlign = v; await this.plugin.saveAll(); }));
-    new Setting(c)
+        .onChange(async (v) => { this.plugin.settings.textAlign = v; await applyAppearance(true); }));
+    new Setting(body)
       .setName(__ertr("Положение текста на странице"))
       .setDesc(__ertr("Если страница заполнена не до конца (например, в конце главы), текст можно не оставлять прижатым к верху. Меняется и на лету — в панели настроек чтения."))
       .addDropdown((d) => d
@@ -10870,22 +11007,22 @@ const SettingsTab = class extends PluginSettingTab {
         .addOption("center", __ertr("По центру"))
         .addOption("bottom", __ertr("Снизу"))
         .setValue(this.plugin.settings.vAlign || "top")
-        .onChange(async (v) => { this.plugin.settings.vAlign = v; await this.plugin.saveAll(); }));
-    new Setting(c)
+        .onChange(async (v) => { this.plugin.settings.vAlign = v; await applyAppearance(true); }));
+    new Setting(body)
       .setName(__ertr("Показывать картинки из книги"))
       .setDesc(__ertr("По умолчанию ВЫКЛ: если из страницы извлекается текст — показывается только чистый текст. Включите, чтобы над текстом показывались иллюстрации, схемы и графики: вырезаются сами картинки, а не скриншот всей страницы. На сканах (где текст извлечь нельзя) страница по-прежнему показывается целиком. Откройте книгу заново, чтобы применить."))
       .addToggle((t) => t.setValue(this.plugin.settings.pdfShowFiguresOnTextPages === true).onChange(async (v) => {
         this.plugin.settings.pdfShowFiguresOnTextPages = v;
         await this.plugin.saveAll();
       }));
-    new Setting(c)
+    new Setting(body)
       .setName(__ertr("Погружение (Immersive)"))
       .setDesc(__ertr("Панели сверху и снизу мягко притухают через пару секунд без движения мыши и мгновенно возвращаются при движении — чтобы ничто не отвлекало от текста."))
       .addToggle((t) => t.setValue(this.plugin.settings.immersive !== false).onChange(async (v) => {
         this.plugin.settings.immersive = v; await this.plugin.saveAll();
       }));
     if (Platform.isMobile) {
-      new Setting(c)
+      new Setting(body)
         .setName(__ertr("Отступ сверху на телефоне"))
         .setDesc(__ertr("Обычно система сама сообщает высоту «шторки» с часами, и верхняя панель встаёт под ней. На части Android-оболочек (например, Samsung One UI) она этого не делает — панель заезжает под часы. Тогда впишите здесь высоту в пикселях, обычно 24–48. Ноль — доверять системе. Откройте книгу заново, чтобы применить."))
         .addText((t) => t

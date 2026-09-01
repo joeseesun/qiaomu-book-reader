@@ -54589,7 +54589,7 @@ var AI_PROVIDERS = {
     needsKey: false,
     binary: "codex",
     model: "",
-    models: [],
+    models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini"],
     desktopOnly: true,
     description: "\u590D\u7528\u672C\u673A Codex \u7684 ChatGPT \u767B\u5F55\uFF0C\u65E0\u9700\u518D\u586B API \u5BC6\u94A5\u3002"
   },
@@ -54600,7 +54600,7 @@ var AI_PROVIDERS = {
     needsKey: false,
     binary: "claude",
     model: "",
-    models: ["sonnet", "opus"],
+    models: ["haiku", "sonnet", "opus"],
     desktopOnly: true,
     description: "\u590D\u7528\u672C\u673A Claude Code \u767B\u5F55\uFF0C\u65E0\u9700\u518D\u586B API \u5BC6\u94A5\u3002"
   },
@@ -54823,6 +54823,11 @@ function createOpenAiSseParser(onDelta) {
 
 // src/ai-cli.js
 var CLI_AI_PROVIDER_IDS = Object.freeze(["codex-cli", "claude-cli", "grok-cli"]);
+var CLI_REASONING_EFFORTS = Object.freeze({
+  "codex-cli": ["", "minimal", "low", "medium", "high", "xhigh"],
+  "claude-cli": ["", "low", "medium", "high", "xhigh", "max"],
+  "grok-cli": ["", "low", "medium", "high", "xhigh"]
+});
 var CLI_META = Object.freeze({
   "codex-cli": {
     binary: "codex",
@@ -54842,6 +54847,9 @@ var MAX_OUTPUT_BYTES = 15e5;
 var DEFAULT_TIMEOUT_MS = 12e4;
 function cliMeta(id) {
   return CLI_META[id] || null;
+}
+function cliReasoningEfforts(id) {
+  return CLI_REASONING_EFFORTS[id] || [""];
 }
 function cliError(reason, message, extra = {}) {
   const error = new Error(message || reason);
@@ -54969,6 +54977,8 @@ ${String(message && message.content || "").trim()}`;
 function buildCliInvocation(id, options) {
   const binaryPath = options.binaryPath;
   const model = String(options.model || "").trim();
+  const effort = cliReasoningEfforts(id).includes(String(options.effort || "")) ? String(options.effort || "") : "";
+  const stream = options.stream === true;
   const cwd = options.cwd;
   if (!binaryPath || !cwd) throw cliError("notconfigured", "CLI path or working directory is missing");
   if (id === "codex-cli") {
@@ -54984,6 +54994,8 @@ function buildCliInvocation(id, options) {
       "never"
     ];
     if (model) args.push("--model", model);
+    if (effort) args.push("--config", `model_reasoning_effort="${effort}"`);
+    if (stream) args.push("--json");
     args.push("-");
     return { command: binaryPath, args, stdin: options.prompt, cwd };
   }
@@ -54991,7 +55003,7 @@ function buildCliInvocation(id, options) {
     const args = [
       "-p",
       "--output-format",
-      "text",
+      stream ? "stream-json" : "text",
       "--permission-mode",
       "plan",
       "--tools",
@@ -55001,7 +55013,9 @@ function buildCliInvocation(id, options) {
       "--disable-slash-commands",
       "--no-chrome"
     ];
+    if (stream) args.push("--include-partial-messages", "--verbose");
     if (model) args.push("--model", model);
+    if (effort) args.push("--effort", effort);
     return { command: binaryPath, args, stdin: options.prompt, cwd };
   }
   if (id === "grok-cli") {
@@ -55011,7 +55025,7 @@ function buildCliInvocation(id, options) {
       "--prompt-file",
       options.promptFile,
       "--output-format",
-      "plain",
+      stream ? "streaming-json" : "plain",
       "--permission-mode",
       "plan",
       "--tools",
@@ -55026,9 +55040,92 @@ function buildCliInvocation(id, options) {
       "--verbatim"
     ];
     if (model) args.push("--model", model);
+    if (effort) args.push("--reasoning-effort", effort);
     return { command: binaryPath, args, stdin: "", cwd };
   }
   throw cliError("notconfigured", "Unknown CLI provider");
+}
+function jsonLineStream(onValue) {
+  let buffer = "";
+  const consume = (line) => {
+    const clean = stripAnsi(line).trim();
+    if (!clean) return;
+    try {
+      onValue(JSON.parse(clean));
+    } catch (e) {
+    }
+  };
+  return {
+    push(chunk) {
+      buffer += String(chunk || "").replace(/\r/g, "");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      lines.forEach(consume);
+    },
+    finish() {
+      consume(buffer);
+      buffer = "";
+    }
+  };
+}
+function createCliStreamParser(id, onDelta) {
+  let answer = "";
+  let reasoning = "";
+  let streamError = "";
+  const emit = (content = "", thought = "") => {
+    if (content) answer += content;
+    if (thought) reasoning += thought;
+    if ((content || thought) && typeof onDelta === "function") {
+      onDelta({ content, reasoning: thought, answer, reasoningText: reasoning });
+    }
+  };
+  const appendSnapshot = (value, kind = "answer") => {
+    const text = String(value || "");
+    if (!text) return;
+    const current = kind === "reasoning" ? reasoning : answer;
+    const delta = text.startsWith(current) ? text.slice(current.length) : current ? "" : text;
+    if (kind === "reasoning") emit("", delta);
+    else emit(delta, "");
+  };
+  const lines = jsonLineStream((event) => {
+    var _a2, _b, _c, _d, _e;
+    if (!event || typeof event !== "object") return;
+    if (id === "codex-cli") {
+      if (event.type === "item.completed" && ((_a2 = event.item) == null ? void 0 : _a2.type) === "agent_message") {
+        appendSnapshot(event.item.text, "answer");
+      } else if (event.type === "item.completed" && ((_b = event.item) == null ? void 0 : _b.type) === "reasoning") {
+        const text = event.item.text || (Array.isArray(event.item.summary) ? event.item.summary.join("\n") : "");
+        appendSnapshot(text, "reasoning");
+      } else if (event.type === "turn.failed") {
+        streamError = ((_c = event.error) == null ? void 0 : _c.message) || "Codex turn failed";
+      }
+      return;
+    }
+    if (id === "claude-cli") {
+      if (event.type === "stream_event" && ((_d = event.event) == null ? void 0 : _d.type) === "content_block_delta") {
+        const delta = event.event.delta || {};
+        if (delta.type === "text_delta") emit(delta.text || "", "");
+        else if (delta.type === "thinking_delta") emit("", delta.thinking || "");
+      } else if (event.type === "result" && !answer) {
+        appendSnapshot(event.result, "answer");
+      } else if (event.type === "assistant" && !answer && Array.isArray((_e = event.message) == null ? void 0 : _e.content)) {
+        appendSnapshot(event.message.content.filter((part) => (part == null ? void 0 : part.type) === "text").map((part) => part.text || "").join(""), "answer");
+      }
+      return;
+    }
+    if (id === "grok-cli") {
+      if (event.type === "text") emit(event.data || event.text || "", "");
+      else if (event.type === "thought") emit("", event.data || event.text || "");
+      else if (event.type === "response.output_text.delta") emit(event.delta || "", "");
+      else if (event.type === "response.reasoning_summary_text.delta" || event.type === "response.reasoning_text.delta") emit("", event.delta || "");
+      else if (event.type === "error") streamError = event.message || "Grok turn failed";
+    }
+  });
+  return {
+    push: (chunk) => lines.push(chunk),
+    finish: () => lines.finish(),
+    result: () => ({ answer: answer.trim(), reasoning: reasoning.trim(), error: streamError })
+  };
 }
 function stripAnsi(value) {
   const ansiPattern = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
@@ -55112,9 +55209,11 @@ function runProcess(spec, options = {}) {
     };
     child.stdout.on("data", (chunk) => {
       stdout = collect(stdout, chunk);
+      if (typeof options.onStdoutChunk === "function") options.onStdoutChunk(chunk);
     });
     child.stderr.on("data", (chunk) => {
       stderr = collect(stderr, chunk);
+      if (typeof options.onStderrChunk === "function") options.onStderrChunk(chunk);
     });
     child.on("close", (code) => {
       if (stoppedForOutput) {
@@ -55184,7 +55283,10 @@ async function probeCliAi(id, options = {}) {
     } catch (e) {
       loggedIn = false;
     }
-  } else if (id === "grok-cli") loggedIn = /available models|default model|logged in/i.test(result.stdout + result.stderr);
+  } else if (id === "grok-cli") {
+    const output = result.stdout + result.stderr;
+    loggedIn = !/not authenticated/i.test(output) && /available models|default model|logged in/i.test(output);
+  }
   if (!loggedIn) throw cliError("cliauth", "CLI is not logged in");
   return { binaryPath, loggedIn: true, loginCommand: cliMeta(id).loginCommand };
 }
@@ -55204,19 +55306,26 @@ async function runCliAi(id, options = {}) {
       promptFile = path5.join(tempDir, "prompt.txt");
       fs.writeFileSync(promptFile, prompt, { encoding: "utf8", mode: 384, flag: "wx" });
     }
+    const parser = typeof options.onDelta === "function" ? createCliStreamParser(id, options.onDelta) : null;
     const result = await runProcess(buildCliInvocation(id, {
       binaryPath,
       model: options.model,
+      effort: options.effort,
+      stream: !!parser,
       prompt,
       promptFile,
       cwd: tempDir
     }), {
       timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
-      signal: options.signal
+      signal: options.signal,
+      onStdoutChunk: parser ? (chunk) => parser.push(chunk) : null
     });
-    const answer = stripAnsi(result.stdout);
+    if (parser) parser.finish();
+    const parsed = parser ? parser.result() : null;
+    if (parsed == null ? void 0 : parsed.error) throw cliError("cli", parsed.error);
+    const answer = (parsed == null ? void 0 : parsed.answer) || stripAnsi(result.stdout);
     if (!answer) throw cliError("empty", "CLI returned an empty response");
-    return { answer, binaryPath };
+    return { answer, reasoning: (parsed == null ? void 0 : parsed.reasoning) || "", binaryPath };
   } finally {
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -56336,7 +56445,11 @@ Object.assign(ER_ZH_CN, {
   "\u042F\u0437\u044B\u043A, \u043D\u0430 \u043A\u043E\u0442\u043E\u0440\u044B\u0439 \u043F\u0435\u0440\u0435\u0432\u043E\u0434\u0438\u0442\u044C \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u043D\u044B\u0439 \u0444\u0440\u0430\u0433\u043C\u0435\u043D\u0442. \u0418\u0441\u0445\u043E\u0434\u043D\u044B\u0439 \u044F\u0437\u044B\u043A \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u044F\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438.": "\u81EA\u52A8\u8BC6\u522B\u539F\u6587\u8BED\u8A00\uFF0C\u5E76\u7FFB\u8BD1\u4E3A\u6240\u9009\u8BED\u8A00\u3002",
   "\u041F\u0443\u0441\u0442\u043E = \u0432\u0435\u0441\u044C vault": "\u7559\u7A7A\u5219\u626B\u63CF\u6574\u4E2A\u4ED3\u5E93\u3002",
   "\u0413\u0434\u0435 \u0445\u0440\u0430\u043D\u044F\u0442\u0441\u044F \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u0447\u0442\u0435\u043D\u0438\u044F, \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u044F \u0438 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u044B\u0435 \u043A\u043E\u043F\u0438\u0438 (reading-progress.json, reading-highlights.json). \u041F\u0443\u0441\u0442\u043E \u2014 \u0440\u044F\u0434\u043E\u043C \u0441 \u043A\u043D\u0438\u0433\u0430\u043C\u0438 (\u0432 \xAB\u041F\u0430\u043F\u043A\u0435 \u0441 \u043A\u043D\u0438\u0433\u0430\u043C\u0438\xBB). \u0424\u0430\u0439\u043B\u044B \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u044E\u0442\u0441\u044F \u0432\u043C\u0435\u0441\u0442\u0435 \u0441 \u0445\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435\u043C.": "\u4FDD\u5B58\u9605\u8BFB\u8FDB\u5EA6\u3001\u5212\u7EBF\u548C\u5907\u4EFD\uFF1B\u7559\u7A7A\u5219\u4E0E\u56FE\u4E66\u653E\u5728\u4E00\u8D77\u3002",
-  "\u041F\u043E\u0434\u0441\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u043F\u043B\u0430\u0433\u0438\u043D\u0443, \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0441\u0432\u0435\u0436\u043E \u043F\u0435\u0440\u0435\u0447\u0438\u0442\u044B\u0432\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441\u0430 \u043F\u0440\u0438 \u043E\u0442\u043A\u0440\u044B\u0442\u0438\u0438 \u043A\u043D\u0438\u0433\u0438.": "\u9009\u62E9\u4F60\u4F7F\u7528\u7684\u540C\u6B65\u65B9\u5F0F\uFF0C\u63D2\u4EF6\u4F1A\u6309\u5408\u9002\u9891\u7387\u91CD\u65B0\u8BFB\u53D6\u8FDB\u5EA6\u3002"
+  "\u041F\u043E\u0434\u0441\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u043F\u043B\u0430\u0433\u0438\u043D\u0443, \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0441\u0432\u0435\u0436\u043E \u043F\u0435\u0440\u0435\u0447\u0438\u0442\u044B\u0432\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441\u0430 \u043F\u0440\u0438 \u043E\u0442\u043A\u0440\u044B\u0442\u0438\u0438 \u043A\u043D\u0438\u0433\u0438.": "\u9009\u62E9\u4F60\u4F7F\u7528\u7684\u540C\u6B65\u65B9\u5F0F\uFF0C\u63D2\u4EF6\u4F1A\u6309\u5408\u9002\u9891\u7387\u91CD\u65B0\u8BFB\u53D6\u8FDB\u5EA6\u3002",
+  "\u041A\u0443\u0434\u0430 \u0432\u0435\u0441\u0442\u0438 \u0441\u0441\u044B\u043B\u043A\u0443 \xAB\u2014 \u0438\u0437 [[\u2026]]\xBB \u0432 \u0437\u0430\u043C\u0435\u0442\u043A\u0430\u0445 \u0438\u0437 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0439. \u041F\u0443\u0441\u0442\u043E \u2014 \u0438\u043C\u044F \u0444\u0430\u0439\u043B\u0430 \u043A\u043D\u0438\u0433\u0438.": "\u5355\u72EC\u6458\u5F55\u7B14\u8BB0\u4E2D\u7684\u56FE\u4E66\u94FE\u63A5\u5C06\u6307\u5411\u8FD9\u7BC7\u9605\u8BFB\u7B14\u8BB0\uFF1B\u7559\u7A7A\u5219\u6307\u5411\u56FE\u4E66\u6587\u4EF6\u3002",
+  "\u0416\u0430\u043D\u0440 \u0438\u043B\u0438 \u0442\u0435\u043C\u0430 \u2014 \u043F\u043E \u043D\u0435\u0439 \u043A\u043D\u0438\u0433\u0438 \u0433\u0440\u0443\u043F\u043F\u0438\u0440\u0443\u044E\u0442\u0441\u044F \u0432 \u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0435. \u041D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u2014 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043F\u044F\u0442\u0443\u044E. \u041F\u0443\u0441\u0442\u043E \u2014 \u0431\u0435\u0437 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438.": "\u7528\u4E8E\u4E66\u5E93\u5206\u7EC4\uFF0C\u53EF\u586B\u5199\u7C7B\u578B\u6216\u4E3B\u9898\uFF1B\u591A\u4E2A\u7C7B\u522B\u7528\u9017\u53F7\u5206\u9694\uFF0C\u7559\u7A7A\u5219\u4E0D\u5206\u7C7B\u3002",
+  "\u0428\u0430\u0431\u043B\u043E\u043D \u0434\u043B\u044F \u044D\u0442\u043E\u0439 \u043A\u043D\u0438\u0433\u0438": "\u672C\u4E66\u6458\u5F55\u7B14\u8BB0\u6A21\u677F",
+  "\u0421\u0432\u043E\u0439 \u0448\u0430\u0431\u043B\u043E\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u044D\u0442\u043E\u0439 \u043A\u043D\u0438\u0433\u0438 (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u043F\u043E\u0434 \u0436\u0430\u043D\u0440). \u041F\u0443\u0441\u0442\u043E \u2014 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F \u043E\u0431\u0449\u0438\u0439 \u0448\u0430\u0431\u043B\u043E\u043D \u0438\u0437 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043A \u043F\u043B\u0430\u0433\u0438\u043D\u0430.": "\u4EC5\u7528\u4E8E\u672C\u4E66\u65B0\u5EFA\u7684\u5355\u72EC\u6458\u5F55\u7B14\u8BB0\uFF1B\u7559\u7A7A\u5219\u4F7F\u7528\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u7684\u201C\u6458\u5F55\u7B14\u8BB0\u6A21\u677F\u201D\u3002"
 });
 for (const [key, value] of Object.entries(ER_ZH_CN)) {
   ER_ZH_CN[key] = String(value).replaceAll("\u56FE\u4E66\u9986", "\u4E66\u5E93").replaceAll("\u5B58\u50A8\u5E93", "\u4ED3\u5E93").replaceAll("\u5B58\u50A8\u7A7A\u95F4", "\u4ED3\u5E93").replaceAll("\u8BFB\u4E66\u7B14\u8BB0", "\u9605\u8BFB\u7B14\u8BB0").replaceAll("\u56FE\u4E66\u7B14\u8BB0", "\u9605\u8BFB\u7B14\u8BB0").replaceAll("\u4EAE\u70B9", "\u5212\u7EBF").replaceAll("\u8BC4\u8BBA", "\u6279\u6CE8").replaceAll("\u5F15\u6587", "\u6458\u5F55");
@@ -56815,7 +56928,40 @@ Object.assign(__erEN, {
   "\u0423\u043F\u0440\u0430\u0432\u043B\u044F\u0442\u044C": "Manage",
   "\u8FFD\u52A0\u6458\u5F55\u540E\u53EA\u5728\u7B2C\u4E00\u6B21\u8BE2\u95EE\u662F\u5426\u6253\u5F00\u9605\u8BFB\u7B14\u8BB0\uFF0C\u540E\u7EED\u4E0D\u518D\u6253\u65AD\u9605\u8BFB": "After appending an excerpt, the reader asks whether to open the reading note only once and no longer interrupts later reading.",
   "AI \u5FEB\u6377\u63D0\u793A\u8BCD\u652F\u6301\u65B0\u589E\u3001\u4FEE\u6539\u3001\u5220\u9664\u548C\u6062\u590D\u9ED8\u8BA4": "AI quick prompts can now be added, edited, deleted, and restored to defaults.",
-  "AI \u5BF9\u8BDD\u6846\u65B0\u589E\u63D0\u793A\u8BCD\u8BBE\u7F6E\u5165\u53E3\uFF0C\u5E76\u5185\u7F6E\u516D\u4E2A\u66F4\u8D34\u8FD1\u65E5\u5E38\u9605\u8BFB\u7684\u95EE\u9898": "The AI dialog now links directly to prompt settings and includes six questions designed for everyday reading."
+  "AI \u5BF9\u8BDD\u6846\u65B0\u589E\u63D0\u793A\u8BCD\u8BBE\u7F6E\u5165\u53E3\uFF0C\u5E76\u5185\u7F6E\u516D\u4E2A\u66F4\u8D34\u8FD1\u65E5\u5E38\u9605\u8BFB\u7684\u95EE\u9898": "The AI dialog now links directly to prompt settings and includes six questions designed for everyday reading.",
+  "\u6BCF\u4E2A CLI \u5355\u72EC\u8BB0\u4F4F\u6A21\u578B\u3002\u7559\u7A7A\u4F7F\u7528\u8BE5 CLI \u7684\u9ED8\u8BA4\u6A21\u578B\uFF0C\u4E5F\u53EF\u4EE5\u76F4\u63A5\u8F93\u5165\u672C\u673A\u652F\u6301\u7684\u6A21\u578B ID\u3002": "Each CLI remembers its own model. Leave empty for that CLI's default, or enter any model ID supported by your local installation.",
+  "\u8DDF\u968F\u6A21\u578B": "Model default",
+  "\u6700\u5FEB": "Minimal",
+  "\u5FEB\u901F": "Low",
+  "\u6807\u51C6": "Medium",
+  "\u6DF1\u5165": "High",
+  "\u6781\u6DF1": "Extra high",
+  "\u6700\u6DF1": "Maximum",
+  "\u601D\u8003\u5F3A\u5EA6": "Reasoning effort",
+  "\u4E0D\u540C CLI \u6CA1\u6709\u7EDF\u4E00\u7684\u201C\u601D\u8003\u5F00\u5173\u201D\u3002\u9009\u62E9\u201C\u5FEB\u901F\u201D\u53EF\u51CF\u5C11\u7B49\u5F85\uFF0C\u590D\u6742\u5185\u5BB9\u518D\u63D0\u9AD8\u5F3A\u5EA6\uFF1B\u4E0D\u652F\u6301\u7684\u6863\u4F4D\u4E0D\u4F1A\u663E\u793A\u3002": "CLIs do not share one universal thinking switch. Choose Low for faster responses and raise it for difficult passages; unsupported levels are hidden.",
+  "\u9605\u8BFB\u5668\u4F1A\u5728\u9694\u79BB\u7684\u4E34\u65F6\u76EE\u5F55\u4E2D\u8FD0\u884C {0}\uFF0C\u7981\u7528\u5DE5\u5177\u3001\u6587\u4EF6\u7F16\u8F91\u548C\u9879\u76EE\u89C4\u5219\u3002Claude \u4E0E Grok \u4F1A\u9010\u5B57\u663E\u793A\uFF1BCodex \u7A33\u5B9A\u547D\u4EE4\u884C\u76EE\u524D\u4F1A\u5728\u4E00\u6761\u56DE\u7B54\u5B8C\u6210\u540E\u8FD4\u56DE\u7ED3\u6784\u5316\u7ED3\u679C\uFF0C\u9009\u62E9\u66F4\u5FEB\u7684\u6A21\u578B\u6216\u66F4\u4F4E\u601D\u8003\u5F3A\u5EA6\u53EF\u7F29\u77ED\u7B49\u5F85\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u4F7F\u7528 AI \u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5BF9\u5E94\u670D\u52A1\u3002": "The reader runs {0} in an isolated temporary directory with tools, file edits, and project rules disabled. Claude and Grok stream text token by token. The stable Codex CLI currently returns a structured result after each answer is complete; choosing a faster model or lower reasoning effort can shorten that wait. The passage, book title, and question are sent only when you actively use AI.",
+  "\u8FD9\u91CC\u4E0E\u9605\u8BFB\u5668\u5185\u7684\u201C\u9605\u8BFB\u8BBE\u7F6E\u201D\u540C\u6B65\uFF1B\u6539\u53D8\u7684\u662F\u4E66\u9875\uFF0C\u5DE5\u5177\u680F\u4ECD\u8DDF\u968F Obsidian\u3002": "These controls stay in sync with Reading Settings inside the reader. They change the page, while the toolbars continue to follow Obsidian.",
+  "\u9605\u8BFB\u5916\u89C2": "Reading appearance",
+  "\u4E3B\u9898": "Theme",
+  "\u9009\u62E9\u9002\u5408\u5F53\u524D\u73AF\u5883\u7684\u4E66\u9875\u80CC\u666F\u3002": "Choose a page background for your current environment.",
+  "\u6B63\u6587\u5B57\u4F53": "Body font",
+  "\u7528\u4E8E\u4E66\u7C4D\u6B63\u6587\uFF1B\u4E2D\u82F1\u6587\u5B57\u4F53\u540D\u79F0\u4FDD\u6301\u539F\u540D\u3002": "Used for the book text. Chinese and English font names keep their native names.",
+  "\u5B57\u53F7": "Font size",
+  "\u9605\u8BFB\u6B63\u6587\u5927\u5C0F\uFF0C\u4E0E\u4E66\u5185\u8BBE\u7F6E\u5B9E\u65F6\u540C\u6B65\u3002": "The book text size, synced with the in-reader control.",
+  "\u884C\u8DDD": "Line spacing",
+  "\u4E2D\u6587\u957F\u6587\u901A\u5E38\u4F7F\u7528 1.6\u20131.8 \u66F4\u8212\u9002\u3002": "Long-form Chinese text is usually most comfortable at 1.6\u20131.8.",
+  "\u7D27\u51D1 \xB7 1.4": "Compact \xB7 1.4",
+  "\u6807\u51C6 \xB7 1.6": "Standard \xB7 1.6",
+  "\u8212\u9002 \xB7 1.8": "Comfortable \xB7 1.8",
+  "\u5BBD\u677E \xB7 2.1": "Spacious \xB7 2.1",
+  "\u66F4\u591A\u5916\u89C2\u9009\u9879": "More appearance options",
+  "\u663E\u793A\u4E0E\u8BBE\u5907": "Display and devices",
+  "\u7248\u9762\u7EC6\u8282": "Layout details",
+  "CLI AI \u73B0\u5728\u4E3A Codex\u3001Claude Code \u548C Grok \u5206\u522B\u8BB0\u4F4F\u6A21\u578B\u4E0E\u601D\u8003\u5F3A\u5EA6": "CLI AI now remembers model and reasoning effort separately for Codex, Claude Code, and Grok.",
+  "Claude Code \u4E0E Grok \u652F\u6301\u9010\u5B57\u6D41\u5F0F\u8F93\u51FA\uFF0C\u601D\u8003\u8FC7\u7A0B\u4E0E\u6B63\u5F0F\u56DE\u7B54\u5206\u5F00\u663E\u793A": "Claude Code and Grok now stream token by token, with reasoning kept separate from the final answer.",
+  "\u590D\u5236\u6458\u5F55\u9ED8\u8BA4\u683C\u5F0F\u5DF2\u79FB\u9664\u9057\u7559\u7684\u4FC4\u6587\u5B57\u7B26": "Removed the leftover Russian word from the default copied-excerpt format.",
+  "\u201C\u9605\u8BFB\u8BBE\u7F6E\u201D\u4FEE\u590D\u6A2A\u5411\u6EDA\u52A8\u548C\u6EDA\u52A8\u6761\u906E\u6321\u5185\u5BB9\u7684\u95EE\u9898": "Reading Settings no longer scrolls horizontally or lets its scrollbar cover controls.",
+  "\u63D2\u4EF6\u201C\u5916\u89C2\u201D\u9875\u65B0\u589E\u4E3B\u9898\u3001\u5B57\u4F53\u3001\u5B57\u53F7\u548C\u884C\u8DDD\uFF0C\u4F4E\u9891\u9009\u9879\u6536\u8FDB\u201C\u66F4\u591A\u5916\u89C2\u9009\u9879\u201D": "The Appearance page now includes theme, font, size, and line spacing, with infrequent controls folded into More appearance options."
 });
 var __erLang = "zh";
 function __erSetLang(v) {
@@ -56988,6 +57134,11 @@ var DEFAULT = {
   aiSecret: "",
   aiKey: "",
   aiModel: "",
+  // Model and reasoning choices belong to the provider, not to the global AI
+  // switch. A reader can move between Codex and Claude without losing either
+  // selection. aiModel remains as a migration bridge for pre-3.7 installs.
+  aiModels: {},
+  aiCliEfforts: {},
   aiBase: "",
   // Optional per-provider executable overrides. Empty means auto-detect from
   // GUI PATH plus common macOS/Linux/Windows install locations.
@@ -58053,6 +58204,15 @@ var EltonReader = class extends import_obsidian.Plugin {
     const d = await this.loadData();
     this.settings = { ...DEFAULT, ...(_a2 = d == null ? void 0 : d.settings) != null ? _a2 : {} };
     this.settings.aiCliPaths = { ...this.settings.aiCliPaths || {} };
+    this.settings.aiModels = { ...this.settings.aiModels || {} };
+    this.settings.aiCliEfforts = { ...this.settings.aiCliEfforts || {} };
+    if (this.settings.aiProvider && this.settings.aiModel && !this.settings.aiModels[this.settings.aiProvider]) {
+      this.settings.aiModels[this.settings.aiProvider] = this.settings.aiModel;
+    }
+    this.settings.aiModel = this.settings.aiProvider ? this.settings.aiModels[this.settings.aiProvider] || "" : "";
+    if (this.settings.quoteTemplate) {
+      this.settings.quoteTemplate = this.settings.quoteTemplate.replace(/—\s+из\s+(?=\[\[\{book\}\]\])/giu, "\u2014 ");
+    }
     let v33SettingsMigrated = false;
     const migratedTheme = migrateReaderTheme(this.settings.theme);
     if (migratedTheme !== this.settings.theme) v33SettingsMigrated = true;
@@ -59149,13 +59309,14 @@ function aiConfig(plugin) {
   const settings = plugin.settings;
   const id = settings.aiProvider || "";
   const p = aiProviderFor(id);
-  if (!p) return { id: "", provider: null, transport: "http", base: "", model: "", key: "", needsKey: false, cliPath: "" };
+  if (!p) return { id: "", provider: null, transport: "http", base: "", model: "", effort: "", key: "", needsKey: false, cliPath: "" };
   return {
     id,
     provider: p,
     transport: p.transport || "http",
     base: normalizeAiBase(settings.aiBase || p.base),
-    model: settings.aiModel || p.model,
+    model: String(settings.aiModels && settings.aiModels[id] || settings.aiModel || p.model || "").trim(),
+    effort: String(settings.aiCliEfforts && settings.aiCliEfforts[id] || "").trim(),
     key: aiSecretValue(plugin),
     needsKey: p.needsKey,
     cliPath: String(settings.aiCliPaths && settings.aiCliPaths[id] || "").trim()
@@ -59303,12 +59464,11 @@ async function aiExplain(text, plugin, turns, book, options = {}) {
     const result = await runCliAi(cfg.id, {
       messages,
       model: cfg.model,
+      effort: cfg.effort,
       binaryPath: cfg.cliPath,
-      signal: options.signal
+      signal: options.signal,
+      onDelta: options.onDelta
     });
-    if (typeof options.onDelta === "function") {
-      options.onDelta({ content: result.answer, reasoning: "", answer: result.answer, reasoningText: "" });
-    }
     return result.answer;
   }
   if (cfg.needsKey && !cfg.key) {
@@ -62275,7 +62435,7 @@ function deleteBookFromVault(app, plugin, file, after) {
     }
   }).open();
 }
-var QUOTE_TEMPLATE_DEFAULT = "> {text}\n\n\u2014 \u0438\u0437 [[{book}]]{page}{link}";
+var QUOTE_TEMPLATE_DEFAULT = "> {text}\n\n\u2014 [[{book}]]{page}{link}";
 function backlinkLabel() {
   return "\u21A9";
 }
@@ -62979,6 +63139,13 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 var WHATS_NEW = [
+  { v: "3.7.0", items: [
+    __ertr("CLI AI \u73B0\u5728\u4E3A Codex\u3001Claude Code \u548C Grok \u5206\u522B\u8BB0\u4F4F\u6A21\u578B\u4E0E\u601D\u8003\u5F3A\u5EA6"),
+    __ertr("Claude Code \u4E0E Grok \u652F\u6301\u9010\u5B57\u6D41\u5F0F\u8F93\u51FA\uFF0C\u601D\u8003\u8FC7\u7A0B\u4E0E\u6B63\u5F0F\u56DE\u7B54\u5206\u5F00\u663E\u793A"),
+    __ertr("\u590D\u5236\u6458\u5F55\u9ED8\u8BA4\u683C\u5F0F\u5DF2\u79FB\u9664\u9057\u7559\u7684\u4FC4\u6587\u5B57\u7B26"),
+    __ertr("\u201C\u9605\u8BFB\u8BBE\u7F6E\u201D\u4FEE\u590D\u6A2A\u5411\u6EDA\u52A8\u548C\u6EDA\u52A8\u6761\u906E\u6321\u5185\u5BB9\u7684\u95EE\u9898"),
+    __ertr("\u63D2\u4EF6\u201C\u5916\u89C2\u201D\u9875\u65B0\u589E\u4E3B\u9898\u3001\u5B57\u4F53\u3001\u5B57\u53F7\u548C\u884C\u8DDD\uFF0C\u4F4E\u9891\u9009\u9879\u6536\u8FDB\u201C\u66F4\u591A\u5916\u89C2\u9009\u9879\u201D")
+  ] },
   { v: "3.6.0", items: [
     __ertr("\u8FFD\u52A0\u6458\u5F55\u540E\u53EA\u5728\u7B2C\u4E00\u6B21\u8BE2\u95EE\u662F\u5426\u6253\u5F00\u9605\u8BFB\u7B14\u8BB0\uFF0C\u540E\u7EED\u4E0D\u518D\u6253\u65AD\u9605\u8BFB"),
     __ertr("AI \u5FEB\u6377\u63D0\u793A\u8BCD\u652F\u6301\u65B0\u589E\u3001\u4FEE\u6539\u3001\u5220\u9664\u548C\u6062\u590D\u9ED8\u8BA4"),
@@ -66209,7 +66376,7 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       }
       d.setValue(s.aiProvider || "").onChange(async (v) => {
         s.aiProvider = v;
-        s.aiModel = "";
+        s.aiModel = s.aiModels && s.aiModels[v] || "";
         s.aiBase = "";
         await this.plugin.saveAll();
         redraw();
@@ -66282,10 +66449,12 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       }
     }
     const addModelSetting = (target) => {
-      new import_obsidian.Setting(target).setName(__ertr("\u6A21\u578B")).setDesc(p.transport === "cli" ? __ertr("\u7559\u7A7A\u4F7F\u7528 CLI \u5F53\u524D\u7684\u9ED8\u8BA4\u6A21\u578B\u3002") : p.model ? __ertr("\u53EF\u76F4\u63A5\u4F7F\u7528\u63A8\u8350\u6A21\u578B\uFF0C\u4E5F\u53EF\u4EE5\u586B\u5199\u670D\u52A1\u5546\u63D0\u4F9B\u7684\u5176\u4ED6\u6A21\u578B ID\u3002") : __ertr("\u8BF7\u8F93\u5165\u670D\u52A1\u5546\u63A7\u5236\u53F0\u663E\u793A\u7684\u6A21\u578B\u6216\u63A8\u7406\u63A5\u5165\u70B9 ID\u3002")).addText((t) => {
+      new import_obsidian.Setting(target).setName(__ertr("\u6A21\u578B")).setDesc(p.transport === "cli" ? __ertr("\u6BCF\u4E2A CLI \u5355\u72EC\u8BB0\u4F4F\u6A21\u578B\u3002\u7559\u7A7A\u4F7F\u7528\u8BE5 CLI \u7684\u9ED8\u8BA4\u6A21\u578B\uFF0C\u4E5F\u53EF\u4EE5\u76F4\u63A5\u8F93\u5165\u672C\u673A\u652F\u6301\u7684\u6A21\u578B ID\u3002") : p.model ? __ertr("\u53EF\u76F4\u63A5\u4F7F\u7528\u63A8\u8350\u6A21\u578B\uFF0C\u4E5F\u53EF\u4EE5\u586B\u5199\u670D\u52A1\u5546\u63D0\u4F9B\u7684\u5176\u4ED6\u6A21\u578B ID\u3002") : __ertr("\u8BF7\u8F93\u5165\u670D\u52A1\u5546\u63A7\u5236\u53F0\u663E\u793A\u7684\u6A21\u578B\u6216\u63A8\u7406\u63A5\u5165\u70B9 ID\u3002")).addText((t) => {
         const listId = `er-ai-models-${p.category}-${s.aiProvider}`;
         t.setPlaceholder(p.transport === "cli" ? __ertr("\u9ED8\u8BA4\u6A21\u578B") : p.model || __ertr("\u6A21\u578B ID")).setValue(s.aiModel || "").onChange(async (v) => {
           s.aiModel = v.trim();
+          if (!s.aiModels || typeof s.aiModels !== "object") s.aiModels = {};
+          s.aiModels[s.aiProvider] = s.aiModel;
           await this.plugin.saveAll();
         });
         if (p.models && p.models.length) {
@@ -66295,6 +66464,25 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
         }
       });
     };
+    const addCliReasoningSetting = (target) => {
+      if (!s.aiCliEfforts || typeof s.aiCliEfforts !== "object") s.aiCliEfforts = {};
+      const labels = {
+        "": __ertr("\u8DDF\u968F\u6A21\u578B"),
+        minimal: __ertr("\u6700\u5FEB"),
+        low: __ertr("\u5FEB\u901F"),
+        medium: __ertr("\u6807\u51C6"),
+        high: __ertr("\u6DF1\u5165"),
+        xhigh: __ertr("\u6781\u6DF1"),
+        max: __ertr("\u6700\u6DF1")
+      };
+      new import_obsidian.Setting(target).setName(__ertr("\u601D\u8003\u5F3A\u5EA6")).setDesc(__ertr("\u4E0D\u540C CLI \u6CA1\u6709\u7EDF\u4E00\u7684\u201C\u601D\u8003\u5F00\u5173\u201D\u3002\u9009\u62E9\u201C\u5FEB\u901F\u201D\u53EF\u51CF\u5C11\u7B49\u5F85\uFF0C\u590D\u6742\u5185\u5BB9\u518D\u63D0\u9AD8\u5F3A\u5EA6\uFF1B\u4E0D\u652F\u6301\u7684\u6863\u4F4D\u4E0D\u4F1A\u663E\u793A\u3002")).addDropdown((d) => {
+        cliReasoningEfforts(s.aiProvider).forEach((value) => d.addOption(value, labels[value] || value));
+        d.setValue(s.aiCliEfforts[s.aiProvider] || "").onChange(async (value) => {
+          s.aiCliEfforts[s.aiProvider] = value;
+          await this.plugin.saveAll();
+        });
+      });
+    };
     const addBaseSetting = (target) => {
       new import_obsidian.Setting(target).setName(__ertr("\u63A5\u53E3\u5730\u5740")).setDesc(__ertr("\u901A\u5E38\u4FDD\u6301\u4E3A\u7A7A\uFF1B\u53EA\u6709\u533A\u57DF\u5730\u5740\u3001\u4EE3\u7406\u6216\u81EA\u5EFA\u670D\u52A1\u9700\u8981\u4FEE\u6539\u3002")).addText((t) => t.setPlaceholder(p.base || "https://\u2026/v1").setValue(s.aiBase || "").onChange(async (v) => {
         s.aiBase = normalizeAiBase(v);
@@ -66302,9 +66490,10 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       }));
     };
     const providerId = s.aiProvider || "";
-    const modelMustBeVisible = p.transport !== "cli" && (!p.model || p.local);
+    const modelMustBeVisible = p.transport === "cli" || !p.model || p.local;
     const baseMustBeVisible = providerId === "custom";
     if (modelMustBeVisible) addModelSetting(c);
+    if (p.transport === "cli") addCliReasoningSetting(c);
     if (baseMustBeVisible) addBaseSetting(c);
     const advancedHasModel = !modelMustBeVisible;
     const advancedHasBase = p.transport !== "cli" && !baseMustBeVisible;
@@ -66343,15 +66532,53 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
     }));
     c.createEl("div", {
       cls: "er-set-note",
-      text: p.transport === "cli" ? __ertr("\u9605\u8BFB\u5668\u4F1A\u5728\u9694\u79BB\u7684\u4E34\u65F6\u76EE\u5F55\u4E2D\u8FD0\u884C {0}\uFF0C\u7981\u7528\u5DE5\u5177\u3001\u6587\u4EF6\u7F16\u8F91\u548C\u9879\u76EE\u89C4\u5219\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u4F7F\u7528 AI \u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5BF9\u5E94\u670D\u52A1\u3002", p.label) : p.local ? __ertr("\u672C\u5730\u6A21\u578B\u53EA\u5728\u8FD9\u53F0\u8BBE\u5907\u4E0A\u8FD0\u884C\uFF1B\u624B\u673A\u65E0\u6CD5\u8FDE\u63A5\u7535\u8111\u7684 localhost\u3002") : __ertr("\u53EA\u6709\u4F60\u4E3B\u52A8\u4F7F\u7528 AI \u65F6\uFF0C\u9009\u4E2D\u7684\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u5230 {0}\u3002", cfg.base)
+      text: p.transport === "cli" ? __ertr("\u9605\u8BFB\u5668\u4F1A\u5728\u9694\u79BB\u7684\u4E34\u65F6\u76EE\u5F55\u4E2D\u8FD0\u884C {0}\uFF0C\u7981\u7528\u5DE5\u5177\u3001\u6587\u4EF6\u7F16\u8F91\u548C\u9879\u76EE\u89C4\u5219\u3002Claude \u4E0E Grok \u4F1A\u9010\u5B57\u663E\u793A\uFF1BCodex \u7A33\u5B9A\u547D\u4EE4\u884C\u76EE\u524D\u4F1A\u5728\u4E00\u6761\u56DE\u7B54\u5B8C\u6210\u540E\u8FD4\u56DE\u7ED3\u6784\u5316\u7ED3\u679C\uFF0C\u9009\u62E9\u66F4\u5FEB\u7684\u6A21\u578B\u6216\u66F4\u4F4E\u601D\u8003\u5F3A\u5EA6\u53EF\u7F29\u77ED\u7B49\u5F85\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u4F7F\u7528 AI \u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5BF9\u5E94\u670D\u52A1\u3002", p.label) : p.local ? __ertr("\u672C\u5730\u6A21\u578B\u53EA\u5728\u8FD9\u53F0\u8BBE\u5907\u4E0A\u8FD0\u884C\uFF1B\u624B\u673A\u65E0\u6CD5\u8FDE\u63A5\u7535\u8111\u7684 localhost\u3002") : __ertr("\u53EA\u6709\u4F60\u4E3B\u52A8\u4F7F\u7528 AI \u65F6\uFF0C\u9009\u4E2D\u7684\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u5230 {0}\u3002", cfg.base)
     });
   }
   // Set once and forgotten: kept out of the tab so what remains there is only
   // what a reader reaches for mid-book. Same controls, same behaviour.
   _groupAppearance(c) {
-    this._sectionIntro(c, __ertr("\u041E\u0444\u043E\u0440\u043C\u043B\u0435\u043D\u0438\u0435"), __ertr("\u041C\u0435\u043D\u044F\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u043A\u043D\u0438\u0433\u0438. \u041F\u0430\u043D\u0435\u043B\u0438 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F \u0432\u0441\u0435\u0433\u0434\u0430 \u0441\u043B\u0435\u0434\u0443\u044E\u0442 \u0442\u0435\u043C\u0435 Obsidian."));
-    c.createEl("h3", { text: __ertr("\u0420\u0435\u0436\u0438\u043C\u044B") });
-    new import_obsidian.Setting(c).setName(__ertr("\u0421\u0432\u043E\u0439 \u0432\u0438\u0434 \u043D\u0430 \u043A\u0430\u0436\u0434\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435")).setDesc(__ertr(
+    const s = this.plugin.settings;
+    this._sectionIntro(c, __ertr("\u041E\u0444\u043E\u0440\u043C\u043B\u0435\u043D\u0438\u0435"), __ertr("\u8FD9\u91CC\u4E0E\u9605\u8BFB\u5668\u5185\u7684\u201C\u9605\u8BFB\u8BBE\u7F6E\u201D\u540C\u6B65\uFF1B\u6539\u53D8\u7684\u662F\u4E66\u9875\uFF0C\u5DE5\u5177\u680F\u4ECD\u8DDF\u968F Obsidian\u3002"));
+    const applyAppearance = async (repaginate = true) => {
+      await this.plugin.saveAll();
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        const view = leaf.view;
+        if (!view) continue;
+        if (typeof view.applyVars === "function") view.applyVars();
+        else if (typeof view._applyTheme === "function") view._applyTheme();
+        if (repaginate && view.bookHtml && typeof view.repaginate === "function") await view.repaginate();
+        else if (repaginate && typeof view._applyContentStyle === "function") view._applyContentStyle();
+      }
+    };
+    c.createEl("h3", { text: __ertr("\u9605\u8BFB\u5916\u89C2") });
+    new import_obsidian.Setting(c).setName(__ertr("\u4E3B\u9898")).setDesc(__ertr("\u9009\u62E9\u9002\u5408\u5F53\u524D\u73AF\u5883\u7684\u4E66\u9875\u80CC\u666F\u3002")).addDropdown((d) => {
+      READER_THEME_CHOICES.forEach((id) => d.addOption(id, readerThemeLabel(id)));
+      d.setValue(selectedReaderTheme(s)).onChange(async (id) => {
+        setReaderTheme(s, id);
+        await applyAppearance(false);
+      });
+    });
+    new import_obsidian.Setting(c).setName(__ertr("\u6B63\u6587\u5B57\u4F53")).setDesc(__ertr("\u7528\u4E8E\u4E66\u7C4D\u6B63\u6587\uFF1B\u4E2D\u82F1\u6587\u5B57\u4F53\u540D\u79F0\u4FDD\u6301\u539F\u540D\u3002")).addDropdown((d) => {
+      erReaderFonts().forEach((font) => d.addOption(font.id, erFontLabel(font)));
+      d.setValue(s.fontFamily || "georgia").onChange(async (font) => {
+        s.fontFamily = font;
+        await applyAppearance(true);
+      });
+    });
+    new import_obsidian.Setting(c).setName(__ertr("\u5B57\u53F7")).setDesc(__ertr("\u9605\u8BFB\u6B63\u6587\u5927\u5C0F\uFF0C\u4E0E\u4E66\u5185\u8BBE\u7F6E\u5B9E\u65F6\u540C\u6B65\u3002")).addSlider((slider) => slider.setLimits(12, 32, 1).setValue(s.fontSize || 18).setDynamicTooltip().onChange(async (size) => {
+      s.fontSize = size;
+      await applyAppearance(true);
+    }));
+    new import_obsidian.Setting(c).setName(__ertr("\u884C\u8DDD")).setDesc(__ertr("\u4E2D\u6587\u957F\u6587\u901A\u5E38\u4F7F\u7528 1.6\u20131.8 \u66F4\u8212\u9002\u3002")).addDropdown((d) => d.addOption("1.4", __ertr("\u7D27\u51D1 \xB7 1.4")).addOption("1.6", __ertr("\u6807\u51C6 \xB7 1.6")).addOption("1.8", __ertr("\u8212\u9002 \xB7 1.8")).addOption("2.1", __ertr("\u5BBD\u677E \xB7 2.1")).setValue(String(s.lineHeight || 1.8)).onChange(async (value) => {
+      s.lineHeight = Number(value);
+      await applyAppearance(true);
+    }));
+    const advanced = c.createEl("details", { cls: "er-settings-disclosure" });
+    advanced.createEl("summary", { text: __ertr("\u66F4\u591A\u5916\u89C2\u9009\u9879") });
+    const body = advanced.createDiv("er-settings-disclosure-body");
+    body.createEl("h3", { text: __ertr("\u663E\u793A\u4E0E\u8BBE\u5907") });
+    new import_obsidian.Setting(body).setName(__ertr("\u0421\u0432\u043E\u0439 \u0432\u0438\u0434 \u043D\u0430 \u043A\u0430\u0436\u0434\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435")).setDesc(__ertr(
       "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430, \u0442\u0435\u043C\u0430, \u0448\u0440\u0438\u0444\u0442, \u0438\u043D\u0442\u0435\u0440\u0432\u0430\u043B, \u0447\u0438\u0441\u043B\u043E \u043A\u043E\u043B\u043E\u043D\u043E\u043A \u0438 \u0432\u044B\u0440\u0430\u0432\u043D\u0438\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u044E\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E \u0434\u043B\u044F \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u0430, \u043F\u043B\u0430\u043D\u0448\u0435\u0442\u0430 \u0438 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0430. \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0445\u0440\u0430\u043D\u044F\u0442\u0441\u044F \u0432 \u043E\u0434\u043D\u043E\u043C \u0444\u0430\u0439\u043B\u0435 \u0438 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u044E\u0442\u0441\u044F, \u043D\u043E \u043A\u0430\u0436\u0434\u043E\u0435 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E \u0447\u0438\u0442\u0430\u0435\u0442 \u0441\u0432\u043E\u044E \u0447\u0430\u0441\u0442\u044C, \u043F\u043E\u044D\u0442\u043E\u043C\u0443 \u043A\u0440\u0443\u043F\u043D\u044B\u0439 \u0448\u0440\u0438\u0444\u0442 \u043D\u0430 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0435 \u0431\u043E\u043B\u044C\u0448\u0435 \u043D\u0435 \u0434\u0435\u043B\u0430\u0435\u0442 \u0435\u0433\u043E \u043E\u0433\u0440\u043E\u043C\u043D\u044B\u043C \u043D\u0430 \u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440\u0435. \u041F\u0430\u043F\u043A\u0438, \u0448\u0430\u0431\u043B\u043E\u043D\u044B \u0438 \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u0447\u0442\u0435\u043D\u0438\u044F \u043E\u0441\u0442\u0430\u044E\u0442\u0441\u044F \u043E\u0431\u0449\u0438\u043C\u0438. \u042D\u0442\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u043E: {0}.",
       __ertr({ desktop: "\u043A\u043E\u043C\u043F\u044C\u044E\u0442\u0435\u0440", tablet: "\u043F\u043B\u0430\u043D\u0448\u0435\u0442", phone: "\u0442\u0435\u043B\u0435\u0444\u043E\u043D" }[erDeviceKey()])
     )).addToggle((t) => t.setValue(this.plugin.settings.perDevice === true).onChange(async (v) => {
@@ -66359,38 +66586,31 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       await this.plugin.saveAll();
       this.display();
     }));
-    new import_obsidian.Setting(c).setName(__ertr("\u0420\u0435\u0436\u0438\u043C \u0434\u043B\u044F e-ink \u0447\u0438\u0442\u0430\u043B\u043E\u043A")).setDesc(__ertr("\u0414\u043B\u044F Obsidian \u043D\u0430 Android-\u0447\u0438\u0442\u0430\u043B\u043A\u0435 \u0441 \u044D\u043B\u0435\u043A\u0442\u0440\u043E\u043D\u043D\u044B\u043C\u0438 \u0447\u0435\u0440\u043D\u0438\u043B\u0430\u043C\u0438. \u0423\u0431\u0438\u0440\u0430\u0435\u0442 \u0430\u043D\u0438\u043C\u0430\u0446\u0438\u0438, \u043F\u043B\u0430\u0432\u043D\u044B\u0435 \u043F\u0435\u0440\u0435\u0445\u043E\u0434\u044B, \u0442\u0435\u043D\u0438 \u0438 \u0440\u0430\u0437\u043C\u044B\u0442\u0438\u0435 \u2014 \u043E\u043D\u0438 \u043E\u0441\u0442\u0430\u0432\u043B\u044F\u044E\u0442 \u043D\u0430 \u0442\u0430\u043A\u043E\u043C \u044D\u043A\u0440\u0430\u043D\u0435 \u0441\u043B\u0435\u0434\u044B. \u0427\u0438\u0441\u0442\u044B\u0439 \u0447\u0451\u0440\u043D\u044B\u0439 \u043D\u0430 \u0431\u0435\u043B\u043E\u043C, \u0436\u0451\u0441\u0442\u043A\u0438\u0435 \u0440\u0430\u043C\u043A\u0438, \u043A\u0440\u0443\u043F\u043D\u0435\u0435 \u043A\u043D\u043E\u043F\u043A\u0438, \u043B\u0438\u0441\u0442\u0430\u043D\u0438\u0435 \u0431\u0435\u0437 \u0441\u043A\u043E\u043B\u044C\u0436\u0435\u043D\u0438\u044F.")).addToggle((t) => t.setValue(this.plugin.settings.einkMode === true).onChange(async (v) => {
+    new import_obsidian.Setting(body).setName(__ertr("\u0420\u0435\u0436\u0438\u043C \u0434\u043B\u044F e-ink \u0447\u0438\u0442\u0430\u043B\u043E\u043A")).setDesc(__ertr("\u0414\u043B\u044F Obsidian \u043D\u0430 Android-\u0447\u0438\u0442\u0430\u043B\u043A\u0435 \u0441 \u044D\u043B\u0435\u043A\u0442\u0440\u043E\u043D\u043D\u044B\u043C\u0438 \u0447\u0435\u0440\u043D\u0438\u043B\u0430\u043C\u0438. \u0423\u0431\u0438\u0440\u0430\u0435\u0442 \u0430\u043D\u0438\u043C\u0430\u0446\u0438\u0438, \u043F\u043B\u0430\u0432\u043D\u044B\u0435 \u043F\u0435\u0440\u0435\u0445\u043E\u0434\u044B, \u0442\u0435\u043D\u0438 \u0438 \u0440\u0430\u0437\u043C\u044B\u0442\u0438\u0435 \u2014 \u043E\u043D\u0438 \u043E\u0441\u0442\u0430\u0432\u043B\u044F\u044E\u0442 \u043D\u0430 \u0442\u0430\u043A\u043E\u043C \u044D\u043A\u0440\u0430\u043D\u0435 \u0441\u043B\u0435\u0434\u044B. \u0427\u0438\u0441\u0442\u044B\u0439 \u0447\u0451\u0440\u043D\u044B\u0439 \u043D\u0430 \u0431\u0435\u043B\u043E\u043C, \u0436\u0451\u0441\u0442\u043A\u0438\u0435 \u0440\u0430\u043C\u043A\u0438, \u043A\u0440\u0443\u043F\u043D\u0435\u0435 \u043A\u043D\u043E\u043F\u043A\u0438, \u043B\u0438\u0441\u0442\u0430\u043D\u0438\u0435 \u0431\u0435\u0437 \u0441\u043A\u043E\u043B\u044C\u0436\u0435\u043D\u0438\u044F.")).addToggle((t) => t.setValue(this.plugin.settings.einkMode === true).onChange(async (v) => {
       this.plugin.settings.einkMode = v;
       if (v) this.plugin.settings.theme = "eink";
       else if (this.plugin.settings.theme === "eink") this.plugin.settings.theme = "auto";
-      await this.plugin.saveAll();
-      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
-        const view = leaf.view;
-        if (view && view.applyVars) {
-          view.applyVars();
-          if (view.bookHtml) view.repaginate();
-        }
-      }
+      await applyAppearance(true);
     }));
-    c.createEl("h3", { text: __ertr("\u0422\u0435\u043A\u0441\u0442 \u043D\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0435") });
-    new import_obsidian.Setting(c).setName(__ertr("\u0412\u044B\u0440\u0430\u0432\u043D\u0438\u0432\u0430\u043D\u0438\u0435 \u0442\u0435\u043A\u0441\u0442\u0430")).setDesc(__ertr("\u041A\u0430\u043A \u0432\u044B\u0440\u0430\u0432\u043D\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u0435\u043A\u0441\u0442 \u0432 \u043A\u043E\u043B\u043E\u043D\u043A\u0435 \u0447\u0442\u0435\u043D\u0438\u044F. \u041C\u043E\u0436\u043D\u043E \u043C\u0435\u043D\u044F\u0442\u044C \u0438 \u043D\u0430 \u043B\u0435\u0442\u0443 \u2014 \u0432 \u043F\u0430\u043D\u0435\u043B\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043A \u0447\u0442\u0435\u043D\u0438\u044F (\u0438\u043A\u043E\u043D\u043A\u0430 \u043F\u043E\u043B\u0437\u0443\u043D\u043A\u043E\u0432) \u0432 \u0441\u0430\u043C\u043E\u0439 \u043A\u043D\u0438\u0433\u0435. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C.")).addDropdown((d) => d.addOption("left", __ertr("\u0421\u043B\u0435\u0432\u0430")).addOption("justify", __ertr("\u041F\u043E \u0448\u0438\u0440\u0438\u043D\u0435")).addOption("center", __ertr("\u041F\u043E \u0446\u0435\u043D\u0442\u0440\u0443")).addOption("right", __ertr("\u0421\u043F\u0440\u0430\u0432\u0430")).setValue(this.plugin.settings.textAlign || "left").onChange(async (v) => {
+    body.createEl("h3", { text: __ertr("\u7248\u9762\u7EC6\u8282") });
+    new import_obsidian.Setting(body).setName(__ertr("\u0412\u044B\u0440\u0430\u0432\u043D\u0438\u0432\u0430\u043D\u0438\u0435 \u0442\u0435\u043A\u0441\u0442\u0430")).setDesc(__ertr("\u041A\u0430\u043A \u0432\u044B\u0440\u0430\u0432\u043D\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u0435\u043A\u0441\u0442 \u0432 \u043A\u043E\u043B\u043E\u043D\u043A\u0435 \u0447\u0442\u0435\u043D\u0438\u044F. \u041C\u043E\u0436\u043D\u043E \u043C\u0435\u043D\u044F\u0442\u044C \u0438 \u043D\u0430 \u043B\u0435\u0442\u0443 \u2014 \u0432 \u043F\u0430\u043D\u0435\u043B\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043A \u0447\u0442\u0435\u043D\u0438\u044F (\u0438\u043A\u043E\u043D\u043A\u0430 \u043F\u043E\u043B\u0437\u0443\u043D\u043A\u043E\u0432) \u0432 \u0441\u0430\u043C\u043E\u0439 \u043A\u043D\u0438\u0433\u0435. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C.")).addDropdown((d) => d.addOption("left", __ertr("\u0421\u043B\u0435\u0432\u0430")).addOption("justify", __ertr("\u041F\u043E \u0448\u0438\u0440\u0438\u043D\u0435")).addOption("center", __ertr("\u041F\u043E \u0446\u0435\u043D\u0442\u0440\u0443")).addOption("right", __ertr("\u0421\u043F\u0440\u0430\u0432\u0430")).setValue(this.plugin.settings.textAlign || "left").onChange(async (v) => {
       this.plugin.settings.textAlign = v;
-      await this.plugin.saveAll();
+      await applyAppearance(true);
     }));
-    new import_obsidian.Setting(c).setName(__ertr("\u041F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0442\u0435\u043A\u0441\u0442\u0430 \u043D\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0435")).setDesc(__ertr("\u0415\u0441\u043B\u0438 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u0430 \u043D\u0435 \u0434\u043E \u043A\u043E\u043D\u0446\u0430 (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u0432 \u043A\u043E\u043D\u0446\u0435 \u0433\u043B\u0430\u0432\u044B), \u0442\u0435\u043A\u0441\u0442 \u043C\u043E\u0436\u043D\u043E \u043D\u0435 \u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0442\u044C \u043F\u0440\u0438\u0436\u0430\u0442\u044B\u043C \u043A \u0432\u0435\u0440\u0445\u0443. \u041C\u0435\u043D\u044F\u0435\u0442\u0441\u044F \u0438 \u043D\u0430 \u043B\u0435\u0442\u0443 \u2014 \u0432 \u043F\u0430\u043D\u0435\u043B\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043A \u0447\u0442\u0435\u043D\u0438\u044F.")).addDropdown((d) => d.addOption("top", __ertr("\u0421\u0432\u0435\u0440\u0445\u0443")).addOption("center", __ertr("\u041F\u043E \u0446\u0435\u043D\u0442\u0440\u0443")).addOption("bottom", __ertr("\u0421\u043D\u0438\u0437\u0443")).setValue(this.plugin.settings.vAlign || "top").onChange(async (v) => {
+    new import_obsidian.Setting(body).setName(__ertr("\u041F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0442\u0435\u043A\u0441\u0442\u0430 \u043D\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0435")).setDesc(__ertr("\u0415\u0441\u043B\u0438 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u0430 \u043D\u0435 \u0434\u043E \u043A\u043E\u043D\u0446\u0430 (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u0432 \u043A\u043E\u043D\u0446\u0435 \u0433\u043B\u0430\u0432\u044B), \u0442\u0435\u043A\u0441\u0442 \u043C\u043E\u0436\u043D\u043E \u043D\u0435 \u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0442\u044C \u043F\u0440\u0438\u0436\u0430\u0442\u044B\u043C \u043A \u0432\u0435\u0440\u0445\u0443. \u041C\u0435\u043D\u044F\u0435\u0442\u0441\u044F \u0438 \u043D\u0430 \u043B\u0435\u0442\u0443 \u2014 \u0432 \u043F\u0430\u043D\u0435\u043B\u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043A \u0447\u0442\u0435\u043D\u0438\u044F.")).addDropdown((d) => d.addOption("top", __ertr("\u0421\u0432\u0435\u0440\u0445\u0443")).addOption("center", __ertr("\u041F\u043E \u0446\u0435\u043D\u0442\u0440\u0443")).addOption("bottom", __ertr("\u0421\u043D\u0438\u0437\u0443")).setValue(this.plugin.settings.vAlign || "top").onChange(async (v) => {
       this.plugin.settings.vAlign = v;
-      await this.plugin.saveAll();
+      await applyAppearance(true);
     }));
-    new import_obsidian.Setting(c).setName(__ertr("\u041F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u043A\u0430\u0440\u0442\u0438\u043D\u043A\u0438 \u0438\u0437 \u043A\u043D\u0438\u0433\u0438")).setDesc(__ertr("\u041F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E \u0412\u042B\u041A\u041B: \u0435\u0441\u043B\u0438 \u0438\u0437 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B \u0438\u0437\u0432\u043B\u0435\u043A\u0430\u0435\u0442\u0441\u044F \u0442\u0435\u043A\u0441\u0442 \u2014 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0447\u0438\u0441\u0442\u044B\u0439 \u0442\u0435\u043A\u0441\u0442. \u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u043D\u0430\u0434 \u0442\u0435\u043A\u0441\u0442\u043E\u043C \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u043B\u0438\u0441\u044C \u0438\u043B\u043B\u044E\u0441\u0442\u0440\u0430\u0446\u0438\u0438, \u0441\u0445\u0435\u043C\u044B \u0438 \u0433\u0440\u0430\u0444\u0438\u043A\u0438: \u0432\u044B\u0440\u0435\u0437\u0430\u044E\u0442\u0441\u044F \u0441\u0430\u043C\u0438 \u043A\u0430\u0440\u0442\u0438\u043D\u043A\u0438, \u0430 \u043D\u0435 \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u0441\u0435\u0439 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B. \u041D\u0430 \u0441\u043A\u0430\u043D\u0430\u0445 (\u0433\u0434\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438\u0437\u0432\u043B\u0435\u0447\u044C \u043D\u0435\u043B\u044C\u0437\u044F) \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u043F\u043E-\u043F\u0440\u0435\u0436\u043D\u0435\u043C\u0443 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0446\u0435\u043B\u0438\u043A\u043E\u043C. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C.")).addToggle((t) => t.setValue(this.plugin.settings.pdfShowFiguresOnTextPages === true).onChange(async (v) => {
+    new import_obsidian.Setting(body).setName(__ertr("\u041F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u043A\u0430\u0440\u0442\u0438\u043D\u043A\u0438 \u0438\u0437 \u043A\u043D\u0438\u0433\u0438")).setDesc(__ertr("\u041F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E \u0412\u042B\u041A\u041B: \u0435\u0441\u043B\u0438 \u0438\u0437 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B \u0438\u0437\u0432\u043B\u0435\u043A\u0430\u0435\u0442\u0441\u044F \u0442\u0435\u043A\u0441\u0442 \u2014 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0447\u0438\u0441\u0442\u044B\u0439 \u0442\u0435\u043A\u0441\u0442. \u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u043D\u0430\u0434 \u0442\u0435\u043A\u0441\u0442\u043E\u043C \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u043B\u0438\u0441\u044C \u0438\u043B\u043B\u044E\u0441\u0442\u0440\u0430\u0446\u0438\u0438, \u0441\u0445\u0435\u043C\u044B \u0438 \u0433\u0440\u0430\u0444\u0438\u043A\u0438: \u0432\u044B\u0440\u0435\u0437\u0430\u044E\u0442\u0441\u044F \u0441\u0430\u043C\u0438 \u043A\u0430\u0440\u0442\u0438\u043D\u043A\u0438, \u0430 \u043D\u0435 \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u0441\u0435\u0439 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B. \u041D\u0430 \u0441\u043A\u0430\u043D\u0430\u0445 (\u0433\u0434\u0435 \u0442\u0435\u043A\u0441\u0442 \u0438\u0437\u0432\u043B\u0435\u0447\u044C \u043D\u0435\u043B\u044C\u0437\u044F) \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u043F\u043E-\u043F\u0440\u0435\u0436\u043D\u0435\u043C\u0443 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0446\u0435\u043B\u0438\u043A\u043E\u043C. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C.")).addToggle((t) => t.setValue(this.plugin.settings.pdfShowFiguresOnTextPages === true).onChange(async (v) => {
       this.plugin.settings.pdfShowFiguresOnTextPages = v;
       await this.plugin.saveAll();
     }));
-    new import_obsidian.Setting(c).setName(__ertr("\u041F\u043E\u0433\u0440\u0443\u0436\u0435\u043D\u0438\u0435 (Immersive)")).setDesc(__ertr("\u041F\u0430\u043D\u0435\u043B\u0438 \u0441\u0432\u0435\u0440\u0445\u0443 \u0438 \u0441\u043D\u0438\u0437\u0443 \u043C\u044F\u0433\u043A\u043E \u043F\u0440\u0438\u0442\u0443\u0445\u0430\u044E\u0442 \u0447\u0435\u0440\u0435\u0437 \u043F\u0430\u0440\u0443 \u0441\u0435\u043A\u0443\u043D\u0434 \u0431\u0435\u0437 \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F \u043C\u044B\u0448\u0438 \u0438 \u043C\u0433\u043D\u043E\u0432\u0435\u043D\u043D\u043E \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0438 \u2014 \u0447\u0442\u043E\u0431\u044B \u043D\u0438\u0447\u0442\u043E \u043D\u0435 \u043E\u0442\u0432\u043B\u0435\u043A\u0430\u043B\u043E \u043E\u0442 \u0442\u0435\u043A\u0441\u0442\u0430.")).addToggle((t) => t.setValue(this.plugin.settings.immersive !== false).onChange(async (v) => {
+    new import_obsidian.Setting(body).setName(__ertr("\u041F\u043E\u0433\u0440\u0443\u0436\u0435\u043D\u0438\u0435 (Immersive)")).setDesc(__ertr("\u041F\u0430\u043D\u0435\u043B\u0438 \u0441\u0432\u0435\u0440\u0445\u0443 \u0438 \u0441\u043D\u0438\u0437\u0443 \u043C\u044F\u0433\u043A\u043E \u043F\u0440\u0438\u0442\u0443\u0445\u0430\u044E\u0442 \u0447\u0435\u0440\u0435\u0437 \u043F\u0430\u0440\u0443 \u0441\u0435\u043A\u0443\u043D\u0434 \u0431\u0435\u0437 \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F \u043C\u044B\u0448\u0438 \u0438 \u043C\u0433\u043D\u043E\u0432\u0435\u043D\u043D\u043E \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0438 \u2014 \u0447\u0442\u043E\u0431\u044B \u043D\u0438\u0447\u0442\u043E \u043D\u0435 \u043E\u0442\u0432\u043B\u0435\u043A\u0430\u043B\u043E \u043E\u0442 \u0442\u0435\u043A\u0441\u0442\u0430.")).addToggle((t) => t.setValue(this.plugin.settings.immersive !== false).onChange(async (v) => {
       this.plugin.settings.immersive = v;
       await this.plugin.saveAll();
     }));
     if (import_obsidian.Platform.isMobile) {
-      new import_obsidian.Setting(c).setName(__ertr("\u041E\u0442\u0441\u0442\u0443\u043F \u0441\u0432\u0435\u0440\u0445\u0443 \u043D\u0430 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0435")).setDesc(__ertr("\u041E\u0431\u044B\u0447\u043D\u043E \u0441\u0438\u0441\u0442\u0435\u043C\u0430 \u0441\u0430\u043C\u0430 \u0441\u043E\u043E\u0431\u0449\u0430\u0435\u0442 \u0432\u044B\u0441\u043E\u0442\u0443 \xAB\u0448\u0442\u043E\u0440\u043A\u0438\xBB \u0441 \u0447\u0430\u0441\u0430\u043C\u0438, \u0438 \u0432\u0435\u0440\u0445\u043D\u044F\u044F \u043F\u0430\u043D\u0435\u043B\u044C \u0432\u0441\u0442\u0430\u0451\u0442 \u043F\u043E\u0434 \u043D\u0435\u0439. \u041D\u0430 \u0447\u0430\u0441\u0442\u0438 Android-\u043E\u0431\u043E\u043B\u043E\u0447\u0435\u043A (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, Samsung One UI) \u043E\u043D\u0430 \u044D\u0442\u043E\u0433\u043E \u043D\u0435 \u0434\u0435\u043B\u0430\u0435\u0442 \u2014 \u043F\u0430\u043D\u0435\u043B\u044C \u0437\u0430\u0435\u0437\u0436\u0430\u0435\u0442 \u043F\u043E\u0434 \u0447\u0430\u0441\u044B. \u0422\u043E\u0433\u0434\u0430 \u0432\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0434\u0435\u0441\u044C \u0432\u044B\u0441\u043E\u0442\u0443 \u0432 \u043F\u0438\u043A\u0441\u0435\u043B\u044F\u0445, \u043E\u0431\u044B\u0447\u043D\u043E 24\u201348. \u041D\u043E\u043B\u044C \u2014 \u0434\u043E\u0432\u0435\u0440\u044F\u0442\u044C \u0441\u0438\u0441\u0442\u0435\u043C\u0435. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C.")).addText((t) => t.setPlaceholder("0").setValue(String(this.plugin.settings.mobileTopInset || 0)).onChange(async (v) => {
+      new import_obsidian.Setting(body).setName(__ertr("\u041E\u0442\u0441\u0442\u0443\u043F \u0441\u0432\u0435\u0440\u0445\u0443 \u043D\u0430 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0435")).setDesc(__ertr("\u041E\u0431\u044B\u0447\u043D\u043E \u0441\u0438\u0441\u0442\u0435\u043C\u0430 \u0441\u0430\u043C\u0430 \u0441\u043E\u043E\u0431\u0449\u0430\u0435\u0442 \u0432\u044B\u0441\u043E\u0442\u0443 \xAB\u0448\u0442\u043E\u0440\u043A\u0438\xBB \u0441 \u0447\u0430\u0441\u0430\u043C\u0438, \u0438 \u0432\u0435\u0440\u0445\u043D\u044F\u044F \u043F\u0430\u043D\u0435\u043B\u044C \u0432\u0441\u0442\u0430\u0451\u0442 \u043F\u043E\u0434 \u043D\u0435\u0439. \u041D\u0430 \u0447\u0430\u0441\u0442\u0438 Android-\u043E\u0431\u043E\u043B\u043E\u0447\u0435\u043A (\u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, Samsung One UI) \u043E\u043D\u0430 \u044D\u0442\u043E\u0433\u043E \u043D\u0435 \u0434\u0435\u043B\u0430\u0435\u0442 \u2014 \u043F\u0430\u043D\u0435\u043B\u044C \u0437\u0430\u0435\u0437\u0436\u0430\u0435\u0442 \u043F\u043E\u0434 \u0447\u0430\u0441\u044B. \u0422\u043E\u0433\u0434\u0430 \u0432\u043F\u0438\u0448\u0438\u0442\u0435 \u0437\u0434\u0435\u0441\u044C \u0432\u044B\u0441\u043E\u0442\u0443 \u0432 \u043F\u0438\u043A\u0441\u0435\u043B\u044F\u0445, \u043E\u0431\u044B\u0447\u043D\u043E 24\u201348. \u041D\u043E\u043B\u044C \u2014 \u0434\u043E\u0432\u0435\u0440\u044F\u0442\u044C \u0441\u0438\u0441\u0442\u0435\u043C\u0435. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C.")).addText((t) => t.setPlaceholder("0").setValue(String(this.plugin.settings.mobileTopInset || 0)).onChange(async (v) => {
         const n = Math.max(0, Math.min(120, Number(String(v).replace(/[^\d]/g, "")) || 0));
         this.plugin.settings.mobileTopInset = n;
         await this.plugin.saveAll();
