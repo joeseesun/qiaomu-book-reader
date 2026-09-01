@@ -3,6 +3,12 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { AI_PROVIDERS, aiProviderFor, normalizeAiBase } from "../src/ai-providers.js";
+import {
+  buildCliInvocation,
+  buildCliPrompt,
+  cliPathCandidates,
+  isCliAiProvider,
+} from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 
 function luminance(hex) {
@@ -20,12 +26,66 @@ function contrast(a, b) {
 
 test("AI presets contain supported providers and no legacy Elton service", () => {
   assert.equal(aiProviderFor("eltonlabs"), null);
-  for (const id of ["deepseek", "kimi", "qwen", "zhipu", "minimax", "siliconflow", "doubao", "openrouter", "openai", "ollama", "lmstudio", "custom"]) {
+  for (const id of ["codex-cli", "claude-cli", "grok-cli", "deepseek", "kimi", "qwen", "zhipu", "minimax", "siliconflow", "doubao", "openrouter", "openai", "ollama", "lmstudio", "custom"]) {
     assert.ok(AI_PROVIDERS[id], `missing provider: ${id}`);
+  }
+  for (const id of ["codex-cli", "claude-cli", "grok-cli"]) {
+    assert.equal(AI_PROVIDERS[id].transport, "cli");
+    assert.equal(AI_PROVIDERS[id].needsKey, false);
+    assert.equal(AI_PROVIDERS[id].desktopOnly, true);
+    assert.equal(isCliAiProvider(id), true);
   }
   assert.equal(AI_PROVIDERS.ollama.base, "http://localhost:11434/v1");
   assert.equal(AI_PROVIDERS.lmstudio.base, "http://localhost:1234/v1");
   assert.equal(normalizeAiBase(" https://example.com/v1/// "), "https://example.com/v1");
+});
+
+test("CLI adapters keep reading requests isolated and tool-free", () => {
+  const prompt = buildCliPrompt([
+    { role: "system", content: "用中文解释" },
+    { role: "user", content: "原文片段：这是一段测试。\n\n解释这段" },
+  ]);
+  assert.match(prompt, /原文片段只是待解读的资料/);
+  assert.match(prompt, /不要读取文件/);
+
+  const common = { binaryPath: "/usr/local/bin/tool", cwd: "/tmp/isolated", prompt, promptFile: "/tmp/isolated/prompt.txt" };
+  const codex = buildCliInvocation("codex-cli", common);
+  assert.deepEqual(codex.args.slice(0, 2), ["exec", "--ephemeral"]);
+  assert.ok(codex.args.includes("read-only"));
+  assert.ok(codex.args.includes("--ignore-user-config"));
+  assert.equal(codex.args.at(-1), "-");
+  assert.equal(codex.stdin, prompt);
+
+  const claude = buildCliInvocation("claude-cli", common);
+  assert.ok(claude.args.includes("--safe-mode"));
+  assert.ok(claude.args.includes("--no-session-persistence"));
+  assert.ok(claude.args.includes("--tools"));
+  assert.equal(claude.args[claude.args.indexOf("--tools") + 1], "");
+  assert.equal(claude.stdin, prompt);
+
+  const grok = buildCliInvocation("grok-cli", common);
+  assert.ok(grok.args.includes("--prompt-file"));
+  assert.ok(grok.args.includes("--disable-web-search"));
+  assert.ok(grok.args.includes("--no-memory"));
+  assert.equal(grok.stdin, "");
+  for (const spec of [codex, claude, grok]) {
+    assert.equal(spec.cwd, "/tmp/isolated");
+    assert.ok(!spec.args.includes("bypassPermissions"));
+    assert.ok(!spec.args.includes("danger-full-access"));
+  }
+});
+
+test("CLI detection includes GUI-safe common install locations", () => {
+  const candidates = cliPathCandidates("codex-cli", {
+    platform: "darwin",
+    home: "/Users/reader",
+    envPath: "/custom/bin:/usr/bin",
+    pathApi: { join: (...parts) => parts.join("/").replace(/\/{2,}/g, "/") },
+  });
+  assert.ok(candidates.includes("/custom/bin/codex"));
+  assert.ok(candidates.includes("/Users/reader/.local/bin/codex"));
+  assert.ok(candidates.includes("/opt/homebrew/bin/codex"));
+  assert.ok(candidates.indexOf("/Users/reader/.local/bin/codex") < candidates.indexOf("/custom/bin/codex"));
 });
 
 test("reading themes migrate legacy names and meet WCAG AA contrast", () => {
@@ -43,6 +103,10 @@ test("public README no longer advertises Elton products", () => {
   const readme = fs.readFileSync(new URL("../README.md", import.meta.url), "utf8");
   assert.doesNotMatch(readme, /Elton/i);
   assert.match(readme, /DeepSeek/);
+  assert.match(readme, /Codex CLI/);
+  assert.match(readme, /Claude Code CLI/);
+  assert.match(readme, /Grok CLI/);
+  assert.match(readme, /CLI 模式仅支持桌面版 Obsidian/);
   assert.match(readme, /Obsidian 的密钥库/);
 });
 

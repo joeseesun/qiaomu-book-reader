@@ -18,7 +18,7 @@
 | 专用阅读笔记 | 每本书自动关联一篇 Markdown 笔记，汇总划线与评论 |
 | 精确返回原文 | 笔记中的 `↩` 可跳回原书对应段落 |
 | 自动进度 | 翻页、滚动和关闭书籍时自动保存，不需要手动点击保存 |
-| 可选 AI 阅读 | 支持 DeepSeek、Kimi、千问、智谱、MiniMax、硅基流动、豆包、OpenRouter、OpenAI、Ollama 和 LM Studio |
+| 可选 AI 阅读 | 支持 Codex CLI、Claude Code CLI、Grok CLI、国产模型 API、OpenRouter、OpenAI、Ollama 和 LM Studio |
 
 ## 安装
 
@@ -48,6 +48,7 @@
 
 AI 默认关闭。启用后，可以围绕选中的原文解释、翻译、提炼关键概念并继续追问。
 
+- 本机账号：Codex CLI、Claude Code CLI、Grok CLI。安装并登录一次后，插件可直接复用账号，无需再填 API 密钥。
 - 国产模型：DeepSeek、Kimi、通义千问、智谱 GLM、MiniMax。
 - 聚合服务：硅基流动、豆包/火山方舟、OpenRouter。
 - 国际服务：OpenAI。
@@ -55,6 +56,8 @@ AI 默认关闭。启用后，可以围绕选中的原文解释、翻译、提�
 - 高级配置：任意 OpenAI 兼容接口。
 
 API 密钥保存在 Obsidian 的密钥库中，不会写入插件 `data.json`。设置页可发送一条不含书籍内容的最短消息测试连接。
+
+CLI 模式会自动检测可执行文件和登录状态，在独立临时目录中运行，禁用工具、文件编辑和项目规则；超时、停止生成或关闭窗口时会终止子进程并删除临时文件。CLI 模式仅支持桌面版 Obsidian。
 
 ## 阅读笔记如何工作
 
@@ -70,6 +73,7 @@ API 密钥保存在 Obsidian 的密钥库中，不会写入插件 `data.json`。
 | --- | --- | --- |
 | 翻译所选文字 | 当前选中的段落 | Google Translate |
 | AI 辅助阅读 | 当前选中的段落、书名和你的问题 | 你明确选择并配置的模型服务 |
+| 本机 CLI 账号 | 当前选中的段落、书名和你的问题 | Codex、Claude 或 Grok 的云端服务 |
 | 本地 AI | 当前选中的段落、书名和你的问题 | 本机 Ollama 或 LM Studio，不离开设备 |
 
 两项联网功能均默认关闭。插件不会自动发送整本书或整章内容。
@@ -105,7 +109,7 @@ Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. It 
 
 Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest).
 
-Reading works fully offline. Optional AI reading assistance supports DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
+Reading works fully offline. Optional AI reading assistance supports signed-in Codex CLI, Claude Code CLI and Grok CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI providers are desktop-only and still send the selected passage to their cloud service. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
 
 Maintained by [Qiaomu](https://qiaomu.ai). Third-party notices and upstream attribution are preserved in [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE).
 

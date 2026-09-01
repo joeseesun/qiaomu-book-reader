@@ -1,6 +1,7 @@
 // Provider metadata lives outside the settings UI so endpoints, model aliases
 // and help links can be reviewed and updated without touching reader logic.
 export const AI_PROVIDER_CATEGORIES = [
+  { id: "cli", label: "本机账号（无需 API 密钥）" },
   { id: "china", label: "国产模型" },
   { id: "aggregator", label: "聚合服务" },
   { id: "international", label: "国际服务" },
@@ -9,6 +10,39 @@ export const AI_PROVIDER_CATEGORIES = [
 ];
 
 export const AI_PROVIDERS = {
+  "codex-cli": {
+    label: "Codex CLI",
+    category: "cli",
+    transport: "cli",
+    needsKey: false,
+    binary: "codex",
+    model: "",
+    models: [],
+    desktopOnly: true,
+    description: "复用本机 Codex 的 ChatGPT 登录，无需再填 API 密钥。",
+  },
+  "claude-cli": {
+    label: "Claude Code CLI",
+    category: "cli",
+    transport: "cli",
+    needsKey: false,
+    binary: "claude",
+    model: "",
+    models: ["sonnet", "opus"],
+    desktopOnly: true,
+    description: "复用本机 Claude Code 登录，无需再填 API 密钥。",
+  },
+  "grok-cli": {
+    label: "Grok CLI",
+    category: "cli",
+    transport: "cli",
+    needsKey: false,
+    binary: "grok",
+    model: "",
+    models: ["grok-4.6", "grok-4.5"],
+    desktopOnly: true,
+    description: "复用本机 Grok 登录，无需再填 API 密钥。",
+  },
   deepseek: {
     label: "DeepSeek",
     category: "china",

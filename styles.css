@@ -1706,6 +1706,7 @@ body:not(.is-mobile) .er-bot {
   color: var(--text-on-accent);
 }
 .er-ai-modal .er-ai-send:active { transform: scale(0.94); }
+.er-ai-modal .er-ai-send.is-stop { background: var(--background-modifier-error); }
 @media (hover: hover) and (pointer: fine) {
   .er-ai-modal .er-ai-send:hover { background: var(--interactive-accent-hover); color: var(--text-on-accent); }
 }

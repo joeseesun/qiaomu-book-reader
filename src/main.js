@@ -10,6 +10,7 @@ import { AbstractInputSuggest, FuzzySuggestModal, ItemView, MarkdownRenderer, Me
 import * as pdfjsLib from "pdfjs-dist";
 import ePub from "epubjs";
 import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, normalizeAiBase } from "./ai-providers.js";
+import { probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
 
@@ -445,6 +446,38 @@ Object.assign(__erEN, {
   "API 密钥改用 Obsidian 密钥库存储，并增加连接测试": "API keys now use Obsidian SecretStorage, with a built-in connection test.",
   "阅读主题重做为纸白、暖纸、青瓷、夜间和电子墨水": "Redesigned reading themes: Paper White, Warm Paper, Celadon, Night, and E-ink.",
   "AI 阅读提示词改为中文阅读逻辑，移除旧服务默认值": "Rebuilt the AI reading prompt for Chinese readers and removed the legacy service default.",
+  "本机 CLI 与已登录账号": "Local CLI and signed-in account",
+  "自动检测 Codex、Claude Code 或 Grok 的安装路径，并复用已有登录。": "Automatically detect the installed Codex, Claude Code, or Grok CLI and reuse its existing login.",
+  "CLI 路径": "CLI path",
+  "留空自动检测；如果 Obsidian 找不到终端里的命令，请填写可执行文件的绝对路径。": "Leave empty for automatic detection. If Obsidian cannot see a command that works in Terminal, enter the executable's absolute path.",
+  "自动检测": "Auto-detect",
+  "已找到：{0}": "Found: {0}",
+  "未找到 {0}，请先安装或手动填写路径。": "Could not find {0}. Install it first or enter its path manually.",
+  "登录状态": "Login status",
+  "只检查 CLI 是否已安装并登录，不会发送书籍内容。": "Checks whether the CLI is installed and signed in. No book content is sent.",
+  "检查状态": "Check status",
+  "检查中…": "Checking…",
+  "已登录：{0}": "Signed in: {0}",
+  "未找到 CLI，请先安装或设置路径。": "CLI not found. Install it or set its path first.",
+  "CLI 尚未登录，请先在终端中完成登录。": "The CLI is not signed in. Complete its login flow in Terminal first.",
+  "留空使用 CLI 当前的默认模型。": "Leave empty to use the CLI's current default model.",
+  "默认模型": "Default model",
+  "本机 CLI 调用只支持桌面版 Obsidian。": "Local CLI providers are available only in Obsidian Desktop.",
+  "阅读器会在隔离的临时目录中运行 {0}，禁用工具、文件编辑和项目规则。只有你主动使用 AI 时，所选原文、书名和问题才会发送给对应服务。": "The reader runs {0} in an isolated temporary directory with tools, file editing, and project rules disabled. The selected passage, book title, and question are sent to that service only when you actively use AI.",
+  "开始测试会复用 CLI 账号发送一条不含书籍内容的最短消息，并可能消耗少量账号额度。": "The connection test reuses the CLI account to send one minimal message with no book content and may consume a small amount of account quota.",
+  "请先在桌面版 Obsidian 中使用本机 CLI。": "Use local CLI providers from Obsidian Desktop.",
+  "CLI 运行失败，请检查安装、登录和模型设置。": "The CLI failed. Check its installation, login, and model settings.",
+  "模型名称不可用，请留空使用 CLI 默认模型或填写有效名称。": "The model name is unavailable. Leave it empty to use the CLI default or enter a valid name.",
+  "AI 请求超时，请稍后重试。": "The AI request timed out. Try again later.",
+  "已停止生成。": "Generation stopped.",
+  "停止生成": "Stop generating",
+  "选中内容过长，请缩小选择范围。": "The selected passage is too long. Select a smaller passage.",
+  "AI 回答过长，已停止生成。": "The AI response was too long and has been stopped.",
+  "选择服务和模型；本机 CLI 可复用已登录账号，Ollama 与 LM Studio 在本机运行。": "Choose a service and model. Local CLIs can reuse signed-in accounts; Ollama and LM Studio run locally.",
+  "新增 Codex CLI、Claude Code CLI 和 Grok CLI，可复用本机已登录账号": "Added Codex CLI, Claude Code CLI, and Grok CLI using existing local sign-ins.",
+  "CLI 请求在隔离的临时目录运行，默认禁用工具、文件编辑和项目规则": "CLI requests run in isolated temporary directories with tools, file editing, and project rules disabled by default.",
+  "设置页可自动检测 CLI 路径、检查登录状态并发送最小连接测试": "Settings can auto-detect CLI paths, check login status, and send a minimal connection test.",
+  "CLI 生成可随时停止，超时或关闭对话时会清理整个子进程": "CLI generation can be stopped at any time, and the full subprocess group is cleaned up on timeout or when the dialog closes.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
@@ -620,6 +653,9 @@ const DEFAULT = {
   aiKey: "",
   aiModel: "",
   aiBase: "",
+  // Optional per-provider executable overrides. Empty means auto-detect from
+  // GUI PATH plus common macOS/Linux/Windows install locations.
+  aiCliPaths: {},
   aiInto: "中文",
   // Empty means the built-in instruction. A reader who wants a different kind
   // of answer writes their own here instead of getting the four fixed sections.
@@ -1811,6 +1847,7 @@ const EltonReader = class extends Plugin {
     let _a, _b;
     const d = await this.loadData();
     this.settings = { ...DEFAULT, ...(_a = d == null ? void 0 : d.settings) != null ? _a : {} };
+    this.settings.aiCliPaths = { ...(this.settings.aiCliPaths || {}) };
     let v33SettingsMigrated = false;
     // v3.3 replaces the old colour names with purpose-built reading themes.
     // Migrate both the shared appearance and any per-device profiles once.
@@ -3145,14 +3182,16 @@ function aiConfig(plugin) {
   const settings = plugin.settings;
   const id = settings.aiProvider || "";
   const p = aiProviderFor(id);
-  if (!p) return { id: "", provider: null, base: "", model: "", key: "", needsKey: false };
+  if (!p) return { id: "", provider: null, transport: "http", base: "", model: "", key: "", needsKey: false, cliPath: "" };
   return {
     id,
     provider: p,
+    transport: p.transport || "http",
     base: normalizeAiBase(settings.aiBase || p.base),
     model: settings.aiModel || p.model,
     key: aiSecretValue(plugin),
     needsKey: p.needsKey,
+    cliPath: String(settings.aiCliPaths && settings.aiCliPaths[id] || "").trim(),
   };
 }
 // One instruction for the whole conversation. The breakdown is not a mode of its
@@ -3190,13 +3229,28 @@ function aiMessages(text, settings, turns, book) {
   });
   return msgs;
 }
-async function aiExplain(text, plugin, turns, book) {
+async function aiExplain(text, plugin, turns, book, options = {}) {
   const settings = plugin.settings;
   const cfg = aiConfig(plugin);
-  if (!cfg.provider || !cfg.base || !cfg.model) {
+  if (!cfg.provider || (cfg.transport !== "cli" && (!cfg.base || !cfg.model))) {
     const err = new Error("AI is not configured");
     err.erReason = "notconfigured";
     throw err;
+  }
+  const messages = aiMessages(text, settings, turns, book);
+  if (cfg.transport === "cli") {
+    if (!Platform.isDesktopApp) {
+      const err = new Error("CLI AI is desktop-only");
+      err.erReason = "desktop";
+      throw err;
+    }
+    const result = await runCliAi(cfg.id, {
+      messages,
+      model: cfg.model,
+      binaryPath: cfg.cliPath,
+      signal: options.signal,
+    });
+    return result.answer;
   }
   if (cfg.needsKey && !cfg.key) {
     const err = new Error("no api key");
@@ -3211,11 +3265,16 @@ async function aiExplain(text, plugin, turns, book) {
     throw: false,
     body: JSON.stringify({
       model: cfg.model,
-      messages: aiMessages(text, settings, turns, book),
+      messages,
       temperature: 0.2,
       max_tokens: 900,
     }),
   });
+  if (options.signal && options.signal.aborted) {
+    const err = new Error("AI request cancelled");
+    err.erReason = "cancelled";
+    throw err;
+  }
   if (res.status === 401 || res.status === 403) {
     const err = new Error("auth"); err.erReason = "auth"; throw err;
   }
@@ -3247,7 +3306,7 @@ async function aiTestConnection(plugin) {
     [{ role: "user", content: "请只回答：连接成功" }],
     "",
   );
-  return { model: cfg.model, latency: Date.now() - started, answer };
+  return { model: cfg.model || cfg.provider && cfg.provider.label || "CLI", latency: Date.now() - started, answer };
 }
 // Shows the translation of a selection, with the original kept above it so the
 // reader can compare. Actions mirror the popup: copy, or save as a note (the
@@ -3720,8 +3779,10 @@ const AiExplainModal = class extends Modal {
     const input = bar.createEl("input", { cls: "er-ai-input", type: "text" });
     input.placeholder = __ertr("Сообщение…");
     const send = bar.createEl("button", { cls: "er-ai-send" });
-    svgIcon(send, "send");
-    send.setAttribute("aria-label", __ertr("Отправить"));
+    this.inputEl = input;
+    this.sendEl = send;
+    this.canCancel = aiConfig(this.plugin).transport === "cli";
+    this._setSending(false);
     const fire = async () => {
       const q = input.value.trim();
       if (!q) return;
@@ -3735,13 +3796,28 @@ const AiExplainModal = class extends Modal {
       input.value = "";
       if (!await this._send(q)) input.value = q;
     };
-    send.addEventListener("click", fire);
+    send.addEventListener("click", () => {
+      if (this.busy && this.canCancel && this.abortController) {
+        this.abortController.abort();
+        return;
+      }
+      fire();
+    });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); fire(); }
     });
     erAutoFocus(input);
     erBlurOnTapOutside(c, input);
     this._watchKeyboard();
+  }
+  _setSending(busy) {
+    if (!this.sendEl) return;
+    const stopping = !!busy && this.canCancel;
+    this.sendEl.empty();
+    svgIcon(this.sendEl, stopping ? "square" : "send");
+    this.sendEl.setAttribute("aria-label", stopping ? __ertr("停止生成") : __ertr("Отправить"));
+    this.sendEl.toggleClass("is-stop", stopping);
+    this.sendEl.disabled = !!busy && !this.canCancel;
   }
   // Obsidian на телефоне собран на Capacitor, и у окна есть честные события
   // клавиатуры с её высотой — единственный надёжный сигнал: visualViewport на
@@ -3818,6 +3894,8 @@ const AiExplainModal = class extends Modal {
   async _send(text) {
     if (this.busy || !text) return false;
     this.busy = true;
+    this.abortController = new AbortController();
+    this._setSending(true);
     if (this.empty) { this.empty.remove(); this.empty = null; }
     const me = this.log.createDiv("er-ai-msg er-ai-msg-me");
     me.setText(text);
@@ -3833,17 +3911,26 @@ const AiExplainModal = class extends Modal {
     this._scroll();
     let answer = "";
     try {
-      answer = await aiExplain(this.text, this.plugin, this.turns, this.book);
+      answer = await aiExplain(this.text, this.plugin, this.turns, this.book, { signal: this.abortController.signal });
     } catch (e) {
       console.error("Book Reader: AI chat failed", e);
       // The unanswered message leaves the thread: keeping it would send the same
       // question twice as soon as the next one is asked.
       this.turns.pop();
       const why = e && e.erReason;
-      bubble.addClass("er-ai-msg-err");
+      if (why !== "cancelled") bubble.addClass("er-ai-msg-err");
       bubble.setText(
-        why === "notconfigured" ? __ertr("请先在插件设置中选择 AI 服务和模型。")
+        why === "cancelled" ? __ertr("已停止生成。")
+          : why === "notconfigured" ? __ertr("请先在插件设置中选择 AI 服务和模型。")
           : why === "nokey" ? __ertr("请先在插件设置中选择或创建 API 密钥。")
+          : why === "desktop" ? __ertr("请先在桌面版 Obsidian 中使用本机 CLI。")
+          : why === "climissing" ? __ertr("未找到 CLI，请先安装或设置路径。")
+          : why === "cliauth" ? __ertr("CLI 尚未登录，请先在终端中完成登录。")
+          : why === "model" ? __ertr("模型名称不可用，请留空使用 CLI 默认模型或填写有效名称。")
+          : why === "timeout" ? __ertr("AI 请求超时，请稍后重试。")
+          : why === "inputtoolong" ? __ertr("选中内容过长，请缩小选择范围。")
+          : why === "outputtoolong" ? __ertr("AI 回答过长，已停止生成。")
+          : why === "cli" ? __ertr("CLI 运行失败，请检查安装、登录和模型设置。")
           : why === "auth" ? __ertr("Сервис не принял ключ. Проверьте его в настройках плагина.")
             : why === "limit" ? __ertr("Сервис ограничил частые запросы. Подождите минуту и попробуйте снова.")
               : why === "local" ? __ertr("Локальная модель не отвечает. Проверьте, запущен ли Ollama или LM Studio.")
@@ -3852,6 +3939,8 @@ const AiExplainModal = class extends Modal {
                     : __ertr("Не удалось связаться с сервисом. Похоже, нет интернета."));
       this._scroll();
       this.busy = false;
+      this.abortController = null;
+      this._setSending(false);
       return false;
     }
     this.turns.push({ role: "assistant", content: answer });
@@ -3862,9 +3951,12 @@ const AiExplainModal = class extends Modal {
     this._actions(group, answer);
     this._scroll();
     this.busy = false;
+    this.abortController = null;
+    this._setSending(false);
     return true;
   }
   onClose() {
+    if (this.abortController) this.abortController.abort();
     if (this._kbShow) {
       window.removeEventListener("keyboardWillShow", this._kbShow);
       window.removeEventListener("keyboardDidShow", this._kbShow);
@@ -6716,6 +6808,12 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.4.0", items: [
+    __ertr("新增 Codex CLI、Claude Code CLI 和 Grok CLI，可复用本机已登录账号"),
+    __ertr("CLI 请求在隔离的临时目录运行，默认禁用工具、文件编辑和项目规则"),
+    __ertr("设置页可自动检测 CLI 路径、检查登录状态并发送最小连接测试"),
+    __ertr("CLI 生成可随时停止，超时或关闭对话时会清理整个子进程")
+  ] },
   { v: "3.3.0", items: [
     __ertr("新增 DeepSeek、Kimi、千问、智谱、MiniMax、硅基流动和豆包等模型配置"),
     __ertr("API 密钥改用 Obsidian 密钥库存储，并增加连接测试"),
@@ -10120,7 +10218,64 @@ const SettingsTab = class extends PluginSettingTab {
     }
     const p = cfg.provider;
     c.createEl("div", { cls: "er-ai-provider-note", text: p.description });
-    if (!p.local) {
+    if (p.transport === "cli") {
+      if (!Platform.isDesktopApp) {
+        c.createEl("div", { cls: "er-set-note", text: __ertr("本机 CLI 调用只支持桌面版 Obsidian。") });
+      }
+      if (!s.aiCliPaths || typeof s.aiCliPaths !== "object") s.aiCliPaths = {};
+      const cliPathSetting = new Setting(c)
+        .setName(__ertr("CLI 路径"))
+        .setDesc(__ertr("留空自动检测；如果 Obsidian 找不到终端里的命令，请填写可执行文件的绝对路径。"));
+      cliPathSetting.addText((t) => t
+        .setPlaceholder(p.binary || "")
+        .setValue(s.aiCliPaths[s.aiProvider] || "")
+        .onChange(async (v) => {
+          s.aiCliPaths[s.aiProvider] = v.trim();
+          await this.plugin.saveAll();
+        }));
+      cliPathSetting.addButton((b) => b.setButtonText(__ertr("自动检测")).onClick(async () => {
+        if (!Platform.isDesktopApp) {
+          new Notice(__ertr("本机 CLI 调用只支持桌面版 Obsidian。"));
+          return;
+        }
+        b.setDisabled(true).setButtonText(__ertr("检查中…"));
+        const found = await resolveCliPath(s.aiProvider, s.aiCliPaths[s.aiProvider]);
+        b.setDisabled(false).setButtonText(__ertr("自动检测"));
+        if (!found) {
+          new Notice(__ertr("未找到 {0}，请先安装或手动填写路径。", p.binary), 7000);
+          return;
+        }
+        s.aiCliPaths[s.aiProvider] = found;
+        await this.plugin.saveAll();
+        new Notice(__ertr("已找到：{0}", found));
+        redraw();
+      }));
+      new Setting(c)
+        .setName(__ertr("登录状态"))
+        .setDesc(__ertr("只检查 CLI 是否已安装并登录，不会发送书籍内容。"))
+        .addButton((b) => b.setButtonText(__ertr("检查状态")).onClick(async () => {
+          if (!Platform.isDesktopApp) {
+            new Notice(__ertr("本机 CLI 调用只支持桌面版 Obsidian。"));
+            return;
+          }
+          b.setDisabled(true).setButtonText(__ertr("检查中…"));
+          try {
+            const status = await probeCliAi(s.aiProvider, { binaryPath: s.aiCliPaths[s.aiProvider] });
+            s.aiCliPaths[s.aiProvider] = status.binaryPath;
+            await this.plugin.saveAll();
+            new Notice(__ertr("已登录：{0}", p.label));
+            redraw();
+          } catch (e) {
+            const why = e && e.erReason;
+            new Notice(why === "climissing"
+              ? __ertr("未找到 CLI，请先安装或设置路径。")
+              : __ertr("CLI 尚未登录，请先在终端中完成登录。"), 7000);
+          } finally {
+            b.setDisabled(false).setButtonText(__ertr("检查状态"));
+          }
+        }));
+    }
+    if (p.transport !== "cli" && !p.local) {
       const keySetting = new Setting(c)
         .setName(__ertr("API 密钥"))
         .setDesc(__ertr("密钥保存在 Obsidian 密钥库中，不会写入插件 data.json。"));
@@ -10139,12 +10294,14 @@ const SettingsTab = class extends PluginSettingTab {
     }
     new Setting(c)
       .setName(__ertr("模型"))
-      .setDesc(p.model
+      .setDesc(p.transport === "cli"
+        ? __ertr("留空使用 CLI 当前的默认模型。")
+        : p.model
         ? __ertr("可直接使用推荐模型，也可以填写服务商提供的其他模型 ID。")
         : __ertr("请输入服务商控制台显示的模型或推理接入点 ID。"))
       .addText((t) => {
         const listId = `er-ai-models-${p.category}-${s.aiProvider}`;
-        t.setPlaceholder(p.model || __ertr("模型 ID"))
+        t.setPlaceholder(p.transport === "cli" ? __ertr("默认模型") : p.model || __ertr("模型 ID"))
           .setValue(s.aiModel || "")
           .onChange(async (v) => {
             s.aiModel = v.trim();
@@ -10156,16 +10313,20 @@ const SettingsTab = class extends PluginSettingTab {
           p.models.forEach((model) => list.createEl("option", { attr: { value: model } }));
         }
       });
-    new Setting(c)
-      .setName(__ertr("接口地址"))
-      .setDesc(__ertr("通常保持为空；只有区域地址、代理或自建服务需要修改。"))
-      .addText((t) => t.setPlaceholder(p.base || "https://…/v1").setValue(s.aiBase || "").onChange(async (v) => {
-        s.aiBase = normalizeAiBase(v);
-        await this.plugin.saveAll();
-      }));
+    if (p.transport !== "cli") {
+      new Setting(c)
+        .setName(__ertr("接口地址"))
+        .setDesc(__ertr("通常保持为空；只有区域地址、代理或自建服务需要修改。"))
+        .addText((t) => t.setPlaceholder(p.base || "https://…/v1").setValue(s.aiBase || "").onChange(async (v) => {
+          s.aiBase = normalizeAiBase(v);
+          await this.plugin.saveAll();
+        }));
+    }
     new Setting(c)
       .setName(__ertr("测试连接"))
-      .setDesc(__ertr("发送一条不含书籍内容的最短测试消息。云端服务可能产生极少量费用。"))
+      .setDesc(p.transport === "cli"
+        ? __ertr("开始测试会复用 CLI 账号发送一条不含书籍内容的最短消息，并可能消耗少量账号额度。")
+        : __ertr("发送一条不含书籍内容的最短测试消息。云端服务可能产生极少量费用。"))
       .addButton((b) => b.setButtonText(__ertr("开始测试")).setCta().onClick(async () => {
         b.setDisabled(true).setButtonText(__ertr("测试中…"));
         try {
@@ -10175,6 +10336,12 @@ const SettingsTab = class extends PluginSettingTab {
           const why = e && e.erReason;
           const msg = why === "notconfigured" ? __ertr("请先填写接口地址和模型。")
             : why === "nokey" ? __ertr("请先选择或创建 API 密钥。")
+              : why === "desktop" ? __ertr("请先在桌面版 Obsidian 中使用本机 CLI。")
+                : why === "climissing" ? __ertr("未找到 CLI，请先安装或设置路径。")
+                  : why === "cliauth" ? __ertr("CLI 尚未登录，请先在终端中完成登录。")
+                    : why === "model" ? __ertr("模型名称不可用，请留空使用 CLI 默认模型或填写有效名称。")
+                      : why === "timeout" ? __ertr("AI 请求超时，请稍后重试。")
+                        : why === "cli" ? __ertr("CLI 运行失败，请检查安装、登录和模型设置。")
               : why === "auth" ? __ertr("密钥未通过验证。")
                 : why === "local" ? __ertr("本地模型没有响应，请确认服务已经启动。")
                   : why === "http" ? __ertr("服务返回错误 {0}。", e.erStatus)
@@ -10205,7 +10372,9 @@ const SettingsTab = class extends PluginSettingTab {
       }));
     c.createEl("div", {
       cls: "er-set-note",
-      text: p.local
+      text: p.transport === "cli"
+        ? __ertr("阅读器会在隔离的临时目录中运行 {0}，禁用工具、文件编辑和项目规则。只有你主动使用 AI 时，所选原文、书名和问题才会发送给对应服务。", p.label)
+        : p.local
         ? __ertr("本地模型只在这台设备上运行；手机无法连接电脑的 localhost。")
         : __ertr("只有你主动使用 AI 时，选中的原文、书名和问题才会发送到 {0}。", cfg.base),
     });
@@ -10442,7 +10611,7 @@ const SettingsTab = class extends PluginSettingTab {
     if (this.plugin.settings.aiEnabled) {
       this._group(c, {
         name: __ertr("AI 模型配置"),
-        desc: __ertr("选择服务、模型和密钥；Ollama 与 LM Studio 在本机运行。"),
+        desc: __ertr("选择服务和模型；本机 CLI 可复用已登录账号，Ollama 与 LM Studio 在本机运行。"),
         build: (b, redraw) => this._groupAi(b, redraw),
       });
     }
