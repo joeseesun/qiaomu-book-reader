@@ -389,6 +389,7 @@ Object.assign(__erEN, {
   "阅读器新增阅读笔记按钮：没有就创建，已有就在原书旁分屏打开": "The reader now has a reading-note button: it creates the note when needed or opens it beside the book.",
   "自动创建的阅读笔记不再重复显示书名一级标题": "Automatically created reading notes no longer repeat the book title as an H1 heading.",
   "修复旧阅读笔记的重复书名标题迁移": "Fixed migration of duplicate book-title headings in existing reading notes.",
+  "修复历史关联名称不一致时的阅读笔记标题迁移": "Fixed reading-note title migration when legacy link names differ from actual filenames.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
@@ -1849,11 +1850,14 @@ const EltonReader = class extends Plugin {
     // Remove the duplicate H1 only from old auto-generated reading notes. A
     // custom template is untouched unless its first H1 exactly matches the
     // filename and is followed immediately by a reader-managed section.
-    if (!this.settings.readingNoteTitlesMigratedV3) {
+    if (!this.settings.readingNoteTitlesMigratedV4) {
       const names = new Set(Object.values(this.settings.bookNoteLinks || {}).filter(Boolean));
+      const candidates = new Map(bookNoteFiles(this.app).map((note) => [note.path, note]));
       for (const name of names) {
         const note = resolveBookNote(this.app, name);
-        if (!(note instanceof TFile)) continue;
+        if (note instanceof TFile) candidates.set(note.path, note);
+      }
+      for (const note of candidates.values()) {
         const before = await this.app.vault.read(note);
         // Metadata cache may still be empty while the plugin is loading. The
         // linked file is eligible when either the cache or its own frontmatter
@@ -1863,7 +1867,7 @@ const EltonReader = class extends Plugin {
         const after = stripGeneratedReadingNoteTitle(before, note.basename);
         if (after !== before) await this.app.vault.modify(note, after);
       }
-      this.settings.readingNoteTitlesMigratedV3 = true;
+      this.settings.readingNoteTitlesMigratedV4 = true;
       await this._saveLocalData();
     }
     // One-time migration: turn pictures on for everyone who never chose to hide
@@ -6609,6 +6613,9 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.2.3", items: [
+    __ertr("修复历史关联名称不一致时的阅读笔记标题迁移")
+  ] },
   { v: "3.2.2", items: [
     __ertr("修复旧阅读笔记的重复书名标题迁移")
   ] },
