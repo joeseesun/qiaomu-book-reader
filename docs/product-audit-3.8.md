@@ -46,5 +46,6 @@
 - `npm run check:i18n`：中文覆盖检查通过。
 - `npx eslint src/`：0 error；仅保留专有产品名和示例路径的 sentence-case warning。
 - `npm run build`：通过，PDF worker 已嵌入。
-- Rockfish：书库四本封面正常；点击卡片可打开 EPUB；阅读笔记与 `↩` 仍在；阅读设置无横向滚动，竖向内容在弹层内滚动。
+- Rockfish：书库四本封面正常；点击卡片可打开 EPUB；阅读笔记的 `↩` 可精确返回原文并闪烁定位；阅读设置无横向滚动，竖向内容在弹层内滚动。
+- Rockfish 选文流程：已有划线可打开紧凑工具条，依次显示三种颜色、AI、复制、批注和“更多”；AI 对话框展示所选原文、六个快捷问题、输入框和提示词管理入口；提示词管理弹层可在内部滚动且不横向溢出。本轮只读验收未发送 AI 请求、未修改划线或用户提示词。
 - 安装边界：只覆盖 `main.js`、`manifest.json`、`styles.css`，未覆盖 `data.json`、`thumb-cache.json`、钥匙串或用户内容。
