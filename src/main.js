@@ -3200,6 +3200,20 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
     return this.total;
   }
 };
+// Resolve an image src against the spine item's URL, folding away "." and ".."
+// segments. ZIP entries are looked up by their literal archive path, so a
+// leftover "../" (calibre's Text/ + Images/ layout uses them everywhere) would
+// miss the file and leave a broken image.
+function resolveEpubSrc(itemUrl, src) {
+  if (/^(data:|https?:)/.test(src)) return src;
+  const stack = src.startsWith("/") ? [] : (itemUrl || "").split("/").slice(0, -1).filter(Boolean);
+  for (const seg of src.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") { if (stack.length) stack.pop(); continue; }
+    stack.push(seg);
+  }
+  return "/" + stack.join("/");
+}
 async function extractEpub(file, app) {
   const buf = await app.vault.readBinary(file);
   const book = ePub(buf);
@@ -3215,10 +3229,29 @@ async function extractEpub(file, app) {
         const src = img.getAttribute("src");
         if (!src || src.startsWith("data:")) continue;
         try {
-          const itemDir = (item.url || "").split("/").slice(0, -1).join("/");
-          const resolved = src.startsWith("/") ? src : (itemDir ? itemDir + "/" + src : "/" + src).replace(/\/\.?\//g, "/");
+          const resolved = resolveEpubSrc(item.url, src);
           const dataUrl = await book.archive.getBase64(resolved);
           if (dataUrl) img.setAttribute("src", dataUrl);
+        } catch { /* optional step; a failure here must not interrupt reading */ }
+      }
+      // EPUB3 covers and InDesign/Kobo illustrations often wrap the bitmap in
+      // <svg><image xlink:href=.../></svg>. nodeToHtml has no rule for that
+      // markup and would drop it silently, so swap each <image> for a plain
+      // <img> once its href is inlined as a data URL.
+      const svgImages = Array.from(body.querySelectorAll?.("svg image") ?? []);
+      for (const imageEl of svgImages) {
+        try {
+          const href = imageEl.getAttribute("href")
+            || imageEl.getAttributeNS("http://www.w3.org/1999/xlink", "href")
+            || imageEl.getAttribute("xlink:href")
+            || "";
+          if (!href || href.startsWith("data:")) continue;
+          const resolved = resolveEpubSrc(item.url, href);
+          const dataUrl = await book.archive.getBase64(resolved);
+          if (!dataUrl) continue;
+          const img = doc.createElement("img");
+          img.setAttribute("src", dataUrl);
+          imageEl.parentNode?.replaceChild(img, imageEl);
         } catch { /* optional step; a failure here must not interrupt reading */ }
       }
       const html = nodeToHtml(body);

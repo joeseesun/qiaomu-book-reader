@@ -59229,8 +59229,21 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
     return this.total;
   }
 };
+function resolveEpubSrc(itemUrl, src) {
+  if (/^(data:|https?:)/.test(src)) return src;
+  const stack = src.startsWith("/") ? [] : (itemUrl || "").split("/").slice(0, -1).filter(Boolean);
+  for (const seg of src.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      if (stack.length) stack.pop();
+      continue;
+    }
+    stack.push(seg);
+  }
+  return "/" + stack.join("/");
+}
 async function extractEpub(file, app) {
-  var _a2, _b, _c, _d;
+  var _a2, _b, _c, _d, _e, _f, _g;
   const buf = await app.vault.readBinary(file);
   const book = src_default(buf);
   await book.ready;
@@ -59245,10 +59258,23 @@ async function extractEpub(file, app) {
         const src = img.getAttribute("src");
         if (!src || src.startsWith("data:")) continue;
         try {
-          const itemDir = (item.url || "").split("/").slice(0, -1).join("/");
-          const resolved = src.startsWith("/") ? src : (itemDir ? itemDir + "/" + src : "/" + src).replace(/\/\.?\//g, "/");
+          const resolved = resolveEpubSrc(item.url, src);
           const dataUrl = await book.archive.getBase64(resolved);
           if (dataUrl) img.setAttribute("src", dataUrl);
+        } catch (e) {
+        }
+      }
+      const svgImages = Array.from((_f = (_e = body.querySelectorAll) == null ? void 0 : _e.call(body, "svg image")) != null ? _f : []);
+      for (const imageEl of svgImages) {
+        try {
+          const href = imageEl.getAttribute("href") || imageEl.getAttributeNS("http://www.w3.org/1999/xlink", "href") || imageEl.getAttribute("xlink:href") || "";
+          if (!href || href.startsWith("data:")) continue;
+          const resolved = resolveEpubSrc(item.url, href);
+          const dataUrl = await book.archive.getBase64(resolved);
+          if (!dataUrl) continue;
+          const img = doc.createElement("img");
+          img.setAttribute("src", dataUrl);
+          (_g = imageEl.parentNode) == null ? void 0 : _g.replaceChild(img, imageEl);
         } catch (e) {
         }
       }
