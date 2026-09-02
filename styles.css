@@ -925,6 +925,30 @@ body:not(.is-mobile) .er-bot {
 .er-rs-ai-card .setting-item-info,
 .er-rs-ai-card .setting-item-control { min-width:0; }
 .er-rs-ai-card .setting-item-description { overflow-wrap:anywhere; }
+.er-ai-setup-empty {
+  display:flex; flex-direction:column; align-items:flex-start; gap:8px;
+  padding:20px; background:var(--background-secondary);
+}
+.er-ai-setup-icon {
+  display:flex; align-items:center; justify-content:center; width:34px; height:34px;
+  border-radius:10px; color:var(--interactive-accent);
+  background:color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+.er-ai-setup-icon svg { width:18px; height:18px; }
+.er-ai-setup-title { margin-top:2px; color:var(--text-normal); font-size:15px; font-weight:650; }
+.er-ai-setup-desc { max-width:520px; color:var(--text-muted); font-size:12.5px; line-height:1.55; }
+.er-ai-setup-cta { margin-top:4px; }
+.er-ai-status-row .setting-item-name,
+.er-ai-system-status .setting-item-name { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.er-ai-status-badge {
+  display:inline-flex; align-items:center; min-height:20px; padding:1px 7px;
+  border-radius:999px; font-size:10.5px; line-height:1.3; font-weight:600;
+  color:var(--text-muted); background:var(--background-modifier-hover);
+}
+.er-ai-status-badge.is-ready {
+  color:var(--color-green); background:color-mix(in srgb, var(--color-green) 12%, transparent);
+}
+.er-ai-status-badge.is-off { color:var(--text-faint); }
 .er-rs-ai-privacy {
   display:flex; align-items:flex-start; gap:8px; padding:2px 4px;
   color:var(--text-muted); font-size:12px; line-height:1.5;

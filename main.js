@@ -54824,6 +54824,44 @@ function createOpenAiSseParser(onDelta) {
   };
 }
 
+// src/ai-setup-state.js
+function deriveAiSetupState({
+  provider,
+  transport = "http",
+  base = "",
+  model = "",
+  needsKey = false,
+  key = "",
+  desktop = true,
+  needsVerification = false,
+  enabled = false
+} = {}) {
+  if (!provider) {
+    return { kind: "unconfigured", ready: false, enabled: false, reason: "provider" };
+  }
+  if (transport === "cli" && !desktop) {
+    return { kind: "needs-attention", ready: false, enabled: false, reason: "desktop" };
+  }
+  if (transport !== "cli" && !base) {
+    return { kind: "incomplete", ready: false, enabled: false, reason: "base" };
+  }
+  if (transport !== "cli" && !model) {
+    return { kind: "incomplete", ready: false, enabled: false, reason: "model" };
+  }
+  if (transport !== "cli" && needsKey && !key) {
+    return { kind: "incomplete", ready: false, enabled: false, reason: "key" };
+  }
+  if (needsVerification) {
+    return { kind: "incomplete", ready: false, enabled: false, reason: "verify" };
+  }
+  return {
+    kind: enabled ? "ready" : "disabled",
+    ready: true,
+    enabled: enabled === true,
+    reason: ""
+  };
+}
+
 // src/ai-cli.js
 var CLI_AI_PROVIDER_IDS = Object.freeze(["codex-cli", "claude-cli", "grok-cli"]);
 var CLI_REASONING_EFFORTS = Object.freeze({
@@ -56949,6 +56987,27 @@ Object.assign(__erEN, {
   "\u7BA1\u7406": "Manage",
   "\u666E\u901A\u9605\u8BFB\u4FDD\u6301\u79BB\u7EBF\u3002\u53EA\u6709\u53D1\u8D77 AI \u8BF7\u6C42\u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5F53\u524D\u670D\u52A1\u3002": "Regular reading stays offline. The selected passage, book title, and question are sent to the current service only when you make an AI request.",
   "\u8BF7\u5728 Obsidian \u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u6253\u5F00 Qiaomu Book Reader \u2192 AI \u4E0E\u7FFB\u8BD1\u3002": "Open Qiaomu Book Reader \u2192 AI & translation in Obsidian plugin settings.",
+  "\u8BBE\u7F6E AI \u52A9\u8BFB": "Set up AI assistance",
+  "AI \u52A9\u8BFB\u5C1A\u672A\u8BBE\u7F6E": "AI assistance is not set up",
+  "AI \u52A9\u8BFB\u8FD8\u5DEE\u4E00\u6B65": "AI assistance needs one more step",
+  "AI \u52A9\u8BFB\u5DF2\u8BBE\u7F6E": "AI assistance is set up",
+  "\u9009\u62E9\u4E00\u79CD AI \u670D\u52A1\u5E76\u5B8C\u6210\u8FDE\u63A5\u6D4B\u8BD5\uFF0C\u4E4B\u540E\u9009\u4E2D\u6587\u5B57\u5373\u53EF\u4F7F\u7528 AI \u89E3\u8BFB\u3002": "Choose an AI service and complete the connection test. Then select text to use AI assistance.",
+  "\u8FD8\u9700\u8981\u9009\u62E9\u6216\u521B\u5EFA API \u5BC6\u94A5\uFF0C\u5B8C\u6210\u6D4B\u8BD5\u540E\u5373\u53EF\u4F7F\u7528\u3002": "Select or create an API key, then complete the test to start using AI.",
+  "\u8FD8\u9700\u8981\u9009\u62E9\u6A21\u578B\uFF0C\u5B8C\u6210\u6D4B\u8BD5\u540E\u5373\u53EF\u4F7F\u7528\u3002": "Choose a model, then complete the test to start using AI.",
+  "\u8FD8\u9700\u8981\u586B\u5199\u63A5\u53E3\u5730\u5740\uFF0C\u5B8C\u6210\u6D4B\u8BD5\u540E\u5373\u53EF\u4F7F\u7528\u3002": "Enter the Base URL, then complete the test to start using AI.",
+  "\u5F53\u524D\u670D\u52A1\u53EA\u80FD\u5728\u684C\u9762\u7248 Obsidian \u4E2D\u4F7F\u7528\uFF0C\u8BF7\u66F4\u6362\u670D\u52A1\u6216\u56DE\u5230\u684C\u9762\u7AEF\u8BBE\u7F6E\u3002": "This service works only in Obsidian desktop. Change the service or finish setup on desktop.",
+  "\u8BBE\u7F6E\u5DF2\u66F4\u6539\uFF0C\u8BF7\u5B8C\u6210\u8FDE\u63A5\u6D4B\u8BD5\u540E\u542F\u7528 AI \u52A9\u8BFB\u3002": "Settings changed. Complete the connection test to enable AI assistance.",
+  "\u5F00\u59CB\u8BBE\u7F6E": "Start setup",
+  "\u7EE7\u7EED\u8BBE\u7F6E": "Continue setup",
+  "\u66F4\u6362\u670D\u52A1": "Change service",
+  "\u53EF\u4EE5\u4F7F\u7528": "Ready",
+  "\u5F53\u524D\u5173\u95ED": "Off",
+  "\u5728\u9009\u6587\u5DE5\u5177\u6761\u663E\u793A AI": "Show AI in the selection toolbar",
+  "\u5173\u95ED\u540E\u4FDD\u7559\u670D\u52A1\u914D\u7F6E\uFF0C\u53EA\u9690\u85CF\u9009\u4E2D\u6587\u5B57\u540E\u7684 AI \u6309\u94AE\u3002": "Turning this off keeps the service configuration and only hides the AI button after text selection.",
+  "\u5173\u95ED\u540E\u4FDD\u7559\u670D\u52A1\u548C\u5BC6\u94A5\uFF0C\u53EA\u9690\u85CF\u9009\u4E2D\u6587\u5B57\u540E\u7684 AI \u6309\u94AE\u3002": "Turning this off keeps the service and key and only hides the AI button after text selection.",
+  "\u6D4B\u8BD5\u5E76\u542F\u7528": "Test and enable",
+  "AI \u52A9\u8BFB\u5DF2\u542F\u7528\uFF1A{0} \xB7 {1} ms": "AI assistance enabled: {0} \xB7 {1} ms",
+  "\u5212\u7EBF\u7FFB\u8BD1": "Selection translation",
   "\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF0C\u53EF\u89E3\u91CA\u539F\u6587\u3001\u63D0\u70BC\u5173\u952E\u6982\u5FF5\u5E76\u7EE7\u7EED\u8FFD\u95EE\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u53D1\u9001\u95EE\u9898\u65F6\uFF0C\u9009\u4E2D\u7684\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u5230\u6240\u9009\u670D\u52A1\uFF1B\u9ED8\u8BA4\u5173\u95ED\u3002": "Show \u2728 for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
   "AI \u6A21\u578B\u914D\u7F6E": "AI model configuration",
   "\u9009\u62E9\u670D\u52A1\u3001\u6A21\u578B\u548C\u5BC6\u94A5\uFF1BOllama \u4E0E LM Studio \u5728\u672C\u673A\u8FD0\u884C\u3002": "Choose a service, model, and key. Ollama and LM Studio run locally.",
@@ -57268,6 +57327,7 @@ var DEFAULT = {
   // selected passage to whichever service they choose, and that has to be a
   // decision, never a surprise.
   aiEnabled: false,
+  aiNeedsVerification: false,
   aiProvider: "",
   // The API key itself lives in Obsidian SecretStorage. data.json keeps only
   // the selected secret ID so vault syncing never copies the key.
@@ -59533,6 +59593,28 @@ function aiConfig(plugin) {
     cliPath: String(settings.aiCliPaths && settings.aiCliPaths[id] || "").trim()
   };
 }
+function aiSetupState(plugin) {
+  const cfg = aiConfig(plugin);
+  return deriveAiSetupState({
+    provider: cfg.provider,
+    transport: cfg.transport,
+    base: cfg.base,
+    model: cfg.model,
+    needsKey: cfg.needsKey,
+    key: cfg.key,
+    desktop: import_obsidian.Platform.isDesktopApp,
+    needsVerification: plugin.settings.aiNeedsVerification === true,
+    enabled: plugin.settings.aiEnabled === true
+  });
+}
+function aiSetupMessage(state) {
+  if (state.reason === "key") return __ertr("\u8FD8\u9700\u8981\u9009\u62E9\u6216\u521B\u5EFA API \u5BC6\u94A5\uFF0C\u5B8C\u6210\u6D4B\u8BD5\u540E\u5373\u53EF\u4F7F\u7528\u3002");
+  if (state.reason === "model") return __ertr("\u8FD8\u9700\u8981\u9009\u62E9\u6A21\u578B\uFF0C\u5B8C\u6210\u6D4B\u8BD5\u540E\u5373\u53EF\u4F7F\u7528\u3002");
+  if (state.reason === "base") return __ertr("\u8FD8\u9700\u8981\u586B\u5199\u63A5\u53E3\u5730\u5740\uFF0C\u5B8C\u6210\u6D4B\u8BD5\u540E\u5373\u53EF\u4F7F\u7528\u3002");
+  if (state.reason === "desktop") return __ertr("\u5F53\u524D\u670D\u52A1\u53EA\u80FD\u5728\u684C\u9762\u7248 Obsidian \u4E2D\u4F7F\u7528\uFF0C\u8BF7\u66F4\u6362\u670D\u52A1\u6216\u56DE\u5230\u684C\u9762\u7AEF\u8BBE\u7F6E\u3002");
+  if (state.reason === "verify") return __ertr("\u8BBE\u7F6E\u5DF2\u66F4\u6539\uFF0C\u8BF7\u5B8C\u6210\u8FDE\u63A5\u6D4B\u8BD5\u540E\u542F\u7528 AI \u52A9\u8BFB\u3002");
+  return __ertr("\u9009\u62E9\u4E00\u79CD AI \u670D\u52A1\u5E76\u5B8C\u6210\u8FDE\u63A5\u6D4B\u8BD5\uFF0C\u4E4B\u540E\u9009\u4E2D\u6587\u5B57\u5373\u53EF\u4F7F\u7528 AI \u89E3\u8BFB\u3002");
+}
 function aiSystemChat(into) {
   return [
     `\u4F60\u662F\u4E00\u540D\u514B\u5236\u3001\u51C6\u786E\u7684\u9605\u8BFB\u52A9\u624B\u3002\u7528\u6237\u4F1A\u56F4\u7ED5\u4E66\u4E2D\u7684\u4E00\u4E2A\u7247\u6BB5\u4E0E\u4F60\u8BA8\u8BBA\u3002`,
@@ -60108,9 +60190,8 @@ function addBarButtons(view, pop) {
     b.addEventListener("click", fn);
     return b;
   };
-  const cfg = aiConfig(view.plugin);
-  const aiReady = cfg.provider && (cfg.transport === "cli" ? import_obsidian.Platform.isDesktopApp : cfg.base && cfg.model && (!cfg.needsKey || cfg.key));
-  if (view.plugin.settings.aiEnabled && aiReady) {
+  const aiState = aiSetupState(view.plugin);
+  if (aiState.ready && aiState.enabled) {
     act("er-hl-ai", "wand-sparkles", __ertr("AI \u89E3\u8BFB"), () => {
       var _a2;
       const cur = view._currentHl();
@@ -62121,16 +62202,36 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
     const plugin = this.view.plugin;
     const s = plugin.settings;
     const cfg = aiConfig(plugin);
+    const state = aiSetupState(plugin);
     const section = c.createDiv("er-rs-ai-card");
-    new import_obsidian.Setting(section).setName(__ertr("AI \u8F85\u52A9\u9605\u8BFB")).setDesc(__ertr("\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF1B\u53EA\u6709\u4F60\u4E3B\u52A8\u63D0\u95EE\u65F6\u624D\u4F1A\u53D1\u9001\u539F\u6587\u3002")).addToggle((toggle) => toggle.setValue(s.aiEnabled === true).onChange(async (value) => {
-      s.aiEnabled = value;
-      await plugin.saveAll();
-      this._draw();
-    }));
-    const providerName = cfg.provider ? cfg.provider.label : __ertr("\u5C1A\u672A\u914D\u7F6E");
-    const modelName = cfg.provider ? cfg.model || (cfg.transport === "cli" ? __ertr("\u8DDF\u968F\u6A21\u578B") : __ertr("\u9ED8\u8BA4\u6A21\u578B")) : "";
-    new import_obsidian.Setting(section).setName(__ertr("\u5F53\u524D\u670D\u52A1")).setDesc(cfg.provider ? `${providerName} \xB7 ${modelName}` : __ertr("\u9009\u62E9\u670D\u52A1\u548C\u6A21\u578B\u540E\uFF0C\u9009\u4E2D\u6587\u672C\u5373\u53EF\u4F7F\u7528 AI \u89E3\u8BFB\u3002")).addButton((button) => button.setButtonText(cfg.provider ? __ertr("\u66F4\u6362\u6216\u914D\u7F6E") : __ertr("\u5F00\u59CB\u914D\u7F6E")).onClick(() => openPluginAiSettings(this.app, plugin)));
-    if (cfg.provider && cfg.transport === "cli") {
+    if (!state.ready) {
+      section.addClass("er-ai-setup-empty");
+      const icon2 = section.createDiv("er-ai-setup-icon");
+      svgIcon(icon2, "wand-sparkles");
+      section.createDiv({ cls: "er-ai-setup-title", text: state.kind === "unconfigured" ? __ertr("AI \u52A9\u8BFB\u5C1A\u672A\u8BBE\u7F6E") : __ertr("AI \u52A9\u8BFB\u8FD8\u5DEE\u4E00\u6B65") });
+      section.createDiv({ cls: "er-ai-setup-desc", text: aiSetupMessage(state) });
+      const start = section.createEl("button", {
+        cls: "mod-cta er-ai-setup-cta",
+        text: state.kind === "unconfigured" ? __ertr("\u5F00\u59CB\u8BBE\u7F6E") : __ertr("\u7EE7\u7EED\u8BBE\u7F6E")
+      });
+      start.addEventListener("click", () => openPluginAiSettings(this.app, plugin, () => this._draw()));
+    } else {
+      const providerName = cfg.provider.label;
+      const modelName = cfg.model || (cfg.transport === "cli" ? __ertr("\u8DDF\u968F\u6A21\u578B") : __ertr("\u9ED8\u8BA4\u6A21\u578B"));
+      const status = new import_obsidian.Setting(section).setName(__ertr("AI \u52A9\u8BFB\u5DF2\u8BBE\u7F6E")).setDesc(`${providerName} \xB7 ${modelName}`).addButton((button) => button.setButtonText(__ertr("\u66F4\u6362\u670D\u52A1")).onClick(() => openPluginAiSettings(this.app, plugin, () => this._draw())));
+      status.settingEl.addClass("er-ai-status-row");
+      const badge = status.nameEl.createSpan({
+        cls: `er-ai-status-badge ${state.enabled ? "is-ready" : "is-off"}`,
+        text: state.enabled ? __ertr("\u53EF\u4EE5\u4F7F\u7528") : __ertr("\u5F53\u524D\u5173\u95ED")
+      });
+      badge.setAttr("aria-label", state.enabled ? __ertr("\u53EF\u4EE5\u4F7F\u7528") : __ertr("\u5F53\u524D\u5173\u95ED"));
+      new import_obsidian.Setting(section).setName(__ertr("\u5728\u9009\u6587\u5DE5\u5177\u6761\u663E\u793A AI")).setDesc(__ertr("\u5173\u95ED\u540E\u4FDD\u7559\u670D\u52A1\u914D\u7F6E\uFF0C\u53EA\u9690\u85CF\u9009\u4E2D\u6587\u5B57\u540E\u7684 AI \u6309\u94AE\u3002")).addToggle((toggle) => toggle.setValue(state.enabled).onChange(async (value) => {
+        s.aiEnabled = value;
+        await plugin.saveAll();
+        this._draw();
+      }));
+    }
+    if (state.ready && cfg.transport === "cli") {
       if (!s.aiCliEfforts || typeof s.aiCliEfforts !== "object") s.aiCliEfforts = {};
       const labels = {
         "": __ertr("\u8DDF\u968F\u6A21\u578B"),
@@ -62148,19 +62249,21 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
           await plugin.saveAll();
         });
       });
-    } else if (cfg.provider && cfg.provider.supportsThinking) {
+    } else if (state.ready && cfg.provider.supportsThinking) {
       if (!s.aiThinking || typeof s.aiThinking !== "object") s.aiThinking = {};
       new import_obsidian.Setting(section).setName(__ertr("\u601D\u8003\u6A21\u5F0F")).setDesc(__ertr("\u9700\u8981\u6DF1\u5165\u5206\u6790\u65F6\u5F00\u542F\uFF1B\u5173\u95ED\u540E\u56DE\u7B54\u66F4\u5FEB\u3002")).addToggle((toggle) => toggle.setValue(s.aiThinking[s.aiProvider] !== false).onChange(async (value) => {
         s.aiThinking[s.aiProvider] = value;
         await plugin.saveAll();
       }));
     }
-    new import_obsidian.Setting(section).setName(__ertr("\u56DE\u7B54\u8BED\u8A00")).setDesc(__ertr("AI \u89E3\u8BFB\u548C\u8FFD\u95EE\u4F7F\u7528\u7684\u8BED\u8A00\u3002")).addText((text) => text.setPlaceholder("\u4E2D\u6587").setValue(s.aiInto || "\u4E2D\u6587").onChange(async (value) => {
-      s.aiInto = value.trim() || "\u4E2D\u6587";
-      await plugin.saveAll();
-    }));
-    const prompts = c.createDiv("er-rs-ai-card");
-    new import_obsidian.Setting(prompts).setName(__ertr("\u5FEB\u6377\u95EE\u9898")).setDesc(__ertr("AI \u5BF9\u8BDD\u6846\u4E2D\u663E\u793A {0} \u4E2A\uFF0C\u53EF\u6309\u81EA\u5DF1\u7684\u9605\u8BFB\u4E60\u60EF\u589E\u5220\u3002", aiQuickPrompts(s).length)).addButton((button) => button.setButtonText(__ertr("\u7BA1\u7406")).onClick(() => new AiPromptLibraryModal(this.app, plugin).open()));
+    if (state.ready) {
+      new import_obsidian.Setting(section).setName(__ertr("\u56DE\u7B54\u8BED\u8A00")).setDesc(__ertr("AI \u89E3\u8BFB\u548C\u8FFD\u95EE\u4F7F\u7528\u7684\u8BED\u8A00\u3002")).addText((text) => text.setPlaceholder("\u4E2D\u6587").setValue(s.aiInto || "\u4E2D\u6587").onChange(async (value) => {
+        s.aiInto = value.trim() || "\u4E2D\u6587";
+        await plugin.saveAll();
+      }));
+      const prompts = c.createDiv("er-rs-ai-card");
+      new import_obsidian.Setting(prompts).setName(__ertr("\u5FEB\u6377\u95EE\u9898")).setDesc(__ertr("AI \u5BF9\u8BDD\u6846\u4E2D\u663E\u793A {0} \u4E2A\uFF0C\u53EF\u6309\u81EA\u5DF1\u7684\u9605\u8BFB\u4E60\u60EF\u589E\u5220\u3002", aiQuickPrompts(s).length)).addButton((button) => button.setButtonText(__ertr("\u7BA1\u7406")).onClick(() => new AiPromptLibraryModal(this.app, plugin).open()));
+    }
     const privacy = c.createDiv("er-rs-ai-privacy");
     svgIcon(privacy.createSpan({ cls: "er-rs-ai-privacy-icon" }), "shield-check");
     privacy.createSpan({ text: __ertr("\u666E\u901A\u9605\u8BFB\u4FDD\u6301\u79BB\u7EBF\u3002\u53EA\u6709\u53D1\u8D77 AI \u8BF7\u6C42\u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5F53\u524D\u670D\u52A1\u3002") });
@@ -66515,20 +66618,24 @@ var SettingsGroupModal = class extends import_obsidian.Modal {
     this.contentEl.empty();
   }
 };
-function openPluginAiSettings(app, plugin) {
+function openPluginAiSettings(app, plugin, onReady) {
   const tab = plugin && plugin.settingsTab;
-  if (tab) tab._tab = "translate";
-  if (!app.setting || typeof app.setting.open !== "function") {
+  if (!tab || typeof tab._groupAi !== "function") {
     new import_obsidian.Notice(__ertr("\u8BF7\u5728 Obsidian \u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u6253\u5F00 Qiaomu Book Reader \u2192 AI \u4E0E\u7FFB\u8BD1\u3002"));
     return;
   }
-  app.setting.open();
-  if (typeof app.setting.openTabById === "function") {
-    app.setting.openTabById(plugin.manifest.id);
-  }
-  window.setTimeout(() => {
-    if (tab && typeof tab._redraw === "function") tab._redraw();
-  }, 0);
+  let modal;
+  modal = new SettingsGroupModal(app, __ertr("\u8BBE\u7F6E AI \u52A9\u8BFB"), (body, redraw) => {
+    tab._groupAi(body, redraw, {
+      enableOnSuccess: true,
+      onReady: () => {
+        modal.close();
+        if (typeof onReady === "function") onReady();
+        if (typeof tab._redraw === "function") tab._redraw();
+      }
+    });
+  });
+  modal.open();
 }
 var SettingsTab = class extends import_obsidian.PluginSettingTab {
   // A row that stands for a whole group: name, one line on what is inside, and
@@ -66719,7 +66826,7 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
   // Where the breakdown is fetched from. In its own window because it is set up
   // once and then never touched, and because the key field has no business
   // sitting next to the reading options.
-  _groupAi(c, redraw) {
+  _groupAi(c, redraw, options = {}) {
     const s = this.plugin.settings;
     const cfg = aiConfig(this.plugin);
     new import_obsidian.Setting(c).setName(__ertr("AI \u670D\u52A1")).setDesc(__ertr("\u4F18\u5148\u5C55\u793A\u56FD\u4EA7\u6A21\u578B\uFF1B\u672A\u9009\u62E9\u65F6\u4E0D\u4F1A\u53D1\u9001\u4EFB\u4F55\u5185\u5BB9\u3002")).addDropdown((d) => {
@@ -66733,6 +66840,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
         s.aiProvider = v;
         s.aiModel = s.aiModels && s.aiModels[v] || "";
         s.aiBase = "";
+        s.aiEnabled = false;
+        s.aiNeedsVerification = Boolean(v);
         await this.plugin.saveAll();
         redraw();
       });
@@ -66751,6 +66860,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       const cliPathSetting = new import_obsidian.Setting(c).setName(__ertr("CLI \u8DEF\u5F84")).setDesc(__ertr("\u7559\u7A7A\u81EA\u52A8\u68C0\u6D4B\uFF1B\u5982\u679C Obsidian \u627E\u4E0D\u5230\u7EC8\u7AEF\u91CC\u7684\u547D\u4EE4\uFF0C\u8BF7\u586B\u5199\u53EF\u6267\u884C\u6587\u4EF6\u7684\u7EDD\u5BF9\u8DEF\u5F84\u3002"));
       cliPathSetting.addText((t) => t.setPlaceholder(p.binary || "").setValue(s.aiCliPaths[s.aiProvider] || "").onChange(async (v) => {
         s.aiCliPaths[s.aiProvider] = v.trim();
+        s.aiEnabled = false;
+        s.aiNeedsVerification = true;
         await this.plugin.saveAll();
       }));
       cliPathSetting.addButton((b) => b.setButtonText(__ertr("\u81EA\u52A8\u68C0\u6D4B")).onClick(async () => {
@@ -66766,6 +66877,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
           return;
         }
         s.aiCliPaths[s.aiProvider] = found;
+        s.aiEnabled = false;
+        s.aiNeedsVerification = true;
         await this.plugin.saveAll();
         new import_obsidian.Notice(__ertr("\u5DF2\u627E\u5230\uFF1A{0}", found));
         redraw();
@@ -66796,6 +66909,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
         keySetting.addComponent((el) => new import_obsidian.SecretComponent(this.app, el).setValue(s.aiSecret || "").onChange(async (v) => {
           s.aiSecret = v;
           s.aiKey = "";
+          s.aiEnabled = false;
+          s.aiNeedsVerification = true;
           await this.plugin.saveAll();
         }));
       }
@@ -66817,6 +66932,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
           s.aiModel = v.trim();
           if (!s.aiModels || typeof s.aiModels !== "object") s.aiModels = {};
           s.aiModels[s.aiProvider] = s.aiModel;
+          s.aiEnabled = false;
+          s.aiNeedsVerification = true;
           await this.plugin.saveAll();
         });
         if (p.models && p.models.length) {
@@ -66848,6 +66965,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
     const addBaseSetting = (target) => {
       new import_obsidian.Setting(target).setName(__ertr("\u63A5\u53E3\u5730\u5740")).setDesc(__ertr("\u901A\u5E38\u4FDD\u6301\u4E3A\u7A7A\uFF1B\u53EA\u6709\u533A\u57DF\u5730\u5740\u3001\u4EE3\u7406\u6216\u81EA\u5EFA\u670D\u52A1\u9700\u8981\u4FEE\u6539\u3002")).addText((t) => t.setPlaceholder(p.base || "https://\u2026/v1").setValue(s.aiBase || "").onChange(async (v) => {
         s.aiBase = normalizeAiBase(v);
+        s.aiEnabled = false;
+        s.aiNeedsVerification = true;
         await this.plugin.saveAll();
       }));
     };
@@ -66869,17 +66988,26 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       if (advancedHasModel) addModelSetting(advancedBody);
       if (advancedHasBase) addBaseSetting(advancedBody);
     }
-    new import_obsidian.Setting(c).setName(__ertr("\u6D4B\u8BD5\u8FDE\u63A5")).setDesc(p.transport === "cli" ? __ertr("\u5F00\u59CB\u6D4B\u8BD5\u4F1A\u590D\u7528 CLI \u8D26\u53F7\u53D1\u9001\u4E00\u6761\u4E0D\u542B\u4E66\u7C4D\u5185\u5BB9\u7684\u6700\u77ED\u6D88\u606F\uFF0C\u5E76\u53EF\u80FD\u6D88\u8017\u5C11\u91CF\u8D26\u53F7\u989D\u5EA6\u3002") : __ertr("\u53D1\u9001\u4E00\u6761\u4E0D\u542B\u4E66\u7C4D\u5185\u5BB9\u7684\u6700\u77ED\u6D4B\u8BD5\u6D88\u606F\u3002\u4E91\u7AEF\u670D\u52A1\u53EF\u80FD\u4EA7\u751F\u6781\u5C11\u91CF\u8D39\u7528\u3002")).addButton((b) => b.setButtonText(__ertr("\u5F00\u59CB\u6D4B\u8BD5")).setCta().onClick(async () => {
+    new import_obsidian.Setting(c).setName(__ertr("\u6D4B\u8BD5\u8FDE\u63A5")).setDesc(p.transport === "cli" ? __ertr("\u5F00\u59CB\u6D4B\u8BD5\u4F1A\u590D\u7528 CLI \u8D26\u53F7\u53D1\u9001\u4E00\u6761\u4E0D\u542B\u4E66\u7C4D\u5185\u5BB9\u7684\u6700\u77ED\u6D88\u606F\uFF0C\u5E76\u53EF\u80FD\u6D88\u8017\u5C11\u91CF\u8D26\u53F7\u989D\u5EA6\u3002") : __ertr("\u53D1\u9001\u4E00\u6761\u4E0D\u542B\u4E66\u7C4D\u5185\u5BB9\u7684\u6700\u77ED\u6D4B\u8BD5\u6D88\u606F\u3002\u4E91\u7AEF\u670D\u52A1\u53EF\u80FD\u4EA7\u751F\u6781\u5C11\u91CF\u8D39\u7528\u3002")).addButton((b) => b.setButtonText(options.enableOnSuccess ? __ertr("\u6D4B\u8BD5\u5E76\u542F\u7528") : __ertr("\u5F00\u59CB\u6D4B\u8BD5")).setCta().onClick(async () => {
+      const idleText = options.enableOnSuccess ? __ertr("\u6D4B\u8BD5\u5E76\u542F\u7528") : __ertr("\u5F00\u59CB\u6D4B\u8BD5");
       b.setDisabled(true).setButtonText(__ertr("\u6D4B\u8BD5\u4E2D\u2026"));
       try {
         const result = await aiTestConnection(this.plugin);
-        new import_obsidian.Notice(__ertr("\u8FDE\u63A5\u6210\u529F\uFF1A{0} \xB7 {1} ms", result.model, result.latency));
+        if (options.enableOnSuccess) {
+          s.aiEnabled = true;
+          s.aiNeedsVerification = false;
+          await this.plugin.saveAll();
+          new import_obsidian.Notice(__ertr("AI \u52A9\u8BFB\u5DF2\u542F\u7528\uFF1A{0} \xB7 {1} ms", result.model, result.latency));
+          if (typeof options.onReady === "function") options.onReady(result);
+        } else {
+          new import_obsidian.Notice(__ertr("\u8FDE\u63A5\u6210\u529F\uFF1A{0} \xB7 {1} ms", result.model, result.latency));
+        }
       } catch (e) {
         const why = e && e.erReason;
         const msg = why === "notconfigured" ? __ertr("\u8BF7\u5148\u586B\u5199\u63A5\u53E3\u5730\u5740\u548C\u6A21\u578B\u3002") : why === "nokey" ? __ertr("\u8BF7\u5148\u9009\u62E9\u6216\u521B\u5EFA API \u5BC6\u94A5\u3002") : why === "desktop" ? __ertr("\u8BF7\u5148\u5728\u684C\u9762\u7248 Obsidian \u4E2D\u4F7F\u7528\u672C\u673A CLI\u3002") : why === "climissing" ? __ertr("\u672A\u627E\u5230 CLI\uFF0C\u8BF7\u5148\u5B89\u88C5\u6216\u8BBE\u7F6E\u8DEF\u5F84\u3002") : why === "cliauth" ? __ertr("CLI \u5C1A\u672A\u767B\u5F55\uFF0C\u8BF7\u5148\u5728\u7EC8\u7AEF\u4E2D\u5B8C\u6210\u767B\u5F55\u3002") : why === "model" ? __ertr("\u6A21\u578B\u540D\u79F0\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7559\u7A7A\u4F7F\u7528 CLI \u9ED8\u8BA4\u6A21\u578B\u6216\u586B\u5199\u6709\u6548\u540D\u79F0\u3002") : why === "timeout" ? __ertr("AI \u8BF7\u6C42\u8D85\u65F6\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002") : why === "cli" ? __ertr("CLI \u8FD0\u884C\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u5B89\u88C5\u3001\u767B\u5F55\u548C\u6A21\u578B\u8BBE\u7F6E\u3002") : why === "auth" ? __ertr("\u5BC6\u94A5\u672A\u901A\u8FC7\u9A8C\u8BC1\u3002") : why === "forbidden" ? __ertr("\u670D\u52A1\u62D2\u7EDD\u5904\u7406\u8BE5\u8BF7\u6C42\uFF08403\uFF09\u3002\u53EF\u80FD\u662F\u5185\u5BB9\u9650\u5236\u6216\u8D26\u53F7\u6743\u9650\u95EE\u9898\uFF0C\u4E0D\u4EE3\u8868\u5BC6\u94A5\u9519\u8BEF\u3002") : why === "local" ? __ertr("\u672C\u5730\u6A21\u578B\u6CA1\u6709\u54CD\u5E94\uFF0C\u8BF7\u786E\u8BA4\u670D\u52A1\u5DF2\u7ECF\u542F\u52A8\u3002") : why === "http" ? __ertr("\u670D\u52A1\u8FD4\u56DE\u9519\u8BEF {0}\u3002", e.erStatus) : __ertr("\u8FDE\u63A5\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u3001\u63A5\u53E3\u5730\u5740\u548C\u6A21\u578B\u540D\u79F0\u3002");
         new import_obsidian.Notice(msg, 7e3);
       } finally {
-        b.setDisabled(false).setButtonText(__ertr("\u5F00\u59CB\u6D4B\u8BD5"));
+        b.setDisabled(false).setButtonText(idleText);
       }
     }));
     new import_obsidian.Setting(c).setName(__ertr("\u81EA\u5B9A\u4E49\u9605\u8BFB\u63D0\u793A\u8BCD")).setDesc(__ertr("\u7559\u7A7A\u4F7F\u7528\u5185\u7F6E\u4E2D\u6587\u9605\u8BFB\u52A9\u624B\uFF1B\u586B\u5199\u540E\u5C06\u5B8C\u5168\u66FF\u6362\u5185\u7F6E\u63D0\u793A\u8BCD\u3002")).addTextArea((t) => {
@@ -67075,21 +67203,30 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
   // ── Перевод ───────────────────────────────────────────────────────────────
   _tabTranslate(c) {
     this._sectionIntro(c, __ertr("AI \u4E0E\u7FFB\u8BD1"), __ertr("\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u043D\u0443\u0436\u043D\u044B\u0435 \u0441\u0435\u0442\u0435\u0432\u044B\u0435 \u0444\u0443\u043D\u043A\u0446\u0438\u0438. \u041E\u0431\u044B\u0447\u043D\u043E\u0435 \u0447\u0442\u0435\u043D\u0438\u0435 \u043E\u0441\u0442\u0430\u0451\u0442\u0441\u044F \u043E\u0444\u043B\u0430\u0439\u043D."));
-    new import_obsidian.Setting(c).setName(__ertr("AI \u8F85\u52A9\u9605\u8BFB")).setDesc(__ertr("\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF0C\u53EF\u89E3\u91CA\u539F\u6587\u3001\u63D0\u70BC\u5173\u952E\u6982\u5FF5\u5E76\u7EE7\u7EED\u8FFD\u95EE\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u53D1\u9001\u95EE\u9898\u65F6\uFF0C\u9009\u4E2D\u7684\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u5230\u6240\u9009\u670D\u52A1\uFF1B\u9ED8\u8BA4\u5173\u95ED\u3002")).addToggle((t) => t.setValue(this.plugin.settings.aiEnabled === true).onChange(async (v) => {
-      this.plugin.settings.aiEnabled = v;
-      await this.plugin.saveAll();
-      this.display();
-    }));
-    if (this.plugin.settings.aiEnabled) {
-      this._group(c, {
-        name: __ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 AI"),
-        desc: __ertr("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u0435\u0440\u0432\u0438\u0441; \u0434\u043B\u044F \u043E\u0431\u043B\u0430\u0447\u043D\u044B\u0445 \u0441\u0435\u0440\u0432\u0438\u0441\u043E\u0432 \u043E\u0431\u044B\u0447\u043D\u043E \u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E \u043A\u043B\u044E\u0447\u0430, \u043C\u043E\u0434\u0435\u043B\u044C \u0438 \u0430\u0434\u0440\u0435\u0441 \u0443\u0436\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u044B."),
-        build: (b, redraw) => this._groupAi(b, redraw)
+    const state = aiSetupState(this.plugin);
+    const cfg = aiConfig(this.plugin);
+    const setup = new import_obsidian.Setting(c);
+    setup.settingEl.addClass("er-ai-system-status");
+    if (!state.ready) {
+      setup.setName(state.kind === "unconfigured" ? __ertr("AI \u52A9\u8BFB\u5C1A\u672A\u8BBE\u7F6E") : __ertr("AI \u52A9\u8BFB\u8FD8\u5DEE\u4E00\u6B65")).setDesc(aiSetupMessage(state)).addButton((b) => b.setButtonText(state.kind === "unconfigured" ? __ertr("\u5F00\u59CB\u8BBE\u7F6E") : __ertr("\u7EE7\u7EED\u8BBE\u7F6E")).setCta().onClick(() => openPluginAiSettings(this.app, this.plugin, () => this._redraw())));
+    } else {
+      const modelName = cfg.model || (cfg.transport === "cli" ? __ertr("\u8DDF\u968F\u6A21\u578B") : __ertr("\u9ED8\u8BA4\u6A21\u578B"));
+      setup.setName(__ertr("AI \u52A9\u8BFB\u5DF2\u8BBE\u7F6E")).setDesc(`${cfg.provider.label} \xB7 ${modelName}`).addButton((b) => b.setButtonText(__ertr("\u66F4\u6362\u670D\u52A1")).onClick(() => openPluginAiSettings(this.app, this.plugin, () => this._redraw())));
+      const badge = setup.nameEl.createSpan({
+        cls: `er-ai-status-badge ${state.enabled ? "is-ready" : "is-off"}`,
+        text: state.enabled ? __ertr("\u53EF\u4EE5\u4F7F\u7528") : __ertr("\u5F53\u524D\u5173\u95ED")
       });
+      badge.setAttr("aria-label", state.enabled ? __ertr("\u53EF\u4EE5\u4F7F\u7528") : __ertr("\u5F53\u524D\u5173\u95ED"));
+      new import_obsidian.Setting(c).setName(__ertr("\u5728\u9009\u6587\u5DE5\u5177\u6761\u663E\u793A AI")).setDesc(__ertr("\u5173\u95ED\u540E\u4FDD\u7559\u670D\u52A1\u548C\u5BC6\u94A5\uFF0C\u53EA\u9690\u85CF\u9009\u4E2D\u6587\u5B57\u540E\u7684 AI \u6309\u94AE\u3002")).addToggle((t) => t.setValue(state.enabled).onChange(async (v) => {
+        this.plugin.settings.aiEnabled = v;
+        await this.plugin.saveAll();
+        this._redraw();
+      }));
       new import_obsidian.Setting(c).setName(__ertr("\u0411\u044B\u0441\u0442\u0440\u044B\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B")).setDesc(__ertr("{0} \u043A\u043D\u043E\u043F\u043E\u043A \u0432 \u043E\u043A\u043D\u0435 AI. \u041C\u043E\u0436\u043D\u043E \u043C\u0435\u043D\u044F\u0442\u044C \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044F \u0438 \u043F\u043E\u043B\u043D\u044B\u0439 \u0442\u0435\u043A\u0441\u0442, \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0442\u044C \u0441\u0432\u043E\u0438 \u0438 \u0443\u0434\u0430\u043B\u044F\u0442\u044C \u043D\u0435\u043D\u0443\u0436\u043D\u044B\u0435.", aiQuickPrompts(this.plugin.settings).length)).addButton((b) => b.setButtonText(__ertr("\u0423\u043F\u0440\u0430\u0432\u043B\u044F\u0442\u044C")).onClick(() => {
         new AiPromptLibraryModal(this.app, this.plugin, () => this._redraw()).open();
       }));
     }
+    c.createEl("h3", { cls: "er-set-h", text: __ertr("\u5212\u7EBF\u7FFB\u8BD1") });
     new import_obsidian.Setting(c).setName(__ertr("\u041A\u043D\u043E\u043F\u043A\u0430 \u043F\u0435\u0440\u0435\u0432\u043E\u0434\u0430 \u0432 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0438")).setDesc(__ertr("\u0414\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u0442 \u043A\u043D\u043E\u043F\u043A\u0443 \u043F\u0435\u0440\u0435\u0432\u043E\u0434\u0430 \u0432 \u043F\u0430\u043D\u0435\u043B\u044C\u043A\u0443, \u043A\u043E\u0442\u043E\u0440\u0430\u044F \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043F\u0440\u0438 \u0432\u044B\u0434\u0435\u043B\u0435\u043D\u0438\u0438 \u0442\u0435\u043A\u0441\u0442\u0430. \u041F\u0435\u0440\u0435\u0432\u043E\u0434 \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0440\u044F\u0434\u043E\u043C \u0441 \u043E\u0440\u0438\u0433\u0438\u043D\u0430\u043B\u043E\u043C, \u0435\u0433\u043E \u043C\u043E\u0436\u043D\u043E \u0441\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0438\u043B\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0432 \u0437\u0430\u043C\u0435\u0442\u043A\u0443 \u043F\u043E\u0434 \u0446\u0438\u0442\u0430\u0442\u043E\u0439. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u043A\u043D\u0438\u0433\u0443 \u0437\u0430\u043D\u043E\u0432\u043E, \u0447\u0442\u043E\u0431\u044B \u043A\u043D\u043E\u043F\u043A\u0430 \u043F\u043E\u044F\u0432\u0438\u043B\u0430\u0441\u044C.")).addToggle((t) => t.setValue(this.plugin.settings.translateEnabled === true).onChange(async (v) => {
       this.plugin.settings.translateEnabled = v;
       await this.plugin.saveAll();

@@ -11,6 +11,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import ePub from "epubjs";
 import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "./ai-providers.js";
 import { createOpenAiSseParser } from "./ai-stream.js";
+import { deriveAiSetupState } from "./ai-setup-state.js";
 import { cliReasoningEfforts, probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { translateUiText } from "./i18n-runtime.js";
@@ -471,6 +472,27 @@ Object.assign(__erEN, {
   "管理": "Manage",
   "普通阅读保持离线。只有发起 AI 请求时，所选原文、书名和问题才会发送给当前服务。": "Regular reading stays offline. The selected passage, book title, and question are sent to the current service only when you make an AI request.",
   "请在 Obsidian 插件设置中打开 Qiaomu Book Reader → AI 与翻译。": "Open Qiaomu Book Reader → AI & translation in Obsidian plugin settings.",
+  "设置 AI 助读": "Set up AI assistance",
+  "AI 助读尚未设置": "AI assistance is not set up",
+  "AI 助读还差一步": "AI assistance needs one more step",
+  "AI 助读已设置": "AI assistance is set up",
+  "选择一种 AI 服务并完成连接测试，之后选中文字即可使用 AI 解读。": "Choose an AI service and complete the connection test. Then select text to use AI assistance.",
+  "还需要选择或创建 API 密钥，完成测试后即可使用。": "Select or create an API key, then complete the test to start using AI.",
+  "还需要选择模型，完成测试后即可使用。": "Choose a model, then complete the test to start using AI.",
+  "还需要填写接口地址，完成测试后即可使用。": "Enter the Base URL, then complete the test to start using AI.",
+  "当前服务只能在桌面版 Obsidian 中使用，请更换服务或回到桌面端设置。": "This service works only in Obsidian desktop. Change the service or finish setup on desktop.",
+  "设置已更改，请完成连接测试后启用 AI 助读。": "Settings changed. Complete the connection test to enable AI assistance.",
+  "开始设置": "Start setup",
+  "继续设置": "Continue setup",
+  "更换服务": "Change service",
+  "可以使用": "Ready",
+  "当前关闭": "Off",
+  "在选文工具条显示 AI": "Show AI in the selection toolbar",
+  "关闭后保留服务配置，只隐藏选中文字后的 AI 按钮。": "Turning this off keeps the service configuration and only hides the AI button after text selection.",
+  "关闭后保留服务和密钥，只隐藏选中文字后的 AI 按钮。": "Turning this off keeps the service and key and only hides the AI button after text selection.",
+  "测试并启用": "Test and enable",
+  "AI 助读已启用：{0} · {1} ms": "AI assistance enabled: {0} · {1} ms",
+  "划线翻译": "Selection translation",
   "选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。": "Show ✨ for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
   "AI 模型配置": "AI model configuration",
   "选择服务、模型和密钥；Ollama 与 LM Studio 在本机运行。": "Choose a service, model, and key. Ollama and LM Studio run locally.",
@@ -788,6 +810,7 @@ const DEFAULT = {
   // selected passage to whichever service they choose, and that has to be a
   // decision, never a surprise.
   aiEnabled: false,
+  aiNeedsVerification: false,
   aiProvider: "",
   // The API key itself lives in Obsidian SecretStorage. data.json keeps only
   // the selected secret ID so vault syncing never copies the key.
@@ -3436,6 +3459,28 @@ function aiConfig(plugin) {
     cliPath: String(settings.aiCliPaths && settings.aiCliPaths[id] || "").trim(),
   };
 }
+function aiSetupState(plugin) {
+  const cfg = aiConfig(plugin);
+  return deriveAiSetupState({
+    provider: cfg.provider,
+    transport: cfg.transport,
+    base: cfg.base,
+    model: cfg.model,
+    needsKey: cfg.needsKey,
+    key: cfg.key,
+    desktop: Platform.isDesktopApp,
+    needsVerification: plugin.settings.aiNeedsVerification === true,
+    enabled: plugin.settings.aiEnabled === true,
+  });
+}
+function aiSetupMessage(state) {
+  if (state.reason === "key") return __ertr("还需要选择或创建 API 密钥，完成测试后即可使用。");
+  if (state.reason === "model") return __ertr("还需要选择模型，完成测试后即可使用。");
+  if (state.reason === "base") return __ertr("还需要填写接口地址，完成测试后即可使用。");
+  if (state.reason === "desktop") return __ertr("当前服务只能在桌面版 Obsidian 中使用，请更换服务或回到桌面端设置。");
+  if (state.reason === "verify") return __ertr("设置已更改，请完成连接测试后启用 AI 助读。");
+  return __ertr("选择一种 AI 服务并完成连接测试，之后选中文字即可使用 AI 解读。");
+}
 // One instruction for the whole conversation. The breakdown is not a mode of its
 // own: it is simply the question most readers ask first, so it is described here
 // and sent as an ordinary message.
@@ -4094,11 +4139,8 @@ function addBarButtons(view, pop) {
     b.addEventListener("click", fn);
     return b;
   };
-  const cfg = aiConfig(view.plugin);
-  const aiReady = cfg.provider && (cfg.transport === "cli"
-    ? Platform.isDesktopApp
-    : cfg.base && cfg.model && (!cfg.needsKey || cfg.key));
-  if (view.plugin.settings.aiEnabled && aiReady) {
+  const aiState = aiSetupState(view.plugin);
+  if (aiState.ready && aiState.enabled) {
     act("er-hl-ai", "wand-sparkles", __ertr("AI 解读"), () => {
       const cur = view._currentHl();
       view._hideHlPopup();
@@ -6141,32 +6183,49 @@ const ReadSettingsModal = class extends Modal {
     const plugin = this.view.plugin;
     const s = plugin.settings;
     const cfg = aiConfig(plugin);
+    const state = aiSetupState(plugin);
     const section = c.createDiv("er-rs-ai-card");
-    new Setting(section)
-      .setName(__ertr("AI 辅助阅读"))
-      .setDesc(__ertr("选中文本后显示 ✨；只有你主动提问时才会发送原文。"))
-      .addToggle((toggle) => toggle
-        .setValue(s.aiEnabled === true)
-        .onChange(async (value) => {
-          s.aiEnabled = value;
-          await plugin.saveAll();
-          this._draw();
-        }));
+    if (!state.ready) {
+      section.addClass("er-ai-setup-empty");
+      const icon = section.createDiv("er-ai-setup-icon");
+      svgIcon(icon, "wand-sparkles");
+      section.createDiv({ cls: "er-ai-setup-title", text: state.kind === "unconfigured"
+        ? __ertr("AI 助读尚未设置")
+        : __ertr("AI 助读还差一步") });
+      section.createDiv({ cls: "er-ai-setup-desc", text: aiSetupMessage(state) });
+      const start = section.createEl("button", {
+        cls: "mod-cta er-ai-setup-cta",
+        text: state.kind === "unconfigured" ? __ertr("开始设置") : __ertr("继续设置"),
+      });
+      start.addEventListener("click", () => openPluginAiSettings(this.app, plugin, () => this._draw()));
+    } else {
+      const providerName = cfg.provider.label;
+      const modelName = cfg.model || (cfg.transport === "cli" ? __ertr("跟随模型") : __ertr("默认模型"));
+      const status = new Setting(section)
+        .setName(__ertr("AI 助读已设置"))
+        .setDesc(`${providerName} · ${modelName}`)
+        .addButton((button) => button
+          .setButtonText(__ertr("更换服务"))
+          .onClick(() => openPluginAiSettings(this.app, plugin, () => this._draw())));
+      status.settingEl.addClass("er-ai-status-row");
+      const badge = status.nameEl.createSpan({
+        cls: `er-ai-status-badge ${state.enabled ? "is-ready" : "is-off"}`,
+        text: state.enabled ? __ertr("可以使用") : __ertr("当前关闭"),
+      });
+      badge.setAttr("aria-label", state.enabled ? __ertr("可以使用") : __ertr("当前关闭"));
+      new Setting(section)
+        .setName(__ertr("在选文工具条显示 AI"))
+        .setDesc(__ertr("关闭后保留服务配置，只隐藏选中文字后的 AI 按钮。"))
+        .addToggle((toggle) => toggle
+          .setValue(state.enabled)
+          .onChange(async (value) => {
+            s.aiEnabled = value;
+            await plugin.saveAll();
+            this._draw();
+          }));
+    }
 
-    const providerName = cfg.provider ? cfg.provider.label : __ertr("尚未配置");
-    const modelName = cfg.provider
-      ? (cfg.model || (cfg.transport === "cli" ? __ertr("跟随模型") : __ertr("默认模型")))
-      : "";
-    new Setting(section)
-      .setName(__ertr("当前服务"))
-      .setDesc(cfg.provider
-        ? `${providerName} · ${modelName}`
-        : __ertr("选择服务和模型后，选中文本即可使用 AI 解读。"))
-      .addButton((button) => button
-        .setButtonText(cfg.provider ? __ertr("更换或配置") : __ertr("开始配置"))
-        .onClick(() => openPluginAiSettings(this.app, plugin)));
-
-    if (cfg.provider && cfg.transport === "cli") {
+    if (state.ready && cfg.transport === "cli") {
       if (!s.aiCliEfforts || typeof s.aiCliEfforts !== "object") s.aiCliEfforts = {};
       const labels = {
         "": __ertr("跟随模型"),
@@ -6187,7 +6246,7 @@ const ReadSettingsModal = class extends Modal {
             await plugin.saveAll();
           });
         });
-    } else if (cfg.provider && cfg.provider.supportsThinking) {
+    } else if (state.ready && cfg.provider.supportsThinking) {
       if (!s.aiThinking || typeof s.aiThinking !== "object") s.aiThinking = {};
       new Setting(section)
         .setName(__ertr("思考模式"))
@@ -6200,24 +6259,26 @@ const ReadSettingsModal = class extends Modal {
           }));
     }
 
-    new Setting(section)
-      .setName(__ertr("回答语言"))
-      .setDesc(__ertr("AI 解读和追问使用的语言。"))
-      .addText((text) => text
-        .setPlaceholder("中文")
-        .setValue(s.aiInto || "中文")
-        .onChange(async (value) => {
-          s.aiInto = value.trim() || "中文";
-          await plugin.saveAll();
-        }));
+    if (state.ready) {
+      new Setting(section)
+        .setName(__ertr("回答语言"))
+        .setDesc(__ertr("AI 解读和追问使用的语言。"))
+        .addText((text) => text
+          .setPlaceholder("中文")
+          .setValue(s.aiInto || "中文")
+          .onChange(async (value) => {
+            s.aiInto = value.trim() || "中文";
+            await plugin.saveAll();
+          }));
 
-    const prompts = c.createDiv("er-rs-ai-card");
-    new Setting(prompts)
-      .setName(__ertr("快捷问题"))
-      .setDesc(__ertr("AI 对话框中显示 {0} 个，可按自己的阅读习惯增删。", aiQuickPrompts(s).length))
-      .addButton((button) => button
-        .setButtonText(__ertr("管理"))
-        .onClick(() => new AiPromptLibraryModal(this.app, plugin).open()));
+      const prompts = c.createDiv("er-rs-ai-card");
+      new Setting(prompts)
+        .setName(__ertr("快捷问题"))
+        .setDesc(__ertr("AI 对话框中显示 {0} 个，可按自己的阅读习惯增删。", aiQuickPrompts(s).length))
+        .addButton((button) => button
+          .setButtonText(__ertr("管理"))
+          .onClick(() => new AiPromptLibraryModal(this.app, plugin).open()));
+    }
 
     const privacy = c.createDiv("er-rs-ai-privacy");
     svgIcon(privacy.createSpan({ cls: "er-rs-ai-privacy-icon" }), "shield-check");
@@ -10721,20 +10782,24 @@ const SettingsGroupModal = class extends Modal {
   }
   onClose() { this.contentEl.empty(); }
 };
-function openPluginAiSettings(app, plugin) {
+function openPluginAiSettings(app, plugin, onReady) {
   const tab = plugin && plugin.settingsTab;
-  if (tab) tab._tab = "translate";
-  if (!app.setting || typeof app.setting.open !== "function") {
+  if (!tab || typeof tab._groupAi !== "function") {
     new Notice(__ertr("请在 Obsidian 插件设置中打开 Qiaomu Book Reader → AI 与翻译。"));
     return;
   }
-  app.setting.open();
-  if (typeof app.setting.openTabById === "function") {
-    app.setting.openTabById(plugin.manifest.id);
-  }
-  window.setTimeout(() => {
-    if (tab && typeof tab._redraw === "function") tab._redraw();
-  }, 0);
+  let modal;
+  modal = new SettingsGroupModal(app, __ertr("设置 AI 助读"), (body, redraw) => {
+    tab._groupAi(body, redraw, {
+      enableOnSuccess: true,
+      onReady: () => {
+        modal.close();
+        if (typeof onReady === "function") onReady();
+        if (typeof tab._redraw === "function") tab._redraw();
+      },
+    });
+  });
+  modal.open();
 }
 const SettingsTab = class extends PluginSettingTab {
   // A row that stands for a whole group: name, one line on what is inside, and
@@ -10968,7 +11033,7 @@ const SettingsTab = class extends PluginSettingTab {
   // Where the breakdown is fetched from. In its own window because it is set up
   // once and then never touched, and because the key field has no business
   // sitting next to the reading options.
-  _groupAi(c, redraw) {
+  _groupAi(c, redraw, options = {}) {
     const s = this.plugin.settings;
     const cfg = aiConfig(this.plugin);
     new Setting(c)
@@ -10985,6 +11050,8 @@ const SettingsTab = class extends PluginSettingTab {
           s.aiProvider = v;
           s.aiModel = s.aiModels && s.aiModels[v] || "";
           s.aiBase = "";
+          s.aiEnabled = false;
+          s.aiNeedsVerification = Boolean(v);
           await this.plugin.saveAll();
           redraw();
         });
@@ -11008,6 +11075,8 @@ const SettingsTab = class extends PluginSettingTab {
         .setValue(s.aiCliPaths[s.aiProvider] || "")
         .onChange(async (v) => {
           s.aiCliPaths[s.aiProvider] = v.trim();
+          s.aiEnabled = false;
+          s.aiNeedsVerification = true;
           await this.plugin.saveAll();
         }));
       cliPathSetting.addButton((b) => b.setButtonText(__ertr("自动检测")).onClick(async () => {
@@ -11023,6 +11092,8 @@ const SettingsTab = class extends PluginSettingTab {
           return;
         }
         s.aiCliPaths[s.aiProvider] = found;
+        s.aiEnabled = false;
+        s.aiNeedsVerification = true;
         await this.plugin.saveAll();
         new Notice(__ertr("已找到：{0}", found));
         redraw();
@@ -11062,6 +11133,8 @@ const SettingsTab = class extends PluginSettingTab {
           .onChange(async (v) => {
             s.aiSecret = v;
             s.aiKey = "";
+            s.aiEnabled = false;
+            s.aiNeedsVerification = true;
             await this.plugin.saveAll();
           }));
       }
@@ -11097,6 +11170,8 @@ const SettingsTab = class extends PluginSettingTab {
             s.aiModel = v.trim();
             if (!s.aiModels || typeof s.aiModels !== "object") s.aiModels = {};
             s.aiModels[s.aiProvider] = s.aiModel;
+            s.aiEnabled = false;
+            s.aiNeedsVerification = true;
             await this.plugin.saveAll();
           });
         if (p.models && p.models.length) {
@@ -11134,6 +11209,8 @@ const SettingsTab = class extends PluginSettingTab {
         .setDesc(__ertr("通常保持为空；只有区域地址、代理或自建服务需要修改。"))
         .addText((t) => t.setPlaceholder(p.base || "https://…/v1").setValue(s.aiBase || "").onChange(async (v) => {
           s.aiBase = normalizeAiBase(v);
+          s.aiEnabled = false;
+          s.aiNeedsVerification = true;
           await this.plugin.saveAll();
         }));
     };
@@ -11161,11 +11238,20 @@ const SettingsTab = class extends PluginSettingTab {
       .setDesc(p.transport === "cli"
         ? __ertr("开始测试会复用 CLI 账号发送一条不含书籍内容的最短消息，并可能消耗少量账号额度。")
         : __ertr("发送一条不含书籍内容的最短测试消息。云端服务可能产生极少量费用。"))
-      .addButton((b) => b.setButtonText(__ertr("开始测试")).setCta().onClick(async () => {
+      .addButton((b) => b.setButtonText(options.enableOnSuccess ? __ertr("测试并启用") : __ertr("开始测试")).setCta().onClick(async () => {
+        const idleText = options.enableOnSuccess ? __ertr("测试并启用") : __ertr("开始测试");
         b.setDisabled(true).setButtonText(__ertr("测试中…"));
         try {
           const result = await aiTestConnection(this.plugin);
-          new Notice(__ertr("连接成功：{0} · {1} ms", result.model, result.latency));
+          if (options.enableOnSuccess) {
+            s.aiEnabled = true;
+            s.aiNeedsVerification = false;
+            await this.plugin.saveAll();
+            new Notice(__ertr("AI 助读已启用：{0} · {1} ms", result.model, result.latency));
+            if (typeof options.onReady === "function") options.onReady(result);
+          } else {
+            new Notice(__ertr("连接成功：{0} · {1} ms", result.model, result.latency));
+          }
         } catch (e) {
           const why = e && e.erReason;
           const msg = why === "notconfigured" ? __ertr("请先填写接口地址和模型。")
@@ -11183,7 +11269,7 @@ const SettingsTab = class extends PluginSettingTab {
                     : __ertr("连接失败，请检查网络、接口地址和模型名称。");
           new Notice(msg, 7000);
         } finally {
-          b.setDisabled(false).setButtonText(__ertr("开始测试"));
+          b.setDisabled(false).setButtonText(idleText);
         }
       }));
     new Setting(c)
@@ -11491,20 +11577,39 @@ const SettingsTab = class extends PluginSettingTab {
   // ── Перевод ───────────────────────────────────────────────────────────────
   _tabTranslate(c) {
     this._sectionIntro(c, __ertr("AI 与翻译"), __ertr("Включите только нужные сетевые функции. Обычное чтение остаётся офлайн."));
-    new Setting(c)
-      .setName(__ertr("AI 辅助阅读"))
-      .setDesc(__ertr("选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。"))
-      .addToggle((t) => t.setValue(this.plugin.settings.aiEnabled === true).onChange(async (v) => {
-        this.plugin.settings.aiEnabled = v;
-        await this.plugin.saveAll();
-        this.display();
-      }));
-    if (this.plugin.settings.aiEnabled) {
-      this._group(c, {
-        name: __ertr("Настройка AI"),
-        desc: __ertr("Выберите сервис; для облачных сервисов обычно достаточно ключа, модель и адрес уже настроены."),
-        build: (b, redraw) => this._groupAi(b, redraw),
+    const state = aiSetupState(this.plugin);
+    const cfg = aiConfig(this.plugin);
+    const setup = new Setting(c);
+    setup.settingEl.addClass("er-ai-system-status");
+    if (!state.ready) {
+      setup
+        .setName(state.kind === "unconfigured" ? __ertr("AI 助读尚未设置") : __ertr("AI 助读还差一步"))
+        .setDesc(aiSetupMessage(state))
+        .addButton((b) => b
+          .setButtonText(state.kind === "unconfigured" ? __ertr("开始设置") : __ertr("继续设置"))
+          .setCta()
+          .onClick(() => openPluginAiSettings(this.app, this.plugin, () => this._redraw())));
+    } else {
+      const modelName = cfg.model || (cfg.transport === "cli" ? __ertr("跟随模型") : __ertr("默认模型"));
+      setup
+        .setName(__ertr("AI 助读已设置"))
+        .setDesc(`${cfg.provider.label} · ${modelName}`)
+        .addButton((b) => b
+          .setButtonText(__ertr("更换服务"))
+          .onClick(() => openPluginAiSettings(this.app, this.plugin, () => this._redraw())));
+      const badge = setup.nameEl.createSpan({
+        cls: `er-ai-status-badge ${state.enabled ? "is-ready" : "is-off"}`,
+        text: state.enabled ? __ertr("可以使用") : __ertr("当前关闭"),
       });
+      badge.setAttr("aria-label", state.enabled ? __ertr("可以使用") : __ertr("当前关闭"));
+      new Setting(c)
+        .setName(__ertr("在选文工具条显示 AI"))
+        .setDesc(__ertr("关闭后保留服务和密钥，只隐藏选中文字后的 AI 按钮。"))
+        .addToggle((t) => t.setValue(state.enabled).onChange(async (v) => {
+          this.plugin.settings.aiEnabled = v;
+          await this.plugin.saveAll();
+          this._redraw();
+        }));
       new Setting(c)
         .setName(__ertr("Быстрые вопросы"))
         .setDesc(__ertr("{0} кнопок в окне AI. Можно менять названия и полный текст, добавлять свои и удалять ненужные.", aiQuickPrompts(this.plugin.settings).length))
@@ -11512,6 +11617,7 @@ const SettingsTab = class extends PluginSettingTab {
           new AiPromptLibraryModal(this.app, this.plugin, () => this._redraw()).open();
         }));
     }
+    c.createEl("h3", { cls: "er-set-h", text: __ertr("划线翻译") });
     new Setting(c)
       .setName(__ertr("Кнопка перевода в выделении"))
       .setDesc(__ertr("Добавляет кнопку перевода в панельку, которая появляется при выделении текста. Перевод открывается рядом с оригиналом, его можно скопировать или сохранить в заметку под цитатой. Откройте книгу заново, чтобы кнопка появилась."))

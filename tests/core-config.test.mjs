@@ -13,6 +13,7 @@ import {
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
+import { deriveAiSetupState } from "../src/ai-setup-state.js";
 import { isChineseSourceText, translateUiText } from "../src/i18n-runtime.js";
 import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
 
@@ -141,6 +142,24 @@ test("AI HTTP failures distinguish a rejected key from a refused request", () =>
   assert.equal(classifyAiHttpStatus(403), "forbidden");
   assert.equal(classifyAiHttpStatus(429), "limit");
   assert.equal(classifyAiHttpStatus(500), "http");
+});
+
+test("AI setup state separates configuration readiness from toolbar visibility", () => {
+  assert.deepEqual(deriveAiSetupState(), {
+    kind: "unconfigured", ready: false, enabled: false, reason: "provider",
+  });
+  assert.equal(deriveAiSetupState({ provider: {}, base: "https://api.example.com", model: "m", needsKey: true }).reason, "key");
+  assert.equal(deriveAiSetupState({ provider: {}, base: "https://api.example.com", needsKey: false }).reason, "model");
+  assert.equal(deriveAiSetupState({ provider: {}, transport: "cli", desktop: false }).reason, "desktop");
+  assert.equal(deriveAiSetupState({
+    provider: {}, base: "https://api.example.com", model: "m", needsVerification: true,
+  }).reason, "verify");
+  assert.deepEqual(deriveAiSetupState({
+    provider: {}, base: "https://api.example.com", model: "m", needsKey: true, key: "secret", enabled: false,
+  }), { kind: "disabled", ready: true, enabled: false, reason: "" });
+  assert.deepEqual(deriveAiSetupState({ provider: {}, transport: "cli", desktop: true, enabled: true }), {
+    kind: "ready", ready: true, enabled: true, reason: "",
+  });
 });
 
 test("DeepSeek requests keep thinking separate and make connection checks short", () => {
@@ -328,7 +347,8 @@ test("selection popup keeps primary actions compact and moves note tools into Mo
   const start = source.indexOf("function addBarButtons");
   const end = source.indexOf("const AiExplainModal", start);
   const popupSource = source.slice(start, end);
-  assert.match(popupSource, /view\.plugin\.settings\.aiEnabled && aiReady/);
+  assert.match(popupSource, /const aiState = aiSetupState\(view\.plugin\)/);
+  assert.match(popupSource, /aiState\.ready && aiState\.enabled/);
   assert.match(popupSource, /act\("er-hl-ai", "wand-sparkles"/);
   assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file, view\)\.open\(\)/);
   assert.match(popupSource, /act\("er-hl-menu", "more"/);
@@ -431,12 +451,29 @@ test("reading settings split reading and AI assistance without exposing secrets"
   assert.match(modalSource, /initialTab = "reading"/);
   assert.match(modalSource, /\[\["reading", __ertr\("阅读"\)\], \["ai", __ertr\("AI 助读"\)\]\]/);
   assert.match(modalSource, /_drawAi\(c\)/);
-  assert.match(modalSource, /setName\(__ertr\("当前服务"\)\)/);
+  assert.match(modalSource, /AI 助读尚未设置/);
+  assert.match(modalSource, /setName\(__ertr\("在选文工具条显示 AI"\)\)/);
   assert.match(modalSource, /setName\(__ertr\("回答语言"\)\)/);
   assert.match(modalSource, /setName\(__ertr\("快捷问题"\)\)/);
-  assert.match(modalSource, /openPluginAiSettings\(this\.app, plugin\)/);
+  assert.match(modalSource, /openPluginAiSettings\(this\.app, plugin, \(\) => this\._draw\(\)\)/);
   assert.doesNotMatch(modalSource, /SecretComponent|API 密钥|接口地址/);
   assert.match(source, /new ReadSettingsModal\(this\.app, this\.readerView, "ai"\)\.open\(\)/);
   assert.match(css, /\.er-rs-tabs \{/);
   assert.match(css, /\.er-rs-ai-card \{/);
+});
+
+test("AI setup uses one status-driven flow and enables only after a successful test", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const start = source.indexOf("_tabTranslate(c)");
+  const end = source.indexOf("_tabData(c)", start);
+  const tabSource = source.slice(start, end);
+  assert.match(tabSource, /const state = aiSetupState\(this\.plugin\)/);
+  assert.match(tabSource, /AI 助读尚未设置/);
+  assert.match(tabSource, /在选文工具条显示 AI/);
+  assert.doesNotMatch(tabSource, /setName\(__ertr\("AI 辅助阅读"\)\)[\s\S]*addToggle/);
+  assert.match(source, /enableOnSuccess: true/);
+  assert.match(source, /setButtonText\(options\.enableOnSuccess \? __ertr\("测试并启用"\)/);
+  assert.match(source, /s\.aiEnabled = true;[\s\S]*await this\.plugin\.saveAll\(\)/);
+  assert.match(source, /s\.aiNeedsVerification = false/);
+  assert.match(source, /s\.aiNeedsVerification = true/);
 });
