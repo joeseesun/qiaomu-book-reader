@@ -62445,7 +62445,8 @@ function deleteBookFromVault(app, plugin, file, after) {
     cancelText: __ertr("\u041E\u0442\u043C\u0435\u043D\u0430"),
     onYes: async () => {
       try {
-        await app.fileManager.trashFile(file);
+        const onDisk = await app.vault.adapter.exists(file.path);
+        if (onDisk) await app.fileManager.trashFile(file);
         const path5 = file.path;
         if (plugin.progress) delete plugin.progress[path5];
         if (plugin.progressBackups) delete plugin.progressBackups[path5];
@@ -64839,9 +64840,10 @@ var LibraryModal = class extends import_obsidian.Modal {
     await this.plugin.refreshProgress();
     const folder = erPath(this.plugin.settings.booksFolder);
     const prefix = folder ? folder + "/" : "";
-    const files = this.app.vault.getFiles().filter(
+    let files = this.app.vault.getFiles().filter(
       (f) => (f.extension === "epub" || f.extension === "pdf" || f.extension === "fb2") && (prefix === "" || f.path.startsWith(prefix))
     );
+    files = (await Promise.all(files.map(async (f) => await this.app.vault.adapter.exists(f.path) ? f : null))).filter(Boolean);
     if (!files.length) {
       const e = contentEl.createDiv("er-lib-empty");
       const emptyIcon = e.createDiv("er-lib-empty-icon");

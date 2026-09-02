@@ -6585,7 +6585,14 @@ function deleteBookFromVault(app, plugin, file, after) {
     cancelText: __ertr("Отмена"),
     onYes: async () => {
       try {
-        await app.fileManager.trashFile(file);
+        // Sync clients (BaiduSyncdisk and friends) can delete a book outside
+        // Obsidian while the vault index still holds a stale entry. trashFile
+        // on a file that is gone from disk always rejects, which made the
+        // reader show "could not delete" no matter how many times it was
+        // tried. Check the disk, not the cache, and treat "already gone" as
+        // success: clean the data and refresh.
+        const onDisk = await app.vault.adapter.exists(file.path);
+        if (onDisk) await app.fileManager.trashFile(file);
         const path5 = file.path;
         if (plugin.progress) delete plugin.progress[path5];
         if (plugin.progressBackups) delete plugin.progressBackups[path5];
@@ -9030,9 +9037,13 @@ const LibraryModal = class extends Modal {
     // Match on "<folder>/" — a bare startsWith would also pull in a sibling
     // folder that merely shares the prefix (e.g. "Books" catching "Books archive").
     const prefix = folder ? folder + "/" : "";
-    const files = this.app.vault.getFiles().filter(
+    let files = this.app.vault.getFiles().filter(
       (f) => (f.extension === "epub" || f.extension === "pdf" || f.extension === "fb2") && (prefix === "" || f.path.startsWith(prefix))
     );
+    // Drop "ghost" entries: sync clients sometimes remove a book on disk while
+    // the vault index still lists it, and every action on such a card (open,
+    // delete) fails. One stat per book is cheap next to rendering covers.
+    files = (await Promise.all(files.map(async (f) => (await this.app.vault.adapter.exists(f.path)) ? f : null))).filter(Boolean);
     if (!files.length) {
       const e = contentEl.createDiv("er-lib-empty");
       const emptyIcon = e.createDiv("er-lib-empty-icon");
