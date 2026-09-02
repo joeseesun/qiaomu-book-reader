@@ -64941,6 +64941,23 @@ var LibraryModal = class extends import_obsidian.Modal {
     this._coverResizeObs.observe(grid);
     erAutoFocus(input, 60);
     erBlurOnTapOutside(this.contentEl, input);
+    if (!this._libVaultWired) {
+      this._libVaultWired = true;
+      const refresh = () => {
+        window.clearTimeout(this._libVaultTimer);
+        this._libVaultTimer = window.setTimeout(() => {
+          if (this.contentEl && this.contentEl.isConnected) this._refresh();
+        }, 1500);
+      };
+      for (const ev of ["create", "delete", "rename"]) {
+        try {
+          this.registerEvent(this.app.vault.on(ev, (f) => {
+            if (f && /^(epub|fb2|pdf)$/.test(f.extension || "")) refresh();
+          }));
+        } catch (e) {
+        }
+      }
+    }
   }
   // Open the OS file picker for the three supported formats, then import.
   _pickBooks() {

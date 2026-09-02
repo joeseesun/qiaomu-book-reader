@@ -9142,6 +9142,30 @@ const LibraryModal = class extends Modal {
     this._coverResizeObs.observe(grid);
     erAutoFocus(input, 60);
     erBlurOnTapOutside(this.contentEl, input);
+    // Keep the shelf honest while it is open. The file list is a snapshot taken
+    // in onOpen(); a book restored from the recycle bin or synced in by a cloud
+    // client after that never re-runs onOpen, so the library kept showing a
+    // stale list (a restored book missing) until the tab was closed and
+    // reopened. Vault events fix that; Component.registerEvent releases the
+    // listeners when the modal/view closes. _refresh() re-runs onOpen, hence
+    // the wire-once guard. Debounced like the command refresh — a sync fires
+    // these in bursts.
+    if (!this._libVaultWired) {
+      this._libVaultWired = true;
+      const refresh = () => {
+        window.clearTimeout(this._libVaultTimer);
+        this._libVaultTimer = window.setTimeout(() => {
+          if (this.contentEl && this.contentEl.isConnected) this._refresh();
+        }, 1500);
+      };
+      for (const ev of ["create", "delete", "rename"]) {
+        try {
+          this.registerEvent(this.app.vault.on(ev, (f) => {
+            if (f && /^(epub|fb2|pdf)$/.test(f.extension || "")) refresh();
+          }));
+        } catch { /* registerEvent unavailable on this host — manual refresh still works */ }
+      }
+    }
   }
   // Open the OS file picker for the three supported formats, then import.
   _pickBooks() {
