@@ -46,7 +46,7 @@
 
 ## AI 辅助阅读
 
-AI 默认关闭。启用后，可以围绕选中的原文通俗解释、举例、提炼要点、联系实际、换角度分析或生成测试题，并继续自由追问。快捷提示词支持在插件设置中新增、修改、删除和恢复默认，也可从 AI 对话框右上角直接管理。模型提供思考过程时会单独显示，回答完成后自动折叠，不与正式回答混在一起。
+AI 默认关闭。启用后，可以围绕选中的原文通俗解释、举例、提炼要点、联系实际、换角度分析或生成测试题，并继续自由追问。书内“阅读设置”新增“AI 助读”标签，可就近开关 AI、查看当前服务与模型、调节思考模式/强度、回答语言和快捷问题；API 密钥、接口地址等低频敏感配置仍留在插件系统设置。DeepSeek V4 可单独开关思考模式；模型提供思考过程时会单独显示，回答完成后自动折叠，不与正式回答混在一起。
 
 - 本机账号：Codex CLI、Claude Code CLI、Grok CLI。安装并登录一次后，插件可直接复用账号，无需再填 API 密钥。三个 CLI 分别记住自己的模型和思考强度。
 - 国产模型：DeepSeek、Kimi、通义千问、智谱 GLM、MiniMax。
@@ -61,7 +61,7 @@ CLI 模式会自动检测可执行文件和登录状态，在独立临时目录�
 
 ## 外观与阅读设置
 
-插件设置的“外观”页和书内“阅读设置”使用同一组数据。主题、正文字体、字号和行距直接展示；分设备外观、电子墨水屏、对齐、插图和沉浸阅读等低频选项收在“更多外观选项”中。书内弹窗只在竖向滚动，并为滚动条预留空间，不再遮住控件。
+插件设置的“外观”页和书内“阅读设置”使用同一组数据。书内弹窗按任务分为“阅读”和“AI 助读”两个标签；主题、正文字体、字号和行距直接展示，分设备外观、电子墨水屏、对齐、插图和沉浸阅读等低频选项收在“更多阅读设置”中。弹窗只在竖向滚动，并为滚动条预留空间，不再遮住控件。
 
 ## 阅读笔记如何工作
 
@@ -119,7 +119,7 @@ Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. It 
 
 Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest).
 
-Reading works fully offline. Optional AI reading assistance includes editable quick prompts and supports signed-in Codex CLI, Claude Code CLI and Grok CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI providers are desktop-only and still send the selected passage to their cloud service. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
+Reading works fully offline. In-reader settings are split into Reading and AI Assistance tabs, keeping frequent AI controls close to the book while API keys and endpoint URLs remain in Obsidian plugin settings. Optional AI reading assistance includes editable quick prompts and supports signed-in Codex CLI, Claude Code CLI and Grok CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI providers are desktop-only and still send the selected passage to their cloud service. AI is off by default, keys are stored with Obsidian SecretStorage, and only the passage you explicitly act on is sent.
 
 ## Acknowledgements and provenance
 

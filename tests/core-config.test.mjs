@@ -13,6 +13,98 @@ import {
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
+import { isChineseSourceText, translateUiText } from "../src/i18n-runtime.js";
+import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
+
+test("JSON stores reject arrays and invalid content instead of treating them as empty data", () => {
+  assert.deepEqual(parseJsonRecord('{"book": {"pct": 0.5}}'), { book: { pct: 0.5 } });
+  assert.throws(() => parseJsonRecord("[]"), /must contain a JSON object/);
+  assert.throws(() => parseJsonRecord("not-json"), SyntaxError);
+});
+
+test("serial task queue preserves order and recovers after a failed save", async () => {
+  const queue = createSerialTaskQueue();
+  const calls = [];
+  const first = queue.run(async () => { calls.push("first"); throw new Error("disk full"); });
+  const second = queue.run(async () => { calls.push("second"); return 2; });
+  await assert.rejects(first, /disk full/);
+  assert.equal(await second, 2);
+  assert.deepEqual(calls, ["first", "second"]);
+});
+
+test("unreadable JSON stores preserve raw content without overwriting the source", async () => {
+  const files = new Map([["reading-progress.json", "{broken"]]);
+  const writes = [];
+  const adapter = {
+    async exists(file) { return files.has(file); },
+    async read(file) { return files.get(file); },
+    async write(file, value) { writes.push([file, value]); files.set(file, value); },
+  };
+  const now = new Date("2026-09-02T10:20:30.456Z");
+  const expectedBackup = corruptBackupPath("reading-progress.json", now);
+  const result = await readJsonRecordStore(adapter, "reading-progress.json", "progress", now);
+  assert.equal(result.status, "unreadable");
+  assert.equal(result.value, null);
+  assert.equal(result.backupPath, expectedBackup);
+  assert.equal(files.get("reading-progress.json"), "{broken");
+  assert.deepEqual(writes, [[expectedBackup, "{broken"]]);
+});
+
+test("read failures block the store without inventing a backup that was never written", async () => {
+  const adapter = {
+    async exists() { return true; },
+    async read() { throw new Error("sync placeholder unavailable"); },
+    async write() { throw new Error("must not write without raw content"); },
+  };
+  const result = await readJsonRecordStore(adapter, "reading-highlights.json", "highlights");
+  assert.equal(result.status, "unreadable");
+  assert.equal(result.value, null);
+  assert.equal(result.backupPath, "");
+  assert.match(result.error.message, /sync placeholder unavailable/);
+});
+
+test("reader persistence refuses to overwrite unreadable stores and reports real save failures", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /this\._blockedStores\.add\(path5\)/);
+  assert.match(source, /if \(this\._blockedStores\.has\(path5\)\) return Promise\.resolve\(false\)/);
+  assert.match(source, /results\.some\(\(result\) => result === false\)/);
+  assert.match(source, /const saved = await this\._persistHighlights/);
+  assert.match(source, /if \(!saved\) \{[\s\S]*Не удалось сохранить комментарий/);
+  assert.match(source, /function renderReaderLoadError/);
+  assert.match(source, /Попробовать снова/);
+});
+
+test("runtime diagnostics use the maintained plugin identity", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /console\.(?:error|warn|log)\("Book Reader:/);
+  assert.doesNotMatch(source, /\bEltonReader\b/);
+  assert.match(source, /const QiaomuBookReader = class extends Plugin/);
+  assert.match(source, /export default QiaomuBookReader/);
+});
+
+test("Russian UI never leaks Chinese-first source keys", () => {
+  const english = {
+    "AI 解读": "AI reading",
+    "Плагин поддерживается 向阳乔木": "The plugin is maintained by Qiaomu",
+  };
+  assert.equal(isChineseSourceText("AI 解读"), true);
+  assert.equal(isChineseSourceText("Плагин поддерживается 向阳乔木"), false);
+  assert.equal(translateUiText("zh", "AI 解读", english, {}), "AI 解读");
+  assert.equal(translateUiText("en", "AI 解读", english, {}), "AI reading");
+  assert.equal(translateUiText("ru", "AI 解读", english, {}), "AI reading");
+  assert.equal(
+    translateUiText("ru", "Плагин поддерживается 向阳乔木", english, {}),
+    "Плагин поддерживается 向阳乔木",
+  );
+});
+
+test("translation target labels follow the plugin interface language", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /const TRANSLATION_LANGUAGE_CHOICES = Object\.freeze/);
+  assert.match(source, /\["zh-CN", "Китайский \(упрощённый\)"\]/);
+  assert.match(source, /TRANSLATION_LANGUAGE_CHOICES\.forEach\(\(\[value, label\]\) => d\.addOption\(value, __ertr\(label\)\)\)/);
+  assert.doesNotMatch(source, /\.addOption\("zh-CN", "简体中文"\)/);
+});
 
 function luminance(hex) {
   const channels = hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16) / 255);
@@ -60,6 +152,9 @@ test("DeepSeek requests keep thinking separate and make connection checks short"
   const normalBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages);
   assert.equal(normalBody.max_tokens, 2400);
   assert.deepEqual(normalBody.thinking, { type: "enabled" });
+
+  const fastBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages, { thinkingEnabled: false });
+  assert.deepEqual(fastBody.thinking, { type: "disabled" });
 
   const streamBody = buildAiRequestBody("deepseek", "deepseek-v4-flash", messages, { stream: true });
   assert.equal(streamBody.stream, true);
@@ -235,7 +330,7 @@ test("selection popup keeps primary actions compact and moves note tools into Mo
   const popupSource = source.slice(start, end);
   assert.match(popupSource, /view\.plugin\.settings\.aiEnabled && aiReady/);
   assert.match(popupSource, /act\("er-hl-ai", "wand-sparkles"/);
-  assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file\)\.open\(\)/);
+  assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file, view\)\.open\(\)/);
   assert.match(popupSource, /act\("er-hl-menu", "more"/);
   assert.match(popupSource, /setTitle\(__ertr\("Создать заметку"\)\)/);
   assert.match(popupSource, /setTitle\(__ertr\("Удалить выделение"\)\)/);
@@ -297,9 +392,12 @@ test("settings use task tabs, concise intros, and Chinese-first copy", () => {
   assert.match(chinese, /"Подтвердить": "确定"/);
   assert.match(source, /const baseMustBeVisible = providerId === "custom"/);
   assert.match(source, /aiModels: \{\}/);
+  assert.match(source, /aiThinking: \{\}/);
   assert.match(source, /aiCliEfforts: \{\}/);
   assert.match(source, /p\.transport === "cli" \|\| !p\.model \|\| p\.local/);
   assert.match(source, /setName\(__ertr\("思考强度"\)\)/);
+  assert.match(source, /setName\(__ertr\("Режим мышления"\)\)/);
+  assert.match(source, /advanced\.open = modelIsCustom \|\| baseIsCustom/);
   assert.match(source, /createEl\("details", \{ cls: "er-ai-advanced" \}\)/);
   assert.match(source, /createEl\("details", \{ cls: "er-settings-disclosure" \}\)/);
   assert.match(source, /setName\(__ertr\("正文字体"\)\)/);
@@ -322,4 +420,23 @@ test("reading settings own their scroll area without horizontal overflow", () =>
   assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*overflow-x:hidden;[^}]*overflow-y:auto;[^}]*scrollbar-gutter:stable/s);
   assert.match(css, /\.er-rs > \*, \.er-rs-card, \.er-rs-col, \.er-rs-quick, \.er-rs-grid \{[^}]*min-width:0/s);
   assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*padding-right:calc\(var\(--er-pad\) \+ 8px\)/s);
+});
+
+test("reading settings split reading and AI assistance without exposing secrets", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const start = source.indexOf("const ReadSettingsModal");
+  const end = source.indexOf("function parseNoteTags", start);
+  const modalSource = source.slice(start, end);
+  assert.match(modalSource, /initialTab = "reading"/);
+  assert.match(modalSource, /\[\["reading", __ertr\("阅读"\)\], \["ai", __ertr\("AI 助读"\)\]\]/);
+  assert.match(modalSource, /_drawAi\(c\)/);
+  assert.match(modalSource, /setName\(__ertr\("当前服务"\)\)/);
+  assert.match(modalSource, /setName\(__ertr\("回答语言"\)\)/);
+  assert.match(modalSource, /setName\(__ertr\("快捷问题"\)\)/);
+  assert.match(modalSource, /openPluginAiSettings\(this\.app, plugin\)/);
+  assert.doesNotMatch(modalSource, /SecretComponent|API 密钥|接口地址/);
+  assert.match(source, /new ReadSettingsModal\(this\.app, this\.readerView, "ai"\)\.open\(\)/);
+  assert.match(css, /\.er-rs-tabs \{/);
+  assert.match(css, /\.er-rs-ai-card \{/);
 });

@@ -53,6 +53,7 @@ export const AI_PROVIDERS = {
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
     description: "DeepSeek 官方接口，中文阅读推荐。",
     recommended: true,
+    supportsThinking: true,
   },
   kimi: {
     label: "Kimi（Moonshot）",
@@ -195,7 +196,11 @@ export function buildAiRequestBody(providerId, model, messages, options = {}) {
   // A connection check needs one short answer. In real reading conversations
   // DeepSeek may return reasoning_content, which the UI shows separately.
   if (providerId === "deepseek") {
-    body.thinking = { type: options.connectionTest ? "disabled" : "enabled" };
+    body.thinking = {
+      type: options.connectionTest || options.thinkingEnabled === false
+        ? "disabled"
+        : "enabled",
+    };
   }
   return body;
 }
