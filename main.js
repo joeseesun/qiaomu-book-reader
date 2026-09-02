@@ -56930,6 +56930,25 @@ Object.assign(__erEN, {
 });
 Object.assign(__erEN, {
   "AI \u8F85\u52A9\u9605\u8BFB": "AI-assisted reading",
+  "\u9605\u8BFB": "Reading",
+  "AI \u52A9\u8BFB": "AI assistant",
+  "AI \u52A9\u8BFB\u8BBE\u7F6E": "AI reading settings",
+  "\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF1B\u53EA\u6709\u4F60\u4E3B\u52A8\u63D0\u95EE\u65F6\u624D\u4F1A\u53D1\u9001\u539F\u6587\u3002": "Show \u2728 when text is selected. The passage is sent only when you ask a question.",
+  "\u5C1A\u672A\u914D\u7F6E": "Not configured",
+  "\u8BF7\u5148\u9009\u62E9 AI \u670D\u52A1": "Choose an AI service first",
+  "\u9009\u62E9\u670D\u52A1\u548C\u6A21\u578B\u540E\uFF0C\u9009\u4E2D\u6587\u672C\u5373\u53EF\u4F7F\u7528 AI \u89E3\u8BFB\u3002": "Choose a service and model, then select text to use AI assistance.",
+  "\u5F53\u524D\u670D\u52A1": "Current service",
+  "\u66F4\u6362\u6216\u914D\u7F6E": "Change or configure",
+  "\u5F00\u59CB\u914D\u7F6E": "Set up",
+  "\u65E5\u5E38\u89E3\u8BFB\u7528\u201C\u5FEB\u901F\u201D\u66F4\u987A\u624B\uFF0C\u590D\u6742\u5185\u5BB9\u518D\u63D0\u9AD8\u3002": "Low is faster for everyday reading; raise it for difficult passages.",
+  "\u601D\u8003\u6A21\u5F0F": "Thinking mode",
+  "\u9700\u8981\u6DF1\u5165\u5206\u6790\u65F6\u5F00\u542F\uFF1B\u5173\u95ED\u540E\u56DE\u7B54\u66F4\u5FEB\u3002": "Turn this on for deeper analysis; turn it off for faster answers.",
+  "AI \u89E3\u8BFB\u548C\u8FFD\u95EE\u4F7F\u7528\u7684\u8BED\u8A00\u3002": "Language used for AI explanations and follow-up questions.",
+  "\u5FEB\u6377\u95EE\u9898": "Quick prompts",
+  "AI \u5BF9\u8BDD\u6846\u4E2D\u663E\u793A {0} \u4E2A\uFF0C\u53EF\u6309\u81EA\u5DF1\u7684\u9605\u8BFB\u4E60\u60EF\u589E\u5220\u3002": "{0} quick prompts appear in the AI dialog. Add or remove them to fit your reading habits.",
+  "\u7BA1\u7406": "Manage",
+  "\u666E\u901A\u9605\u8BFB\u4FDD\u6301\u79BB\u7EBF\u3002\u53EA\u6709\u53D1\u8D77 AI \u8BF7\u6C42\u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5F53\u524D\u670D\u52A1\u3002": "Regular reading stays offline. The selected passage, book title, and question are sent to the current service only when you make an AI request.",
+  "\u8BF7\u5728 Obsidian \u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u6253\u5F00 Qiaomu Book Reader \u2192 AI \u4E0E\u7FFB\u8BD1\u3002": "Open Qiaomu Book Reader \u2192 AI & translation in Obsidian plugin settings.",
   "\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF0C\u53EF\u89E3\u91CA\u539F\u6587\u3001\u63D0\u70BC\u5173\u952E\u6982\u5FF5\u5E76\u7EE7\u7EED\u8FFD\u95EE\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u53D1\u9001\u95EE\u9898\u65F6\uFF0C\u9009\u4E2D\u7684\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u5230\u6240\u9009\u670D\u52A1\uFF1B\u9ED8\u8BA4\u5173\u95ED\u3002": "Show \u2728 for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
   "AI \u6A21\u578B\u914D\u7F6E": "AI model configuration",
   "\u9009\u62E9\u670D\u52A1\u3001\u6A21\u578B\u548C\u5BC6\u94A5\uFF1BOllama \u4E0E LM Studio \u5728\u672C\u673A\u8FD0\u884C\u3002": "Choose a service, model, and key. Ollama and LM Studio run locally.",
@@ -58201,7 +58220,8 @@ var QiaomuBookReader = class extends import_obsidian.Plugin {
       if (file instanceof import_obsidian.TFile && file.extension === "pdf")
         menu.addItem((item) => item.setTitle(__ertr("\u{1F4D6} \u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 Book Reader")).setIcon("book-open").onClick(() => this.openFile(file)));
     }));
-    this.addSettingTab(new SettingsTab(this.app, this));
+    this.settingsTab = new SettingsTab(this.app, this);
+    this.addSettingTab(this.settingsTab);
     this.addCommand({
       id: "show-onboarding",
       name: __ertr("\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u043F\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 (\u043E\u043D\u0431\u043E\u0440\u0434\u0438\u043D\u0433)"),
@@ -60097,7 +60117,7 @@ function addBarButtons(view, pop) {
       view._hideHlPopup();
       (_a2 = selOf(view.areaEl)) == null ? void 0 : _a2.removeAllRanges();
       if (!cur) return;
-      new AiExplainModal(view.app, view.plugin, cur.text, view.file).open();
+      new AiExplainModal(view.app, view.plugin, cur.text, view.file, view).open();
     });
   }
   act("er-hl-copy", "copy", __ertr("\u041A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442"), async () => {
@@ -60252,11 +60272,12 @@ var AiPromptLibraryModal = class extends import_obsidian.Modal {
   }
 };
 var AiExplainModal = class extends import_obsidian.Modal {
-  constructor(app, plugin, text, bookFile) {
+  constructor(app, plugin, text, bookFile, readerView) {
     super(app);
     this.plugin = plugin;
     this.text = text;
     this.bookFile = bookFile;
+    this.readerView = readerView;
     this.book = bookFile ? bookNoteLinkFor(plugin, bookFile) || bookFile.basename : "";
     this.turns = [];
   }
@@ -60270,14 +60291,10 @@ var AiExplainModal = class extends import_obsidian.Modal {
     if (this.book) headText.createDiv({ cls: "er-ai-book", text: this.book });
     const settings = head.createEl("button", { cls: "er-ai-prompt-settings" });
     svgIcon(settings, "sliders");
-    settings.setAttribute("aria-label", __ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0431\u044B\u0441\u0442\u0440\u044B\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B"));
+    settings.setAttribute("aria-label", __ertr("AI \u52A9\u8BFB\u8BBE\u7F6E"));
     settings.addEventListener("click", () => {
-      new AiPromptLibraryModal(this.app, this.plugin, () => {
-        if (!this.turns.length && this.log) {
-          this.log.empty();
-          this._buildEmpty();
-        }
-      }).open();
+      if (this.readerView) new ReadSettingsModal(this.app, this.readerView, "ai").open();
+      else openPluginAiSettings(this.app, this.plugin);
     });
     const quote = c.createDiv({ cls: "er-ai-quote", text: this.text });
     quote.addEventListener("click", () => quote.classList.toggle("er-ai-quote-open"));
@@ -62032,9 +62049,10 @@ function suggestNoteTitle(text, max = 60) {
   return cut.replace(/\s+[a-zа-яё]{1,2}$/i, "").replace(/[.,;:!?…\-—\s]+$/, "");
 }
 var ReadSettingsModal = class extends import_obsidian.Modal {
-  constructor(app, view) {
+  constructor(app, view, initialTab = "reading") {
     super(app);
     this.view = view;
+    this.tab = initialTab === "ai" ? "ai" : "reading";
   }
   // Тема применяется мгновенно, остальное требует перевёрстки. Обе читалки
   // называют свои методы по-разному, поэтому зовём то, что есть.
@@ -62099,16 +62117,86 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
     if (hint) host.createDiv("er-pan-hint").setText(hint);
     return row;
   }
+  _drawAi(c) {
+    const plugin = this.view.plugin;
+    const s = plugin.settings;
+    const cfg = aiConfig(plugin);
+    const section = c.createDiv("er-rs-ai-card");
+    new import_obsidian.Setting(section).setName(__ertr("AI \u8F85\u52A9\u9605\u8BFB")).setDesc(__ertr("\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF1B\u53EA\u6709\u4F60\u4E3B\u52A8\u63D0\u95EE\u65F6\u624D\u4F1A\u53D1\u9001\u539F\u6587\u3002")).addToggle((toggle) => toggle.setValue(s.aiEnabled === true).onChange(async (value) => {
+      s.aiEnabled = value;
+      await plugin.saveAll();
+      this._draw();
+    }));
+    const providerName = cfg.provider ? cfg.provider.label : __ertr("\u5C1A\u672A\u914D\u7F6E");
+    const modelName = cfg.provider ? cfg.model || (cfg.transport === "cli" ? __ertr("\u8DDF\u968F\u6A21\u578B") : __ertr("\u9ED8\u8BA4\u6A21\u578B")) : "";
+    new import_obsidian.Setting(section).setName(__ertr("\u5F53\u524D\u670D\u52A1")).setDesc(cfg.provider ? `${providerName} \xB7 ${modelName}` : __ertr("\u9009\u62E9\u670D\u52A1\u548C\u6A21\u578B\u540E\uFF0C\u9009\u4E2D\u6587\u672C\u5373\u53EF\u4F7F\u7528 AI \u89E3\u8BFB\u3002")).addButton((button) => button.setButtonText(cfg.provider ? __ertr("\u66F4\u6362\u6216\u914D\u7F6E") : __ertr("\u5F00\u59CB\u914D\u7F6E")).onClick(() => openPluginAiSettings(this.app, plugin)));
+    if (cfg.provider && cfg.transport === "cli") {
+      if (!s.aiCliEfforts || typeof s.aiCliEfforts !== "object") s.aiCliEfforts = {};
+      const labels = {
+        "": __ertr("\u8DDF\u968F\u6A21\u578B"),
+        minimal: __ertr("\u6700\u5FEB"),
+        low: __ertr("\u5FEB\u901F"),
+        medium: __ertr("\u6807\u51C6"),
+        high: __ertr("\u6DF1\u5165"),
+        xhigh: __ertr("\u6781\u6DF1"),
+        max: __ertr("\u6700\u6DF1")
+      };
+      new import_obsidian.Setting(section).setName(__ertr("\u601D\u8003\u5F3A\u5EA6")).setDesc(__ertr("\u65E5\u5E38\u89E3\u8BFB\u7528\u201C\u5FEB\u901F\u201D\u66F4\u987A\u624B\uFF0C\u590D\u6742\u5185\u5BB9\u518D\u63D0\u9AD8\u3002")).addDropdown((dropdown) => {
+        cliReasoningEfforts(s.aiProvider).forEach((value) => dropdown.addOption(value, labels[value] || value));
+        dropdown.setValue(s.aiCliEfforts[s.aiProvider] || "").onChange(async (value) => {
+          s.aiCliEfforts[s.aiProvider] = value;
+          await plugin.saveAll();
+        });
+      });
+    } else if (cfg.provider && cfg.provider.supportsThinking) {
+      if (!s.aiThinking || typeof s.aiThinking !== "object") s.aiThinking = {};
+      new import_obsidian.Setting(section).setName(__ertr("\u601D\u8003\u6A21\u5F0F")).setDesc(__ertr("\u9700\u8981\u6DF1\u5165\u5206\u6790\u65F6\u5F00\u542F\uFF1B\u5173\u95ED\u540E\u56DE\u7B54\u66F4\u5FEB\u3002")).addToggle((toggle) => toggle.setValue(s.aiThinking[s.aiProvider] !== false).onChange(async (value) => {
+        s.aiThinking[s.aiProvider] = value;
+        await plugin.saveAll();
+      }));
+    }
+    new import_obsidian.Setting(section).setName(__ertr("\u56DE\u7B54\u8BED\u8A00")).setDesc(__ertr("AI \u89E3\u8BFB\u548C\u8FFD\u95EE\u4F7F\u7528\u7684\u8BED\u8A00\u3002")).addText((text) => text.setPlaceholder("\u4E2D\u6587").setValue(s.aiInto || "\u4E2D\u6587").onChange(async (value) => {
+      s.aiInto = value.trim() || "\u4E2D\u6587";
+      await plugin.saveAll();
+    }));
+    const prompts = c.createDiv("er-rs-ai-card");
+    new import_obsidian.Setting(prompts).setName(__ertr("\u5FEB\u6377\u95EE\u9898")).setDesc(__ertr("AI \u5BF9\u8BDD\u6846\u4E2D\u663E\u793A {0} \u4E2A\uFF0C\u53EF\u6309\u81EA\u5DF1\u7684\u9605\u8BFB\u4E60\u60EF\u589E\u5220\u3002", aiQuickPrompts(s).length)).addButton((button) => button.setButtonText(__ertr("\u7BA1\u7406")).onClick(() => new AiPromptLibraryModal(this.app, plugin).open()));
+    const privacy = c.createDiv("er-rs-ai-privacy");
+    svgIcon(privacy.createSpan({ cls: "er-rs-ai-privacy-icon" }), "shield-check");
+    privacy.createSpan({ text: __ertr("\u666E\u901A\u9605\u8BFB\u4FDD\u6301\u79BB\u7EBF\u3002\u53EA\u6709\u53D1\u8D77 AI \u8BF7\u6C42\u65F6\uFF0C\u6240\u9009\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u7ED9\u5F53\u524D\u670D\u52A1\u3002") });
+  }
   onOpen() {
+    this.modalEl.addClass("er-rs-modal");
+    this.contentEl.addClass("er-rs");
+    this._draw();
+  }
+  _draw() {
     const v = this.view;
     const s = v.plugin.settings;
-    this.modalEl.addClass("er-rs-modal");
-    const c = this.contentEl;
+    let c = this.contentEl;
     c.empty();
-    c.addClass("er-rs");
     const head = c.createDiv("er-rs-head");
     head.createDiv("er-rs-title").setText(__ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0447\u0442\u0435\u043D\u0438\u044F"));
-    head.createDiv("er-rs-subtitle").setText(__ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u0441\u0440\u0430\u0437\u0443 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438."));
+    const tabs = head.createDiv("er-rs-tabs");
+    [["reading", __ertr("\u9605\u8BFB")], ["ai", __ertr("AI \u52A9\u8BFB")]].forEach(([id, label]) => {
+      const button = tabs.createEl("button", { cls: "er-rs-tab", text: label });
+      button.type = "button";
+      button.toggleClass("is-active", this.tab === id);
+      button.setAttr("aria-selected", this.tab === id ? "true" : "false");
+      button.addEventListener("click", () => {
+        if (this.tab === id) return;
+        this.tab = id;
+        this._draw();
+      });
+    });
+    c = c.createDiv("er-rs-body");
+    c.dataset.tab = this.tab;
+    if (this.tab === "ai") {
+      this.previewEl = null;
+      this._drawAi(c);
+      return;
+    }
+    c.createDiv("er-rs-subtitle").setText(__ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u0441\u0440\u0430\u0437\u0443 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438."));
     this.previewEl = c.createDiv("er-rs-preview");
     this.previewEl.setText(__ertr("\u0422\u0430\u043A \u0431\u0443\u0434\u0435\u0442 \u0432\u044B\u0433\u043B\u044F\u0434\u0435\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u043A\u043D\u0438\u0433\u0438"));
     this._paintPreview();
@@ -64251,7 +64339,7 @@ var ReaderView = class extends import_obsidian.ItemView {
       if (this.plugin.settings.aiEnabled) {
         menu.addItem((it) => it.setTitle(__ertr("\u0420\u0430\u0437\u043E\u0431\u0440\u0430\u0442\u044C \u0444\u0440\u0430\u0433\u043C\u0435\u043D\u0442")).setIcon("wand-sparkles").onClick(() => {
           this._hideHlPopup();
-          new AiExplainModal(this.app, this.plugin, text, this.file).open();
+          new AiExplainModal(this.app, this.plugin, text, this.file, this).open();
         }));
       }
       if (this.plugin.settings.translateEnabled) {
@@ -66427,6 +66515,21 @@ var SettingsGroupModal = class extends import_obsidian.Modal {
     this.contentEl.empty();
   }
 };
+function openPluginAiSettings(app, plugin) {
+  const tab = plugin && plugin.settingsTab;
+  if (tab) tab._tab = "translate";
+  if (!app.setting || typeof app.setting.open !== "function") {
+    new import_obsidian.Notice(__ertr("\u8BF7\u5728 Obsidian \u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u6253\u5F00 Qiaomu Book Reader \u2192 AI \u4E0E\u7FFB\u8BD1\u3002"));
+    return;
+  }
+  app.setting.open();
+  if (typeof app.setting.openTabById === "function") {
+    app.setting.openTabById(plugin.manifest.id);
+  }
+  window.setTimeout(() => {
+    if (tab && typeof tab._redraw === "function") tab._redraw();
+  }, 0);
+}
 var SettingsTab = class extends import_obsidian.PluginSettingTab {
   // A row that stands for a whole group: name, one line on what is inside, and
   // the button that opens it.

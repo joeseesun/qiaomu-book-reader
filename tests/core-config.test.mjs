@@ -330,7 +330,7 @@ test("selection popup keeps primary actions compact and moves note tools into Mo
   const popupSource = source.slice(start, end);
   assert.match(popupSource, /view\.plugin\.settings\.aiEnabled && aiReady/);
   assert.match(popupSource, /act\("er-hl-ai", "wand-sparkles"/);
-  assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file\)\.open\(\)/);
+  assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file, view\)\.open\(\)/);
   assert.match(popupSource, /act\("er-hl-menu", "more"/);
   assert.match(popupSource, /setTitle\(__ertr\("Создать заметку"\)\)/);
   assert.match(popupSource, /setTitle\(__ertr\("Удалить выделение"\)\)/);
@@ -420,4 +420,23 @@ test("reading settings own their scroll area without horizontal overflow", () =>
   assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*overflow-x:hidden;[^}]*overflow-y:auto;[^}]*scrollbar-gutter:stable/s);
   assert.match(css, /\.er-rs > \*, \.er-rs-card, \.er-rs-col, \.er-rs-quick, \.er-rs-grid \{[^}]*min-width:0/s);
   assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*padding-right:calc\(var\(--er-pad\) \+ 8px\)/s);
+});
+
+test("reading settings split reading and AI assistance without exposing secrets", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const start = source.indexOf("const ReadSettingsModal");
+  const end = source.indexOf("function parseNoteTags", start);
+  const modalSource = source.slice(start, end);
+  assert.match(modalSource, /initialTab = "reading"/);
+  assert.match(modalSource, /\[\["reading", __ertr\("阅读"\)\], \["ai", __ertr\("AI 助读"\)\]\]/);
+  assert.match(modalSource, /_drawAi\(c\)/);
+  assert.match(modalSource, /setName\(__ertr\("当前服务"\)\)/);
+  assert.match(modalSource, /setName\(__ertr\("回答语言"\)\)/);
+  assert.match(modalSource, /setName\(__ertr\("快捷问题"\)\)/);
+  assert.match(modalSource, /openPluginAiSettings\(this\.app, plugin\)/);
+  assert.doesNotMatch(modalSource, /SecretComponent|API 密钥|接口地址/);
+  assert.match(source, /new ReadSettingsModal\(this\.app, this\.readerView, "ai"\)\.open\(\)/);
+  assert.match(css, /\.er-rs-tabs \{/);
+  assert.match(css, /\.er-rs-ai-card \{/);
 });

@@ -452,6 +452,25 @@ Object.assign(__erEN, {
 // entire inherited dictionary in one risky release.
 Object.assign(__erEN, {
   "AI 辅助阅读": "AI-assisted reading",
+  "阅读": "Reading",
+  "AI 助读": "AI assistant",
+  "AI 助读设置": "AI reading settings",
+  "选中文本后显示 ✨；只有你主动提问时才会发送原文。": "Show ✨ when text is selected. The passage is sent only when you ask a question.",
+  "尚未配置": "Not configured",
+  "请先选择 AI 服务": "Choose an AI service first",
+  "选择服务和模型后，选中文本即可使用 AI 解读。": "Choose a service and model, then select text to use AI assistance.",
+  "当前服务": "Current service",
+  "更换或配置": "Change or configure",
+  "开始配置": "Set up",
+  "日常解读用“快速”更顺手，复杂内容再提高。": "Low is faster for everyday reading; raise it for difficult passages.",
+  "思考模式": "Thinking mode",
+  "需要深入分析时开启；关闭后回答更快。": "Turn this on for deeper analysis; turn it off for faster answers.",
+  "AI 解读和追问使用的语言。": "Language used for AI explanations and follow-up questions.",
+  "快捷问题": "Quick prompts",
+  "AI 对话框中显示 {0} 个，可按自己的阅读习惯增删。": "{0} quick prompts appear in the AI dialog. Add or remove them to fit your reading habits.",
+  "管理": "Manage",
+  "普通阅读保持离线。只有发起 AI 请求时，所选原文、书名和问题才会发送给当前服务。": "Regular reading stays offline. The selected passage, book title, and question are sent to the current service only when you make an AI request.",
+  "请在 Obsidian 插件设置中打开 Qiaomu Book Reader → AI 与翻译。": "Open Qiaomu Book Reader → AI & translation in Obsidian plugin settings.",
   "选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。": "Show ✨ for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
   "AI 模型配置": "AI model configuration",
   "选择服务、模型和密钥；Ollama 与 LM Studio 在本机运行。": "Choose a service, model, and key. Ollama and LM Studio run locally.",
@@ -1815,7 +1834,8 @@ const QiaomuBookReader = class extends Plugin {
       if (file instanceof TFile && file.extension === "pdf")
         menu.addItem((item) => item.setTitle(__ertr("\u{1F4D6} \u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0432 Book Reader")).setIcon("book-open").onClick(() => this.openFile(file)));
     }));
-    this.addSettingTab(new SettingsTab(this.app, this));
+    this.settingsTab = new SettingsTab(this.app, this);
+    this.addSettingTab(this.settingsTab);
     this.addCommand({
       id: "show-onboarding",
       name: __ertr("Показать приветствие (онбординг)"),
@@ -4084,7 +4104,7 @@ function addBarButtons(view, pop) {
       view._hideHlPopup();
       selOf(view.areaEl)?.removeAllRanges();
       if (!cur) return;
-      new AiExplainModal(view.app, view.plugin, cur.text, view.file).open();
+      new AiExplainModal(view.app, view.plugin, cur.text, view.file, view).open();
     });
   }
   act("er-hl-copy", "copy", __ertr("Копировать текст"), async () => {
@@ -4237,11 +4257,12 @@ const AiPromptLibraryModal = class extends Modal {
 // The breakdown itself: the passage on top, the answer under it, and the two
 // things a reader wants to do with it — copy it, or keep it under the quote.
 const AiExplainModal = class extends Modal {
-  constructor(app, plugin, text, bookFile) {
+  constructor(app, plugin, text, bookFile, readerView) {
     super(app);
     this.plugin = plugin;
     this.text = text;
     this.bookFile = bookFile;
+    this.readerView = readerView;
     this.book = bookFile ? bookNoteLinkFor(plugin, bookFile) || bookFile.basename : "";
     // What has been said so far, in the shape the service wants it. Nothing is
     // sent until the reader says something: the passage alone is not a question.
@@ -4260,14 +4281,10 @@ const AiExplainModal = class extends Modal {
     if (this.book) headText.createDiv({ cls: "er-ai-book", text: this.book });
     const settings = head.createEl("button", { cls: "er-ai-prompt-settings" });
     svgIcon(settings, "sliders");
-    settings.setAttribute("aria-label", __ertr("Настроить быстрые вопросы"));
+    settings.setAttribute("aria-label", __ertr("AI 助读设置"));
     settings.addEventListener("click", () => {
-      new AiPromptLibraryModal(this.app, this.plugin, () => {
-        if (!this.turns.length && this.log) {
-          this.log.empty();
-          this._buildEmpty();
-        }
-      }).open();
+      if (this.readerView) new ReadSettingsModal(this.app, this.readerView, "ai").open();
+      else openPluginAiSettings(this.app, this.plugin);
     });
     // The passage is context, not the subject: two lines, and it opens on a tap
     // for the times the reader wants to check the wording.
@@ -6046,9 +6063,10 @@ function suggestNoteTitle(text, max = 60) {
   return cut.replace(/\s+[a-zа-яё]{1,2}$/i, "").replace(/[.,;:!?…\-—\s]+$/, "");
 }
 const ReadSettingsModal = class extends Modal {
-  constructor(app, view) {
+  constructor(app, view, initialTab = "reading") {
     super(app);
     this.view = view;
+    this.tab = initialTab === "ai" ? "ai" : "reading";
   }
   // Тема применяется мгновенно, остальное требует перевёрстки. Обе читалки
   // называют свои методы по-разному, поэтому зовём то, что есть.
@@ -6119,16 +6137,124 @@ const ReadSettingsModal = class extends Modal {
     if (hint) host.createDiv("er-pan-hint").setText(hint);
     return row;
   }
+  _drawAi(c) {
+    const plugin = this.view.plugin;
+    const s = plugin.settings;
+    const cfg = aiConfig(plugin);
+    const section = c.createDiv("er-rs-ai-card");
+    new Setting(section)
+      .setName(__ertr("AI 辅助阅读"))
+      .setDesc(__ertr("选中文本后显示 ✨；只有你主动提问时才会发送原文。"))
+      .addToggle((toggle) => toggle
+        .setValue(s.aiEnabled === true)
+        .onChange(async (value) => {
+          s.aiEnabled = value;
+          await plugin.saveAll();
+          this._draw();
+        }));
+
+    const providerName = cfg.provider ? cfg.provider.label : __ertr("尚未配置");
+    const modelName = cfg.provider
+      ? (cfg.model || (cfg.transport === "cli" ? __ertr("跟随模型") : __ertr("默认模型")))
+      : "";
+    new Setting(section)
+      .setName(__ertr("当前服务"))
+      .setDesc(cfg.provider
+        ? `${providerName} · ${modelName}`
+        : __ertr("选择服务和模型后，选中文本即可使用 AI 解读。"))
+      .addButton((button) => button
+        .setButtonText(cfg.provider ? __ertr("更换或配置") : __ertr("开始配置"))
+        .onClick(() => openPluginAiSettings(this.app, plugin)));
+
+    if (cfg.provider && cfg.transport === "cli") {
+      if (!s.aiCliEfforts || typeof s.aiCliEfforts !== "object") s.aiCliEfforts = {};
+      const labels = {
+        "": __ertr("跟随模型"),
+        minimal: __ertr("最快"),
+        low: __ertr("快速"),
+        medium: __ertr("标准"),
+        high: __ertr("深入"),
+        xhigh: __ertr("极深"),
+        max: __ertr("最深"),
+      };
+      new Setting(section)
+        .setName(__ertr("思考强度"))
+        .setDesc(__ertr("日常解读用“快速”更顺手，复杂内容再提高。"))
+        .addDropdown((dropdown) => {
+          cliReasoningEfforts(s.aiProvider).forEach((value) => dropdown.addOption(value, labels[value] || value));
+          dropdown.setValue(s.aiCliEfforts[s.aiProvider] || "").onChange(async (value) => {
+            s.aiCliEfforts[s.aiProvider] = value;
+            await plugin.saveAll();
+          });
+        });
+    } else if (cfg.provider && cfg.provider.supportsThinking) {
+      if (!s.aiThinking || typeof s.aiThinking !== "object") s.aiThinking = {};
+      new Setting(section)
+        .setName(__ertr("思考模式"))
+        .setDesc(__ertr("需要深入分析时开启；关闭后回答更快。"))
+        .addToggle((toggle) => toggle
+          .setValue(s.aiThinking[s.aiProvider] !== false)
+          .onChange(async (value) => {
+            s.aiThinking[s.aiProvider] = value;
+            await plugin.saveAll();
+          }));
+    }
+
+    new Setting(section)
+      .setName(__ertr("回答语言"))
+      .setDesc(__ertr("AI 解读和追问使用的语言。"))
+      .addText((text) => text
+        .setPlaceholder("中文")
+        .setValue(s.aiInto || "中文")
+        .onChange(async (value) => {
+          s.aiInto = value.trim() || "中文";
+          await plugin.saveAll();
+        }));
+
+    const prompts = c.createDiv("er-rs-ai-card");
+    new Setting(prompts)
+      .setName(__ertr("快捷问题"))
+      .setDesc(__ertr("AI 对话框中显示 {0} 个，可按自己的阅读习惯增删。", aiQuickPrompts(s).length))
+      .addButton((button) => button
+        .setButtonText(__ertr("管理"))
+        .onClick(() => new AiPromptLibraryModal(this.app, plugin).open()));
+
+    const privacy = c.createDiv("er-rs-ai-privacy");
+    svgIcon(privacy.createSpan({ cls: "er-rs-ai-privacy-icon" }), "shield-check");
+    privacy.createSpan({ text: __ertr("普通阅读保持离线。只有发起 AI 请求时，所选原文、书名和问题才会发送给当前服务。") });
+  }
   onOpen() {
+    this.modalEl.addClass("er-rs-modal");
+    this.contentEl.addClass("er-rs");
+    this._draw();
+  }
+  _draw() {
     const v = this.view;
     const s = v.plugin.settings;
-    this.modalEl.addClass("er-rs-modal");
-    const c = this.contentEl;
+    let c = this.contentEl;
     c.empty();
-    c.addClass("er-rs");
     const head = c.createDiv("er-rs-head");
     head.createDiv("er-rs-title").setText(__ertr("Настройки чтения"));
-    head.createDiv("er-rs-subtitle").setText(__ertr("Настройки применяются сразу и сохраняются автоматически."));
+    const tabs = head.createDiv("er-rs-tabs");
+    [["reading", __ertr("阅读")], ["ai", __ertr("AI 助读")]].forEach(([id, label]) => {
+      const button = tabs.createEl("button", { cls: "er-rs-tab", text: label });
+      button.type = "button";
+      button.toggleClass("is-active", this.tab === id);
+      button.setAttr("aria-selected", this.tab === id ? "true" : "false");
+      button.addEventListener("click", () => {
+        if (this.tab === id) return;
+        this.tab = id;
+        this._draw();
+      });
+    });
+    c = c.createDiv("er-rs-body");
+    c.dataset.tab = this.tab;
+    if (this.tab === "ai") {
+      this.previewEl = null;
+      this._drawAi(c);
+      return;
+    }
+    c.createDiv("er-rs-subtitle").setText(__ertr("Настройки применяются сразу и сохраняются автоматически."));
     this.previewEl = c.createDiv("er-rs-preview");
     this.previewEl.setText(__ertr("Так будет выглядеть текст книги"));
     this._paintPreview();
@@ -8288,7 +8414,7 @@ const ReaderView = class extends ItemView {
       if (this.plugin.settings.aiEnabled) {
         menu.addItem((it) => it.setTitle(__ertr("Разобрать фрагмент")).setIcon("wand-sparkles").onClick(() => {
           this._hideHlPopup();
-          new AiExplainModal(this.app, this.plugin, text, this.file).open();
+          new AiExplainModal(this.app, this.plugin, text, this.file, this).open();
         }));
       }
       if (this.plugin.settings.translateEnabled) {
@@ -10595,6 +10721,21 @@ const SettingsGroupModal = class extends Modal {
   }
   onClose() { this.contentEl.empty(); }
 };
+function openPluginAiSettings(app, plugin) {
+  const tab = plugin && plugin.settingsTab;
+  if (tab) tab._tab = "translate";
+  if (!app.setting || typeof app.setting.open !== "function") {
+    new Notice(__ertr("请在 Obsidian 插件设置中打开 Qiaomu Book Reader → AI 与翻译。"));
+    return;
+  }
+  app.setting.open();
+  if (typeof app.setting.openTabById === "function") {
+    app.setting.openTabById(plugin.manifest.id);
+  }
+  window.setTimeout(() => {
+    if (tab && typeof tab._redraw === "function") tab._redraw();
+  }, 0);
+}
 const SettingsTab = class extends PluginSettingTab {
   // A row that stands for a whole group: name, one line on what is inside, and
   // the button that opens it.

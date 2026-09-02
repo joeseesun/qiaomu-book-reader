@@ -893,9 +893,44 @@ body:not(.is-mobile) .er-bot {
 .er-rs > *, .er-rs-card, .er-rs-col, .er-rs-quick, .er-rs-grid {
   min-width:0; max-width:100%; box-sizing:border-box;
 }
-.er-rs-head { margin:0 0 12px; }
+.er-rs-head {
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  margin:0 0 14px;
+}
 .er-rs-title { font-size: 21px; line-height:1.2; font-weight: 650; margin:0; }
 .er-rs-subtitle { margin-top:5px; color:var(--text-muted); font-size:12px; }
+.er-rs-tabs {
+  display:grid; grid-template-columns:repeat(2, minmax(84px, 1fr)); gap:3px;
+  padding:3px; border-radius:10px; background:var(--background-secondary);
+  flex:0 0 auto;
+}
+.er-rs-tab {
+  min-height:34px; padding:5px 13px; border:0; border-radius:8px;
+  color:var(--text-muted); background:transparent; box-shadow:none;
+  font-size:12.5px; font-weight:550; cursor:pointer;
+}
+.er-rs-tab:hover { color:var(--text-normal); background:var(--background-modifier-hover); }
+.er-rs-tab.is-active {
+  color:var(--text-normal); background:var(--background-primary);
+  box-shadow:0 1px 4px rgba(0,0,0,.1);
+}
+.er-rs-body { min-width:0; max-width:100%; }
+.er-rs-ai-card {
+  min-width:0; margin-bottom:12px; padding:2px 14px;
+  border:1px solid var(--background-modifier-border); border-radius:14px;
+  background:color-mix(in srgb, var(--background-secondary) 52%, transparent);
+}
+.er-rs-ai-card .setting-item { padding:14px 0; }
+.er-rs-ai-card .setting-item:last-child { border-bottom:0; }
+.er-rs-ai-card .setting-item-info,
+.er-rs-ai-card .setting-item-control { min-width:0; }
+.er-rs-ai-card .setting-item-description { overflow-wrap:anywhere; }
+.er-rs-ai-privacy {
+  display:flex; align-items:flex-start; gap:8px; padding:2px 4px;
+  color:var(--text-muted); font-size:12px; line-height:1.5;
+}
+.er-rs-ai-privacy-icon { display:flex; flex:0 0 auto; margin-top:1px; color:var(--text-faint); }
+.er-rs-ai-privacy-icon svg { width:15px; height:15px; }
 .er-rs-preview {
   border: 1px solid var(--background-modifier-border); border-radius: 14px;
   padding: 15px 18px; margin-bottom: 12px;
@@ -978,6 +1013,10 @@ body:not(.is-mobile) .er-bot {
   }
   .er-rs-quick { grid-template-columns:1fr; }
   .er-rs-grid { grid-template-columns: 1fr; gap: 16px; }
+  .er-rs-head { align-items:stretch; flex-direction:column; gap:12px; }
+  .er-rs-tabs { width:100%; }
+  .er-rs-tab { min-height:42px; font-size:14px; }
+  .er-rs-ai-card .setting-item { align-items:flex-start; gap:10px; }
   .er-rs { max-height: none; }
   .er-rs .er-col-btn, .er-rs .er-theme-btn, .er-rs .er-ff-btn,
   .er-rs .er-lh-btn, .er-rs .er-sz-btn { min-height: 44px; font-size: 14px; }
