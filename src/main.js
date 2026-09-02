@@ -493,6 +493,10 @@ Object.assign(__erEN, {
   "测试并启用": "Test and enable",
   "AI 助读已启用：{0} · {1} ms": "AI assistance enabled: {0} · {1} ms",
   "划线翻译": "Selection translation",
+  "阅读不是为了记住所有内容，而是为了遇见值得留下的思想。": "Reading is not about remembering everything, but about finding ideas worth keeping.",
+  "减小字号": "Decrease text size",
+  "增大字号": "Increase text size",
+  "可在 1.4–2.2 之间精调；中文长文通常使用 1.6–1.9 更舒适。": "Fine-tune between 1.4 and 2.2. A range of 1.6–1.9 usually works well for long Chinese text.",
   "选中文本后显示 ✨，可解释原文、提炼关键概念并继续追问。只有你主动发送问题时，选中的原文、书名和问题才会发送到所选服务；默认关闭。": "Show ✨ for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
   "AI 模型配置": "AI model configuration",
   "选择服务、模型和密钥；Ollama 与 LM Studio 在本机运行。": "Choose a service, model, and key. Ollama and LM Studio run locally.",
@@ -6315,18 +6319,15 @@ const ReadSettingsModal = class extends Modal {
       this._drawAi(c);
       return;
     }
-    c.createDiv("er-rs-subtitle").setText(__ertr("Настройки применяются сразу и сохраняются автоматически."));
     this.previewEl = c.createDiv("er-rs-preview");
-    this.previewEl.setText(__ertr("Так будет выглядеть текст книги"));
+    this.previewEl.setText(__ertr("阅读不是为了记住所有内容，而是为了遇见值得留下的思想。"));
     this._paintPreview();
     c.addEventListener("click", () => window.setTimeout(() => this._paintPreview(), 80), true);
 
-    // Apple Books keeps the two most frequently adjusted controls at the first
-    // level: page appearance and text size. Everything else follows in clear
-    // groups, with uncommon reading behaviour behind one disclosure row.
-    const quick = c.createDiv("er-rs-quick");
-    const appearance = quick.createDiv("er-rs-card er-rs-card-wide");
-    const size = quick.createDiv("er-rs-card er-rs-card-size");
+    // Theme is the only page-wide visual choice. Text size belongs with the
+    // rest of typography; isolating it in a narrow card caused the + button to
+    // escape the card and left most of the tile empty.
+    const appearance = c.createDiv("er-rs-card er-rs-theme-card");
     this._seg(
       appearance,
       __ertr("Тема"),
@@ -6337,14 +6338,20 @@ const ReadSettingsModal = class extends Modal {
         await this._apply(false);
       }
     );
-    size.createDiv("er-pan-sec").setText(__ertr("Размер шрифта"));
-    const szRow = size.createDiv("er-sz-row er-rs-size-control");
-    const szMinus = szRow.createDiv("er-sz-btn");
-    szMinus.setText("A−");
+    const grid = c.createDiv("er-rs-grid");
+    const colA = grid.createDiv("er-rs-col er-rs-card");
+    const colB = grid.createDiv("er-rs-col er-rs-card");
+    colA.createDiv("er-rs-h").setText(__ertr("Текст и шрифт"));
+    colA.createDiv("er-pan-sec").setText(__ertr("Размер шрифта"));
+    const szRow = colA.createDiv("er-sz-row er-rs-size-control");
+    const szMinus = szRow.createEl("button", { cls: "er-sz-btn", text: "A−" });
+    szMinus.type = "button";
+    szMinus.setAttr("aria-label", __ertr("减小字号"));
     const szLbl = szRow.createDiv("er-sz-label");
     szLbl.setText(`${s.fontSize}px`);
-    const szPlus = szRow.createDiv("er-sz-btn");
-    szPlus.setText("A+");
+    const szPlus = szRow.createEl("button", { cls: "er-sz-btn", text: "A+" });
+    szPlus.type = "button";
+    szPlus.setAttr("aria-label", __ertr("增大字号"));
     const chSz = async (d) => {
       s.fontSize = Math.min(32, Math.max(12, (s.fontSize || 18) + d));
       szLbl.setText(`${s.fontSize}px`);
@@ -6352,11 +6359,6 @@ const ReadSettingsModal = class extends Modal {
     };
     szMinus.addEventListener("click", () => chSz(-1));
     szPlus.addEventListener("click", () => chSz(1));
-
-    const grid = c.createDiv("er-rs-grid");
-    const colA = grid.createDiv("er-rs-col er-rs-card");
-    const colB = grid.createDiv("er-rs-col er-rs-card");
-    colA.createDiv("er-rs-h").setText(__ertr("Текст и шрифт"));
     this._seg(
       colA,
       __ertr("Шрифт"),
@@ -6367,19 +6369,35 @@ const ReadSettingsModal = class extends Modal {
         await this._apply(true);
       }
     );
-    const шаги = [1.4, 1.6, 1.8, 2.1];
-    this._seg(
-      colA,
-      __ertr("Межстрочный"),
-      [[1.4, __ertr("Компактно")], [1.6, __ertr("Обычно")], [1.8, __ertr("Комфортно")], [2.1, __ertr("Свободно")]],
-      () => шаги.find((x) => Math.abs((s.lineHeight || 1.8) - x) < 0.05),
-      async (x) => {
-        s.lineHeight = x;
-        await this._apply(true);
-      },
-      null,
-      true
-    );
+    const lineHead = colA.createDiv("er-rs-range-head");
+    lineHead.createSpan({ text: __ertr("Межстрочный") });
+    const lineValue = lineHead.createSpan({ cls: "er-rs-range-value" });
+    const lineLabel = (value) => value <= 1.5 ? __ertr("Компактно")
+      : value <= 1.7 ? __ertr("Обычно")
+        : value <= 1.95 ? __ertr("Комфортно") : __ertr("Свободно");
+    const updateLineValue = (value) => {
+      lineValue.setText(`${lineLabel(value)} · ${value.toFixed(2)}`);
+    };
+    const lineRange = colA.createEl("input", {
+      cls: "er-rs-range",
+      type: "range",
+      attr: { min: "1.4", max: "2.2", step: "0.05", value: String(s.lineHeight || 1.8) },
+    });
+    lineRange.setAttr("aria-label", __ertr("Межстрочный"));
+    const lineEnds = colA.createDiv("er-rs-range-ends");
+    lineEnds.createSpan({ text: __ertr("Компактно") });
+    lineEnds.createSpan({ text: __ertr("Свободно") });
+    updateLineValue(Number(lineRange.value));
+    lineRange.addEventListener("input", () => {
+      const value = Math.round(Number(lineRange.value) * 20) / 20;
+      s.lineHeight = value;
+      updateLineValue(value);
+      this._paintPreview();
+    });
+    lineRange.addEventListener("change", async () => {
+      s.lineHeight = Math.round(Number(lineRange.value) * 20) / 20;
+      await this._apply(true);
+    });
     colB.createDiv("er-rs-h").setText(__ertr("Параметры страницы"));
     this._seg(
       colB,
@@ -11346,15 +11364,13 @@ const SettingsTab = class extends PluginSettingTab {
       }));
     new Setting(c)
       .setName(__ertr("行距"))
-      .setDesc(__ertr("中文长文通常使用 1.6–1.8 更舒适。"))
-      .addDropdown((d) => d
-        .addOption("1.4", __ertr("紧凑 · 1.4"))
-        .addOption("1.6", __ertr("标准 · 1.6"))
-        .addOption("1.8", __ertr("舒适 · 1.8"))
-        .addOption("2.1", __ertr("宽松 · 2.1"))
-        .setValue(String(s.lineHeight || 1.8))
+      .setDesc(__ertr("可在 1.4–2.2 之间精调；中文长文通常使用 1.6–1.9 更舒适。"))
+      .addSlider((slider) => slider
+        .setLimits(1.4, 2.2, 0.05)
+        .setValue(s.lineHeight || 1.8)
+        .setDynamicTooltip()
         .onChange(async (value) => {
-          s.lineHeight = Number(value);
+          s.lineHeight = Math.round(value * 20) / 20;
           await applyAppearance(true);
         }));
 

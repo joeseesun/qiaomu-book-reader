@@ -438,8 +438,10 @@ test("quote template is language-neutral and migrates the old Russian fragment",
 test("reading settings own their scroll area without horizontal overflow", () => {
   const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
   assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*overflow-x:hidden;[^}]*overflow-y:auto;[^}]*scrollbar-gutter:stable/s);
-  assert.match(css, /\.er-rs > \*, \.er-rs-card, \.er-rs-col, \.er-rs-quick, \.er-rs-grid \{[^}]*min-width:0/s);
+  assert.match(css, /\.er-rs > \*, \.er-rs-card, \.er-rs-col, \.er-rs-grid \{[^}]*min-width:0/s);
   assert.match(css, /\.er-rs-modal \.modal-content\.er-rs \{[^}]*padding-right:calc\(var\(--er-pad\) \+ 8px\)/s);
+  assert.match(css, /\.er-rs \.er-sz-row \{[^}]*grid-template-columns:44px minmax\(64px, 1fr\) 44px/s);
+  assert.match(css, /\.er-rs \.er-rs-theme-card \.er-rs-seg \{[^}]*repeat\(3, minmax\(0, 1fr\)\)/s);
 });
 
 test("reading settings split reading and AI assistance without exposing secrets", () => {
@@ -457,6 +459,14 @@ test("reading settings split reading and AI assistance without exposing secrets"
   assert.match(modalSource, /setName\(__ertr\("快捷问题"\)\)/);
   assert.match(modalSource, /openPluginAiSettings\(this\.app, plugin, \(\) => this\._draw\(\)\)/);
   assert.doesNotMatch(modalSource, /SecretComponent|API 密钥|接口地址/);
+  assert.doesNotMatch(modalSource, /Настройки применяются сразу и сохраняются автоматически/);
+  assert.match(modalSource, /阅读不是为了记住所有内容，而是为了遇见值得留下的思想/);
+  assert.match(modalSource, /er-rs-card er-rs-theme-card/);
+  assert.match(modalSource, /colA\.createDiv\("er-pan-sec"\)\.setText\(__ertr\("Размер шрифта"\)\)/);
+  assert.match(modalSource, /createEl\("input", \{[\s\S]*type: "range"[\s\S]*min: "1\.4", max: "2\.2", step: "0\.05"/);
+  assert.match(modalSource, /lineRange\.addEventListener\("input"[\s\S]*this\._paintPreview\(\)/);
+  assert.match(modalSource, /lineRange\.addEventListener\("change"[\s\S]*this\._apply\(true\)/);
+  assert.doesNotMatch(modalSource, /const quick = c\.createDiv\("er-rs-quick"\)/);
   assert.match(source, /new ReadSettingsModal\(this\.app, this\.readerView, "ai"\)\.open\(\)/);
   assert.match(css, /\.er-rs-tabs \{/);
   assert.match(css, /\.er-rs-ai-card \{/);

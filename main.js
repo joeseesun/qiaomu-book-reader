@@ -57008,6 +57008,10 @@ Object.assign(__erEN, {
   "\u6D4B\u8BD5\u5E76\u542F\u7528": "Test and enable",
   "AI \u52A9\u8BFB\u5DF2\u542F\u7528\uFF1A{0} \xB7 {1} ms": "AI assistance enabled: {0} \xB7 {1} ms",
   "\u5212\u7EBF\u7FFB\u8BD1": "Selection translation",
+  "\u9605\u8BFB\u4E0D\u662F\u4E3A\u4E86\u8BB0\u4F4F\u6240\u6709\u5185\u5BB9\uFF0C\u800C\u662F\u4E3A\u4E86\u9047\u89C1\u503C\u5F97\u7559\u4E0B\u7684\u601D\u60F3\u3002": "Reading is not about remembering everything, but about finding ideas worth keeping.",
+  "\u51CF\u5C0F\u5B57\u53F7": "Decrease text size",
+  "\u589E\u5927\u5B57\u53F7": "Increase text size",
+  "\u53EF\u5728 1.4\u20132.2 \u4E4B\u95F4\u7CBE\u8C03\uFF1B\u4E2D\u6587\u957F\u6587\u901A\u5E38\u4F7F\u7528 1.6\u20131.9 \u66F4\u8212\u9002\u3002": "Fine-tune between 1.4 and 2.2. A range of 1.6\u20131.9 usually works well for long Chinese text.",
   "\u9009\u4E2D\u6587\u672C\u540E\u663E\u793A \u2728\uFF0C\u53EF\u89E3\u91CA\u539F\u6587\u3001\u63D0\u70BC\u5173\u952E\u6982\u5FF5\u5E76\u7EE7\u7EED\u8FFD\u95EE\u3002\u53EA\u6709\u4F60\u4E3B\u52A8\u53D1\u9001\u95EE\u9898\u65F6\uFF0C\u9009\u4E2D\u7684\u539F\u6587\u3001\u4E66\u540D\u548C\u95EE\u9898\u624D\u4F1A\u53D1\u9001\u5230\u6240\u9009\u670D\u52A1\uFF1B\u9ED8\u8BA4\u5173\u95ED\u3002": "Show \u2728 for selected text to explain the passage, extract key ideas, and continue with follow-up questions. The passage, book title, and question are sent to the selected service only when you submit a request. Off by default.",
   "AI \u6A21\u578B\u914D\u7F6E": "AI model configuration",
   "\u9009\u62E9\u670D\u52A1\u3001\u6A21\u578B\u548C\u5BC6\u94A5\uFF1BOllama \u4E0E LM Studio \u5728\u672C\u673A\u8FD0\u884C\u3002": "Choose a service, model, and key. Ollama and LM Studio run locally.",
@@ -62299,14 +62303,11 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
       this._drawAi(c);
       return;
     }
-    c.createDiv("er-rs-subtitle").setText(__ertr("\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u044F\u044E\u0442\u0441\u044F \u0441\u0440\u0430\u0437\u0443 \u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438."));
     this.previewEl = c.createDiv("er-rs-preview");
-    this.previewEl.setText(__ertr("\u0422\u0430\u043A \u0431\u0443\u0434\u0435\u0442 \u0432\u044B\u0433\u043B\u044F\u0434\u0435\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u043A\u043D\u0438\u0433\u0438"));
+    this.previewEl.setText(__ertr("\u9605\u8BFB\u4E0D\u662F\u4E3A\u4E86\u8BB0\u4F4F\u6240\u6709\u5185\u5BB9\uFF0C\u800C\u662F\u4E3A\u4E86\u9047\u89C1\u503C\u5F97\u7559\u4E0B\u7684\u601D\u60F3\u3002"));
     this._paintPreview();
     c.addEventListener("click", () => window.setTimeout(() => this._paintPreview(), 80), true);
-    const quick = c.createDiv("er-rs-quick");
-    const appearance = quick.createDiv("er-rs-card er-rs-card-wide");
-    const size = quick.createDiv("er-rs-card er-rs-card-size");
+    const appearance = c.createDiv("er-rs-card er-rs-theme-card");
     this._seg(
       appearance,
       __ertr("\u0422\u0435\u043C\u0430"),
@@ -62317,14 +62318,20 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
         await this._apply(false);
       }
     );
-    size.createDiv("er-pan-sec").setText(__ertr("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430"));
-    const szRow = size.createDiv("er-sz-row er-rs-size-control");
-    const szMinus = szRow.createDiv("er-sz-btn");
-    szMinus.setText("A\u2212");
+    const grid = c.createDiv("er-rs-grid");
+    const colA = grid.createDiv("er-rs-col er-rs-card");
+    const colB = grid.createDiv("er-rs-col er-rs-card");
+    colA.createDiv("er-rs-h").setText(__ertr("\u0422\u0435\u043A\u0441\u0442 \u0438 \u0448\u0440\u0438\u0444\u0442"));
+    colA.createDiv("er-pan-sec").setText(__ertr("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430"));
+    const szRow = colA.createDiv("er-sz-row er-rs-size-control");
+    const szMinus = szRow.createEl("button", { cls: "er-sz-btn", text: "A\u2212" });
+    szMinus.type = "button";
+    szMinus.setAttr("aria-label", __ertr("\u51CF\u5C0F\u5B57\u53F7"));
     const szLbl = szRow.createDiv("er-sz-label");
     szLbl.setText(`${s.fontSize}px`);
-    const szPlus = szRow.createDiv("er-sz-btn");
-    szPlus.setText("A+");
+    const szPlus = szRow.createEl("button", { cls: "er-sz-btn", text: "A+" });
+    szPlus.type = "button";
+    szPlus.setAttr("aria-label", __ertr("\u589E\u5927\u5B57\u53F7"));
     const chSz = async (d) => {
       s.fontSize = Math.min(32, Math.max(12, (s.fontSize || 18) + d));
       szLbl.setText(`${s.fontSize}px`);
@@ -62332,10 +62339,6 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
     };
     szMinus.addEventListener("click", () => chSz(-1));
     szPlus.addEventListener("click", () => chSz(1));
-    const grid = c.createDiv("er-rs-grid");
-    const colA = grid.createDiv("er-rs-col er-rs-card");
-    const colB = grid.createDiv("er-rs-col er-rs-card");
-    colA.createDiv("er-rs-h").setText(__ertr("\u0422\u0435\u043A\u0441\u0442 \u0438 \u0448\u0440\u0438\u0444\u0442"));
     this._seg(
       colA,
       __ertr("\u0428\u0440\u0438\u0444\u0442"),
@@ -62346,19 +62349,33 @@ var ReadSettingsModal = class extends import_obsidian.Modal {
         await this._apply(true);
       }
     );
-    const \u0448\u0430\u0433\u0438 = [1.4, 1.6, 1.8, 2.1];
-    this._seg(
-      colA,
-      __ertr("\u041C\u0435\u0436\u0441\u0442\u0440\u043E\u0447\u043D\u044B\u0439"),
-      [[1.4, __ertr("\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u043E")], [1.6, __ertr("\u041E\u0431\u044B\u0447\u043D\u043E")], [1.8, __ertr("\u041A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E")], [2.1, __ertr("\u0421\u0432\u043E\u0431\u043E\u0434\u043D\u043E")]],
-      () => \u0448\u0430\u0433\u0438.find((x) => Math.abs((s.lineHeight || 1.8) - x) < 0.05),
-      async (x) => {
-        s.lineHeight = x;
-        await this._apply(true);
-      },
-      null,
-      true
-    );
+    const lineHead = colA.createDiv("er-rs-range-head");
+    lineHead.createSpan({ text: __ertr("\u041C\u0435\u0436\u0441\u0442\u0440\u043E\u0447\u043D\u044B\u0439") });
+    const lineValue = lineHead.createSpan({ cls: "er-rs-range-value" });
+    const lineLabel = (value) => value <= 1.5 ? __ertr("\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u043E") : value <= 1.7 ? __ertr("\u041E\u0431\u044B\u0447\u043D\u043E") : value <= 1.95 ? __ertr("\u041A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E") : __ertr("\u0421\u0432\u043E\u0431\u043E\u0434\u043D\u043E");
+    const updateLineValue = (value) => {
+      lineValue.setText(`${lineLabel(value)} \xB7 ${value.toFixed(2)}`);
+    };
+    const lineRange = colA.createEl("input", {
+      cls: "er-rs-range",
+      type: "range",
+      attr: { min: "1.4", max: "2.2", step: "0.05", value: String(s.lineHeight || 1.8) }
+    });
+    lineRange.setAttr("aria-label", __ertr("\u041C\u0435\u0436\u0441\u0442\u0440\u043E\u0447\u043D\u044B\u0439"));
+    const lineEnds = colA.createDiv("er-rs-range-ends");
+    lineEnds.createSpan({ text: __ertr("\u041A\u043E\u043C\u043F\u0430\u043A\u0442\u043D\u043E") });
+    lineEnds.createSpan({ text: __ertr("\u0421\u0432\u043E\u0431\u043E\u0434\u043D\u043E") });
+    updateLineValue(Number(lineRange.value));
+    lineRange.addEventListener("input", () => {
+      const value = Math.round(Number(lineRange.value) * 20) / 20;
+      s.lineHeight = value;
+      updateLineValue(value);
+      this._paintPreview();
+    });
+    lineRange.addEventListener("change", async () => {
+      s.lineHeight = Math.round(Number(lineRange.value) * 20) / 20;
+      await this._apply(true);
+    });
     colB.createDiv("er-rs-h").setText(__ertr("\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B"));
     this._seg(
       colB,
@@ -67062,8 +67079,8 @@ var SettingsTab = class extends import_obsidian.PluginSettingTab {
       s.fontSize = size;
       await applyAppearance(true);
     }));
-    new import_obsidian.Setting(c).setName(__ertr("\u884C\u8DDD")).setDesc(__ertr("\u4E2D\u6587\u957F\u6587\u901A\u5E38\u4F7F\u7528 1.6\u20131.8 \u66F4\u8212\u9002\u3002")).addDropdown((d) => d.addOption("1.4", __ertr("\u7D27\u51D1 \xB7 1.4")).addOption("1.6", __ertr("\u6807\u51C6 \xB7 1.6")).addOption("1.8", __ertr("\u8212\u9002 \xB7 1.8")).addOption("2.1", __ertr("\u5BBD\u677E \xB7 2.1")).setValue(String(s.lineHeight || 1.8)).onChange(async (value) => {
-      s.lineHeight = Number(value);
+    new import_obsidian.Setting(c).setName(__ertr("\u884C\u8DDD")).setDesc(__ertr("\u53EF\u5728 1.4\u20132.2 \u4E4B\u95F4\u7CBE\u8C03\uFF1B\u4E2D\u6587\u957F\u6587\u901A\u5E38\u4F7F\u7528 1.6\u20131.9 \u66F4\u8212\u9002\u3002")).addSlider((slider) => slider.setLimits(1.4, 2.2, 0.05).setValue(s.lineHeight || 1.8).setDynamicTooltip().onChange(async (value) => {
+      s.lineHeight = Math.round(value * 20) / 20;
       await applyAppearance(true);
     }));
     const advanced = c.createEl("details", { cls: "er-settings-disclosure" });
