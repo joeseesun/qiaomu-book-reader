@@ -3310,6 +3310,20 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
     return this.total;
   }
 };
+// Resolve an image src against the spine item's URL, folding away "." and ".."
+// segments. ZIP entries are looked up by their literal archive path, so a
+// leftover "../" (calibre's Text/ + Images/ layout uses them everywhere) would
+// miss the file and leave a broken image.
+function resolveEpubSrc(itemUrl, src) {
+  if (/^(data:|https?:)/.test(src)) return src;
+  const stack = src.startsWith("/") ? [] : (itemUrl || "").split("/").slice(0, -1).filter(Boolean);
+  for (const seg of src.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") { if (stack.length) stack.pop(); continue; }
+    stack.push(seg);
+  }
+  return "/" + stack.join("/");
+}
 async function extractEpub(file, app) {
   const buf = await app.vault.readBinary(file);
   const book = ePub(buf);
@@ -3325,10 +3339,29 @@ async function extractEpub(file, app) {
         const src = img.getAttribute("src");
         if (!src || src.startsWith("data:")) continue;
         try {
-          const itemDir = (item.url || "").split("/").slice(0, -1).join("/");
-          const resolved = src.startsWith("/") ? src : (itemDir ? itemDir + "/" + src : "/" + src).replace(/\/\.?\//g, "/");
+          const resolved = resolveEpubSrc(item.url, src);
           const dataUrl = await book.archive.getBase64(resolved);
           if (dataUrl) img.setAttribute("src", dataUrl);
+        } catch { /* optional step; a failure here must not interrupt reading */ }
+      }
+      // EPUB3 covers and InDesign/Kobo illustrations often wrap the bitmap in
+      // <svg><image xlink:href=.../></svg>. nodeToHtml has no rule for that
+      // markup and would drop it silently, so swap each <image> for a plain
+      // <img> once its href is inlined as a data URL.
+      const svgImages = Array.from(body.querySelectorAll?.("svg image") ?? []);
+      for (const imageEl of svgImages) {
+        try {
+          const href = imageEl.getAttribute("href")
+            || imageEl.getAttributeNS("http://www.w3.org/1999/xlink", "href")
+            || imageEl.getAttribute("xlink:href")
+            || "";
+          if (!href || href.startsWith("data:")) continue;
+          const resolved = resolveEpubSrc(item.url, href);
+          const dataUrl = await book.archive.getBase64(resolved);
+          if (!dataUrl) continue;
+          const img = doc.createElement("img");
+          img.setAttribute("src", dataUrl);
+          imageEl.parentNode?.replaceChild(img, imageEl);
         } catch { /* optional step; a failure here must not interrupt reading */ }
       }
       const html = nodeToHtml(body);
@@ -6777,7 +6810,14 @@ function deleteBookFromVault(app, plugin, file, after) {
     cancelText: __ertr("Отмена"),
     onYes: async () => {
       try {
-        await app.fileManager.trashFile(file);
+        // Sync clients (BaiduSyncdisk and friends) can delete a book outside
+        // Obsidian while the vault index still holds a stale entry. trashFile
+        // on a file that is gone from disk always rejects, which made the
+        // reader show "could not delete" no matter how many times it was
+        // tried. Check the disk, not the cache, and treat "already gone" as
+        // success: clean the data and refresh.
+        const onDisk = await app.vault.adapter.exists(file.path);
+        if (onDisk) await app.fileManager.trashFile(file);
         const path5 = file.path;
         if (plugin.progress) delete plugin.progress[path5];
         if (plugin.progressBackups) delete plugin.progressBackups[path5];
@@ -9255,9 +9295,13 @@ const LibraryModal = class extends Modal {
     // Match on "<folder>/" — a bare startsWith would also pull in a sibling
     // folder that merely shares the prefix (e.g. "Books" catching "Books archive").
     const prefix = folder ? folder + "/" : "";
-    const files = this.app.vault.getFiles().filter(
+    let files = this.app.vault.getFiles().filter(
       (f) => (f.extension === "epub" || f.extension === "pdf" || f.extension === "fb2") && (prefix === "" || f.path.startsWith(prefix))
     );
+    // Drop "ghost" entries: sync clients sometimes remove a book on disk while
+    // the vault index still lists it, and every action on such a card (open,
+    // delete) fails. One stat per book is cheap next to rendering covers.
+    files = (await Promise.all(files.map(async (f) => (await this.app.vault.adapter.exists(f.path)) ? f : null))).filter(Boolean);
     if (!files.length) {
       const e = contentEl.createDiv("er-lib-empty");
       const emptyIcon = e.createDiv("er-lib-empty-icon");
@@ -9356,6 +9400,30 @@ const LibraryModal = class extends Modal {
     this._coverResizeObs.observe(grid);
     erAutoFocus(input, 60);
     erBlurOnTapOutside(this.contentEl, input);
+    // Keep the shelf honest while it is open. The file list is a snapshot taken
+    // in onOpen(); a book restored from the recycle bin or synced in by a cloud
+    // client after that never re-runs onOpen, so the library kept showing a
+    // stale list (a restored book missing) until the tab was closed and
+    // reopened. Vault events fix that; Component.registerEvent releases the
+    // listeners when the modal/view closes. _refresh() re-runs onOpen, hence
+    // the wire-once guard. Debounced like the command refresh — a sync fires
+    // these in bursts.
+    if (!this._libVaultWired) {
+      this._libVaultWired = true;
+      const refresh = () => {
+        window.clearTimeout(this._libVaultTimer);
+        this._libVaultTimer = window.setTimeout(() => {
+          if (this.contentEl && this.contentEl.isConnected) this._refresh();
+        }, 1500);
+      };
+      for (const ev of ["create", "delete", "rename"]) {
+        try {
+          this.registerEvent(this.app.vault.on(ev, (f) => {
+            if (f && /^(epub|fb2|pdf)$/.test(f.extension || "")) refresh();
+          }));
+        } catch { /* registerEvent unavailable on this host — manual refresh still works */ }
+      }
+    }
   }
   // Open the OS file picker for the three supported formats, then import.
   _pickBooks() {

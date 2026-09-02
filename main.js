@@ -59439,8 +59439,21 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
     return this.total;
   }
 };
+function resolveEpubSrc(itemUrl, src) {
+  if (/^(data:|https?:)/.test(src)) return src;
+  const stack = src.startsWith("/") ? [] : (itemUrl || "").split("/").slice(0, -1).filter(Boolean);
+  for (const seg of src.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      if (stack.length) stack.pop();
+      continue;
+    }
+    stack.push(seg);
+  }
+  return "/" + stack.join("/");
+}
 async function extractEpub(file, app) {
-  var _a2, _b, _c, _d;
+  var _a2, _b, _c, _d, _e, _f, _g;
   const buf = await app.vault.readBinary(file);
   const book = src_default(buf);
   await book.ready;
@@ -59455,10 +59468,23 @@ async function extractEpub(file, app) {
         const src = img.getAttribute("src");
         if (!src || src.startsWith("data:")) continue;
         try {
-          const itemDir = (item.url || "").split("/").slice(0, -1).join("/");
-          const resolved = src.startsWith("/") ? src : (itemDir ? itemDir + "/" + src : "/" + src).replace(/\/\.?\//g, "/");
+          const resolved = resolveEpubSrc(item.url, src);
           const dataUrl = await book.archive.getBase64(resolved);
           if (dataUrl) img.setAttribute("src", dataUrl);
+        } catch (e) {
+        }
+      }
+      const svgImages = Array.from((_f = (_e = body.querySelectorAll) == null ? void 0 : _e.call(body, "svg image")) != null ? _f : []);
+      for (const imageEl of svgImages) {
+        try {
+          const href = imageEl.getAttribute("href") || imageEl.getAttributeNS("http://www.w3.org/1999/xlink", "href") || imageEl.getAttribute("xlink:href") || "";
+          if (!href || href.startsWith("data:")) continue;
+          const resolved = resolveEpubSrc(item.url, href);
+          const dataUrl = await book.archive.getBase64(resolved);
+          if (!dataUrl) continue;
+          const img = doc.createElement("img");
+          img.setAttribute("src", dataUrl);
+          (_g = imageEl.parentNode) == null ? void 0 : _g.replaceChild(img, imageEl);
         } catch (e) {
         }
       }
@@ -62705,7 +62731,8 @@ function deleteBookFromVault(app, plugin, file, after) {
     cancelText: __ertr("\u041E\u0442\u043C\u0435\u043D\u0430"),
     onYes: async () => {
       try {
-        await app.fileManager.trashFile(file);
+        const onDisk = await app.vault.adapter.exists(file.path);
+        if (onDisk) await app.fileManager.trashFile(file);
         const path5 = file.path;
         if (plugin.progress) delete plugin.progress[path5];
         if (plugin.progressBackups) delete plugin.progressBackups[path5];
@@ -65132,9 +65159,10 @@ var LibraryModal = class extends import_obsidian.Modal {
     await this.plugin.refreshProgress();
     const folder = erPath(this.plugin.settings.booksFolder);
     const prefix = folder ? folder + "/" : "";
-    const files = this.app.vault.getFiles().filter(
+    let files = this.app.vault.getFiles().filter(
       (f) => (f.extension === "epub" || f.extension === "pdf" || f.extension === "fb2") && (prefix === "" || f.path.startsWith(prefix))
     );
+    files = (await Promise.all(files.map(async (f) => await this.app.vault.adapter.exists(f.path) ? f : null))).filter(Boolean);
     if (!files.length) {
       const e = contentEl.createDiv("er-lib-empty");
       const emptyIcon = e.createDiv("er-lib-empty-icon");
@@ -65232,6 +65260,23 @@ var LibraryModal = class extends import_obsidian.Modal {
     this._coverResizeObs.observe(grid);
     erAutoFocus(input, 60);
     erBlurOnTapOutside(this.contentEl, input);
+    if (!this._libVaultWired) {
+      this._libVaultWired = true;
+      const refresh = () => {
+        window.clearTimeout(this._libVaultTimer);
+        this._libVaultTimer = window.setTimeout(() => {
+          if (this.contentEl && this.contentEl.isConnected) this._refresh();
+        }, 1500);
+      };
+      for (const ev of ["create", "delete", "rename"]) {
+        try {
+          this.registerEvent(this.app.vault.on(ev, (f) => {
+            if (f && /^(epub|fb2|pdf)$/.test(f.extension || "")) refresh();
+          }));
+        } catch (e) {
+        }
+      }
+    }
   }
   // Open the OS file picker for the three supported formats, then import.
   _pickBooks() {
