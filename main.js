@@ -57382,7 +57382,9 @@ Object.assign(__erEN, {
   "Claude Code \u4E0E Grok \u652F\u6301\u9010\u5B57\u6D41\u5F0F\u8F93\u51FA\uFF0C\u601D\u8003\u8FC7\u7A0B\u4E0E\u6B63\u5F0F\u56DE\u7B54\u5206\u5F00\u663E\u793A": "Claude Code and Grok now stream token by token, with reasoning kept separate from the final answer.",
   "\u590D\u5236\u6458\u5F55\u9ED8\u8BA4\u683C\u5F0F\u5DF2\u79FB\u9664\u9057\u7559\u7684\u4FC4\u6587\u5B57\u7B26": "Removed the leftover Russian word from the default copied-excerpt format.",
   "\u201C\u9605\u8BFB\u8BBE\u7F6E\u201D\u4FEE\u590D\u6A2A\u5411\u6EDA\u52A8\u548C\u6EDA\u52A8\u6761\u906E\u6321\u5185\u5BB9\u7684\u95EE\u9898": "Reading Settings no longer scrolls horizontally or lets its scrollbar cover controls.",
-  "\u63D2\u4EF6\u201C\u5916\u89C2\u201D\u9875\u65B0\u589E\u4E3B\u9898\u3001\u5B57\u4F53\u3001\u5B57\u53F7\u548C\u884C\u8DDD\uFF0C\u4F4E\u9891\u9009\u9879\u6536\u8FDB\u201C\u66F4\u591A\u5916\u89C2\u9009\u9879\u201D": "The Appearance page now includes theme, font, size, and line spacing, with infrequent controls folded into More appearance options."
+  "\u63D2\u4EF6\u201C\u5916\u89C2\u201D\u9875\u65B0\u589E\u4E3B\u9898\u3001\u5B57\u4F53\u3001\u5B57\u53F7\u548C\u884C\u8DDD\uFF0C\u4F4E\u9891\u9009\u9879\u6536\u8FDB\u201C\u66F4\u591A\u5916\u89C2\u9009\u9879\u201D": "The Appearance page now includes theme, font, size, and line spacing, with infrequent controls folded into More appearance options.",
+  "\u624B\u52A8\u8FFD\u52A0\u5230\u9605\u8BFB\u7B14\u8BB0\u7684\u6458\u5F55\u4E0D\u518D\u88AB\u540E\u7EED\u5212\u7EBF\u6216\u6279\u6CE8\u540C\u6B65\u8986\u76D6": "Manually appended excerpts are no longer overwritten by later highlight or comment synchronisation.",
+  "\u8865\u5168\u53F0\u6E7E\u4E0E\u9999\u6E2F\u7E41\u4F53\u4E2D\u6587 PDF \u7684\u79BB\u7EBF\u5B57\u7B26\u6620\u5C04\uFF0C\u907F\u514D\u7F3A\u5B57\u548C\u4E71\u7801": "Traditional Chinese PDFs from Taiwan and Hong Kong now use bundled offline character maps instead of showing missing or garbled text."
 });
 var __erLang = "zh";
 function __erSetLang(v) {
@@ -63729,6 +63731,10 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 var WHATS_NEW = [
+  { v: "3.9.1", items: [
+    __ertr("\u624B\u52A8\u8FFD\u52A0\u5230\u9605\u8BFB\u7B14\u8BB0\u7684\u6458\u5F55\u4E0D\u518D\u88AB\u540E\u7EED\u5212\u7EBF\u6216\u6279\u6CE8\u540C\u6B65\u8986\u76D6"),
+    __ertr("\u8865\u5168\u53F0\u6E7E\u4E0E\u9999\u6E2F\u7E41\u4F53\u4E2D\u6587 PDF \u7684\u79BB\u7EBF\u5B57\u7B26\u6620\u5C04\uFF0C\u907F\u514D\u7F3A\u5B57\u548C\u4E71\u7801")
+  ] },
   { v: "3.8.0", items: [
     __ertr("\u9605\u8BFB\u8FDB\u5EA6\u3001\u8BBE\u7F6E\u4E0E\u5212\u7EBF\u5199\u5165\u6539\u4E3A\u987A\u5E8F\u4FDD\u5B58\uFF0C\u907F\u514D\u8FDE\u7EED\u64CD\u4F5C\u4E92\u76F8\u8986\u76D6"),
     __ertr("\u68C0\u6D4B\u5230\u635F\u574F\u7684\u9605\u8BFB\u6570\u636E\u65F6\u505C\u6B62\u8986\u76D6\u5E76\u4FDD\u7559\u539F\u6587\u4EF6\u526F\u672C"),

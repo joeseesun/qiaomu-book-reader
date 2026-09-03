@@ -653,6 +653,8 @@ Object.assign(__erEN, {
   "复制摘录默认格式已移除遗留的俄文字符": "Removed the leftover Russian word from the default copied-excerpt format.",
   "“阅读设置”修复横向滚动和滚动条遮挡内容的问题": "Reading Settings no longer scrolls horizontally or lets its scrollbar cover controls.",
   "插件“外观”页新增主题、字体、字号和行距，低频选项收进“更多外观选项”": "The Appearance page now includes theme, font, size, and line spacing, with infrequent controls folded into More appearance options.",
+  "手动追加到阅读笔记的摘录不再被后续划线或批注同步覆盖": "Manually appended excerpts are no longer overwritten by later highlight or comment synchronisation.",
+  "补全台湾与香港繁体中文 PDF 的离线字符映射，避免缺字和乱码": "Traditional Chinese PDFs from Taiwan and Hong Kong now use bundled offline character maps instead of showing missing or garbled text.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
@@ -7543,6 +7545,10 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.9.1", items: [
+    __ertr("手动追加到阅读笔记的摘录不再被后续划线或批注同步覆盖"),
+    __ertr("补全台湾与香港繁体中文 PDF 的离线字符映射，避免缺字和乱码")
+  ]},
   { v: "3.8.0", items: [
     __ertr("阅读进度、设置与划线写入改为顺序保存，避免连续操作互相覆盖"),
     __ertr("检测到损坏的阅读数据时停止覆盖并保留原文件副本"),
