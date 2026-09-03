@@ -12,6 +12,7 @@ import ePub from "epubjs";
 import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "./ai-providers.js";
 import { createOpenAiSseParser } from "./ai-stream.js";
 import { deriveAiSetupState } from "./ai-setup-state.js";
+import { rewriteEpubImageResources } from "./epub-resources.js";
 import { cliReasoningEfforts, probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { translateUiText } from "./i18n-runtime.js";
@@ -3343,27 +3344,20 @@ async function extractEpub(file, app) {
   await book.ready;
   const spineItems = book.spine.spineItems;
   const parts = [];
+  let failedImages = 0;
   for (const item of spineItems) {
     try {
       const doc = await item.load(book.load.bind(book));
       const body = doc.querySelector?.("body") ?? doc;
-      const imgs = Array.from(body.querySelectorAll?.("img") ?? []);
-      for (const img of imgs) {
-        const src = img.getAttribute("src");
-        if (!src || src.startsWith("data:")) continue;
-        try {
-          const itemDir = (item.url || "").split("/").slice(0, -1).join("/");
-          const resolved = src.startsWith("/") ? src : (itemDir ? itemDir + "/" + src : "/" + src).replace(/\/\.?\//g, "/");
-          const dataUrl = await book.archive.getBase64(resolved);
-          if (dataUrl) img.setAttribute("src", dataUrl);
-        } catch { /* optional step; a failure here must not interrupt reading */ }
-      }
+      const imageResult = await rewriteEpubImageResources(body, item.url || item.href || "", book.archive);
+      failedImages += imageResult.failed;
       const html = nodeToHtml(body);
       if (html.trim())
         parts.push(`<div class="er-section">${html}</div>`);
       item.unload();
     } catch { /* a chapter that will not parse is skipped, not fatal */ }
   }
+  if (failedImages) console.warn(`Qiaomu Book Reader: ${failedImages} EPUB image resource(s) could not be loaded from ${file.path}`);
   book.destroy();
   return parts.join("\n");
 }
@@ -5394,7 +5388,7 @@ function pdfPickFigures(rects, view) {
   });
   return mergeRects(big, 6).filter((r) => r.x1 - r.x0 >= 56 && r.y1 - r.y0 >= 56).sort((a, b) => b.y1 - a.y1);
 }
-const BLOCK_TAGS = /^(p|div|section|article|main|aside|figure|figcaption|h[1-6]|ul|ol|dl|li|dt|dd|table|pre|blockquote|hr|img)$/i;
+const BLOCK_TAGS = /^(p|div|section|article|main|aside|figure|figcaption|svg|h[1-6]|ul|ol|dl|li|dt|dd|table|pre|blockquote|hr|img|image)$/i;
 function tableToHtml(el) {
   let _a, _b;
   const rows = Array.from((_b = (_a = el.querySelectorAll) == null ? void 0 : _a.call(el, "tr")) != null ? _b : []);
@@ -5417,7 +5411,7 @@ function nodeToHtml(el) {
     return "";
   const tag = (_b = (_a = el.tagName) == null ? void 0 : _a.toLowerCase()) != null ? _b : "";
   const text = (_d = (_c = el.textContent) == null ? void 0 : _c.trim()) != null ? _d : "";
-  if (!text && !["br", "hr", "img"].includes(tag) && !((_a2 = el.querySelector) == null ? void 0 : _a2.call(el, "img")))
+  if (!text && !["br", "hr", "img", "image"].includes(tag) && !((_a2 = el.querySelector) == null ? void 0 : _a2.call(el, "img, image")))
     return "";
   if (/^h[1-6]$/.test(tag))
     return `<${tag}>${escHtml(text)}</${tag}>`;
@@ -5425,8 +5419,9 @@ function nodeToHtml(el) {
     return "<br>";
   if (tag === "hr")
     return "<hr>";
-  if (tag === "img") {
-    const src = (_c2 = (_b2 = el.getAttribute) == null ? void 0 : _b2.call(el, "src")) != null ? _c2 : "";
+  if (tag === "img" || tag === "image") {
+    const sourceAttribute = tag === "img" ? "src" : ((el.getAttribute?.("href") && "href") || "xlink:href");
+    const src = (_c2 = (_b2 = el.getAttribute) == null ? void 0 : _b2.call(el, sourceAttribute)) != null ? _c2 : "";
     if (!src) return "";
     return `<img src="${escHtml(src)}" style="max-width:100%;height:auto;display:block;margin:8px auto">`;
   }
@@ -5439,7 +5434,7 @@ function nodeToHtml(el) {
     const inner = Array.from(el.children).map((c) => nodeToHtml(c)).filter(Boolean).join("\n") || (inlineHtml(el).trim() ? `<p>${inlineHtml(el)}</p>` : "");
     return inner ? `<div class="er-side-notes">${inner}</div>` : "";
   }
-  if (["div", "section", "article", "body", "main", "aside", "figure"].includes(tag)) {
+  if (["div", "section", "article", "body", "main", "aside", "figure", "svg"].includes(tag)) {
     const hasBlockChild = Array.from(el.children).some((c) => BLOCK_TAGS.test(c.tagName || ""));
     if (!hasBlockChild) {
       const inner = inlineHtml(el);

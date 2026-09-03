@@ -14,8 +14,53 @@ import {
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
 import { deriveAiSetupState } from "../src/ai-setup-state.js";
+import { resolveEpubResourcePath, rewriteEpubImageResources } from "../src/epub-resources.js";
 import { isChineseSourceText, translateUiText } from "../src/i18n-runtime.js";
 import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
+
+test("EPUB resource paths resolve relative to the chapter instead of keeping parent segments", () => {
+  assert.equal(
+    resolveEpubResourcePath("/OEBPS/Text/part0002.xhtml", "../Images/image00073.jpeg"),
+    "/OEBPS/Images/image00073.jpeg",
+  );
+  assert.equal(
+    resolveEpubResourcePath("OPS/chapters/deep/chapter.xhtml?view=1", "../../media/封面 图.jpg#page"),
+    "/OPS/media/%E5%B0%81%E9%9D%A2%20%E5%9B%BE.jpg",
+  );
+  assert.equal(resolveEpubResourcePath("/OPS/chapter.xhtml", "data:image/png;base64,abc"), "");
+  assert.equal(resolveEpubResourcePath("/OPS/chapter.xhtml", "https://example.com/image.jpg"), "");
+});
+
+test("EPUB image rewriting supports HTML images and SVG href variants", async () => {
+  function element(tagName, attributes) {
+    return {
+      tagName,
+      attributes: { ...attributes },
+      getAttribute(name) { return this.attributes[name] ?? null; },
+      setAttribute(name, value) { this.attributes[name] = value; },
+    };
+  }
+  const htmlImage = element("img", { src: "../Images/page.jpeg" });
+  const svgImage = element("image", { "xlink:href": "../../media/chart.png" });
+  const requested = [];
+  const result = await rewriteEpubImageResources(
+    { querySelectorAll: () => [htmlImage, svgImage] },
+    "/OEBPS/Text/chapters/chapter.xhtml",
+    { async getBase64(pathname) { requested.push(pathname); return `data:image/test;base64,${pathname}`; } },
+  );
+
+  assert.deepEqual(requested, ["/OEBPS/Text/Images/page.jpeg", "/OEBPS/media/chart.png"]);
+  assert.equal(htmlImage.attributes.src, "data:image/test;base64,/OEBPS/Text/Images/page.jpeg");
+  assert.equal(svgImage.attributes["xlink:href"], "data:image/test;base64,/OEBPS/media/chart.png");
+  assert.deepEqual(result, { rewritten: 2, failed: 0 });
+});
+
+test("flattened EPUB HTML preserves rewritten SVG image nodes", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /\["br", "hr", "img", "image"\]/);
+  assert.match(source, /"figure", "svg"/);
+  assert.match(source, /tag === "img" \|\| tag === "image"/);
+});
 
 test("JSON stores reject arrays and invalid content instead of treating them as empty data", () => {
   assert.deepEqual(parseJsonRecord('{"book": {"pct": 0.5}}'), { book: { pct: 0.5 } });

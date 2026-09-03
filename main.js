@@ -54862,6 +54862,53 @@ function deriveAiSetupState({
   };
 }
 
+// src/epub-resources.js
+var EXTERNAL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+function resolveEpubResourcePath(sectionUrl, resourceRef) {
+  const ref = String(resourceRef || "").trim();
+  if (!ref || ref.startsWith("#") || ref.startsWith("//") || EXTERNAL_SCHEME.test(ref)) return "";
+  const section = String(sectionUrl || "").split(/[?#]/, 1)[0];
+  const basePath = section.startsWith("/") ? section : `/${section}`;
+  try {
+    return new URL(ref, `https://epub.local${basePath}`).pathname;
+  } catch (e) {
+    return "";
+  }
+}
+function imageReference(element) {
+  var _a2, _b, _c;
+  const tag = String((element == null ? void 0 : element.tagName) || "").toLowerCase().split(":").pop();
+  if (tag === "img") return { attribute: "src", value: ((_a2 = element.getAttribute) == null ? void 0 : _a2.call(element, "src")) || "" };
+  if (tag !== "image") return null;
+  const href = (_b = element.getAttribute) == null ? void 0 : _b.call(element, "href");
+  if (href) return { attribute: "href", value: href };
+  const xlinkHref = (_c = element.getAttribute) == null ? void 0 : _c.call(element, "xlink:href");
+  return xlinkHref ? { attribute: "xlink:href", value: xlinkHref } : null;
+}
+async function rewriteEpubImageResources(root, sectionUrl, archive) {
+  var _a2, _b;
+  const result = { rewritten: 0, failed: 0 };
+  const elements = Array.from(((_a2 = root == null ? void 0 : root.querySelectorAll) == null ? void 0 : _a2.call(root, "img, image")) || []);
+  for (const element of elements) {
+    const reference = imageReference(element);
+    if (!reference || reference.value.startsWith("data:")) continue;
+    const archivePath = resolveEpubResourcePath(sectionUrl, reference.value);
+    if (!archivePath) continue;
+    try {
+      const dataUrl = await ((_b = archive == null ? void 0 : archive.getBase64) == null ? void 0 : _b.call(archive, archivePath));
+      if (!dataUrl) {
+        result.failed += 1;
+        continue;
+      }
+      element.setAttribute(reference.attribute, dataUrl);
+      result.rewritten += 1;
+    } catch (e) {
+      result.failed += 1;
+    }
+  }
+  return result;
+}
+
 // src/ai-cli.js
 var CLI_AI_PROVIDER_IDS = Object.freeze(["codex-cli", "claude-cli", "grok-cli"]);
 var CLI_REASONING_EFFORTS = Object.freeze({
@@ -59504,28 +59551,19 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
   }
 };
 async function extractEpub(file, app) {
-  var _a2, _b, _c, _d;
+  var _a2, _b;
   const buf = await app.vault.readBinary(file);
   const book = src_default(buf);
   await book.ready;
   const spineItems = book.spine.spineItems;
   const parts = [];
+  let failedImages = 0;
   for (const item of spineItems) {
     try {
       const doc = await item.load(book.load.bind(book));
       const body = (_b = (_a2 = doc.querySelector) == null ? void 0 : _a2.call(doc, "body")) != null ? _b : doc;
-      const imgs = Array.from((_d = (_c = body.querySelectorAll) == null ? void 0 : _c.call(body, "img")) != null ? _d : []);
-      for (const img of imgs) {
-        const src = img.getAttribute("src");
-        if (!src || src.startsWith("data:")) continue;
-        try {
-          const itemDir = (item.url || "").split("/").slice(0, -1).join("/");
-          const resolved = src.startsWith("/") ? src : (itemDir ? itemDir + "/" + src : "/" + src).replace(/\/\.?\//g, "/");
-          const dataUrl = await book.archive.getBase64(resolved);
-          if (dataUrl) img.setAttribute("src", dataUrl);
-        } catch (e) {
-        }
-      }
+      const imageResult = await rewriteEpubImageResources(body, item.url || item.href || "", book.archive);
+      failedImages += imageResult.failed;
       const html = nodeToHtml(body);
       if (html.trim())
         parts.push(`<div class="er-section">${html}</div>`);
@@ -59533,6 +59571,7 @@ async function extractEpub(file, app) {
     } catch (e) {
     }
   }
+  if (failedImages) console.warn(`Qiaomu Book Reader: ${failedImages} EPUB image resource(s) could not be loaded from ${file.path}`);
   book.destroy();
   return parts.join("\n");
 }
@@ -61426,7 +61465,7 @@ function pdfPickFigures(rects, view) {
   });
   return mergeRects(big, 6).filter((r) => r.x1 - r.x0 >= 56 && r.y1 - r.y0 >= 56).sort((a, b) => b.y1 - a.y1);
 }
-var BLOCK_TAGS = /^(p|div|section|article|main|aside|figure|figcaption|h[1-6]|ul|ol|dl|li|dt|dd|table|pre|blockquote|hr|img)$/i;
+var BLOCK_TAGS = /^(p|div|section|article|main|aside|figure|figcaption|svg|h[1-6]|ul|ol|dl|li|dt|dd|table|pre|blockquote|hr|img|image)$/i;
 function tableToHtml(el) {
   let _a2, _b;
   const rows = Array.from((_b = (_a2 = el.querySelectorAll) == null ? void 0 : _a2.call(el, "tr")) != null ? _b : []);
@@ -61443,13 +61482,14 @@ function tableToHtml(el) {
   return body ? `<table class="er-table">${body}</table>` : "";
 }
 function nodeToHtml(el) {
+  var _a4;
   let _a2, _b2, _c2;
   let _a3, _b, _c, _d;
   if (!el)
     return "";
   const tag = (_b = (_a3 = el.tagName) == null ? void 0 : _a3.toLowerCase()) != null ? _b : "";
   const text = (_d = (_c = el.textContent) == null ? void 0 : _c.trim()) != null ? _d : "";
-  if (!text && !["br", "hr", "img"].includes(tag) && !((_a2 = el.querySelector) == null ? void 0 : _a2.call(el, "img")))
+  if (!text && !["br", "hr", "img", "image"].includes(tag) && !((_a2 = el.querySelector) == null ? void 0 : _a2.call(el, "img, image")))
     return "";
   if (/^h[1-6]$/.test(tag))
     return `<${tag}>${escHtml(text)}</${tag}>`;
@@ -61457,8 +61497,9 @@ function nodeToHtml(el) {
     return "<br>";
   if (tag === "hr")
     return "<hr>";
-  if (tag === "img") {
-    const src = (_c2 = (_b2 = el.getAttribute) == null ? void 0 : _b2.call(el, "src")) != null ? _c2 : "";
+  if (tag === "img" || tag === "image") {
+    const sourceAttribute = tag === "img" ? "src" : ((_a4 = el.getAttribute) == null ? void 0 : _a4.call(el, "href")) && "href" || "xlink:href";
+    const src = (_c2 = (_b2 = el.getAttribute) == null ? void 0 : _b2.call(el, sourceAttribute)) != null ? _c2 : "";
     if (!src) return "";
     return `<img src="${escHtml(src)}" style="max-width:100%;height:auto;display:block;margin:8px auto">`;
   }
@@ -61471,7 +61512,7 @@ function nodeToHtml(el) {
     const inner = Array.from(el.children).map((c) => nodeToHtml(c)).filter(Boolean).join("\n") || (inlineHtml(el).trim() ? `<p>${inlineHtml(el)}</p>` : "");
     return inner ? `<div class="er-side-notes">${inner}</div>` : "";
   }
-  if (["div", "section", "article", "body", "main", "aside", "figure"].includes(tag)) {
+  if (["div", "section", "article", "body", "main", "aside", "figure", "svg"].includes(tag)) {
     const hasBlockChild = Array.from(el.children).some((c) => BLOCK_TAGS.test(c.tagName || ""));
     if (!hasBlockChild) {
       const inner = inlineHtml(el);
