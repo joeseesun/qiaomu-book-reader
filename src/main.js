@@ -13,6 +13,8 @@ import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody
 import { createOpenAiSseParser } from "./ai-stream.js";
 import { deriveAiSetupState } from "./ai-setup-state.js";
 import { rewriteEpubImageResources } from "./epub-resources.js";
+import { PDF_CMAP_OPTIONS } from "./pdf-cmaps.js";
+import { appendReadingNoteExcerpts, migrateAndReplaceReadingHighlights, replaceManagedReadingHighlights } from "./reading-note.js";
 import { cliReasoningEfforts, probeCliAi, resolveCliPath, runCliAi } from "./ai-cli.js";
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { translateUiText } from "./i18n-runtime.js";
@@ -651,12 +653,17 @@ Object.assign(__erEN, {
   "复制摘录默认格式已移除遗留的俄文字符": "Removed the leftover Russian word from the default copied-excerpt format.",
   "“阅读设置”修复横向滚动和滚动条遮挡内容的问题": "Reading Settings no longer scrolls horizontally or lets its scrollbar cover controls.",
   "插件“外观”页新增主题、字体、字号和行距，低频选项收进“更多外观选项”": "The Appearance page now includes theme, font, size, and line spacing, with infrequent controls folded into More appearance options.",
+  "手动追加到阅读笔记的摘录不再被后续划线或批注同步覆盖": "Manually appended excerpts are no longer overwritten by later highlight or comment synchronisation.",
+  "补全台湾与香港繁体中文 PDF 的离线字符映射，避免缺字和乱码": "Traditional Chinese PDFs from Taiwan and Hong Kong now use bundled offline character maps instead of showing missing or garbled text.",
 });
 // Module-scope, not a global. It was on globalThis/window, which the popout
 // guidance rightly flags — but the honest fix is that a module's own setting
 // has no business on the window object at all. One value, one place.
 let __erLang = "zh";
 function __erSetLang(v) { __erLang = v || "zh"; }
+Object.assign(__erEN, {
+  "## Отрывки": "## Excerpts",
+});
 function __ertr(s){
   const lang = __erLang || 'ru';
   let out = translateUiText(lang, s, __erEN, ER_ZH_CN);
@@ -804,6 +811,9 @@ const DEFAULT = {
   // One-time repair for older builds that inferred a reading note from any
   // Markdown file carrying a `book` property, including templates/person notes.
   readingNoteLinksRepaired: false,
+  // One-time data-safe migration: excerpts manually appended by older versions
+  // shared the generated highlights section and could be erased by the next sync.
+  manualExcerptSectionsMigrated: false,
   figuresShownByDefault: false,
   einkMode: false,
   // Keep the LOOK of the reader separate on each kind of device (see
@@ -2202,6 +2212,17 @@ const QiaomuBookReader = class extends Plugin {
         }
       }
       this.settings.iconBacklinksMigrated = true;
+      await this._saveLocalData();
+    }
+    if (!this.settings.manualExcerptSectionsMigrated && this.settings.quotesToBookNote === true) {
+      const bookPaths = new Set([
+        ...Object.keys(this.settings.bookNoteLinks || {}),
+        ...Object.keys(this.highlights || {}),
+      ]);
+      for (const bookPath of bookPaths) {
+        await syncHighlightsToReadingNote(this.app, this, bookPath, this.highlights[bookPath] || [], { migrateManualExcerpts: true });
+      }
+      this.settings.manualExcerptSectionsMigrated = true;
       await this._saveLocalData();
     }
     // Remove the duplicate H1 only from old auto-generated reading notes. A
@@ -4736,6 +4757,7 @@ async function extractPdf(file, app, settings = {}, onProgress) {
   const buf = await app.vault.readBinary(file);
   const doc = await pdfjsLib.getDocument({
       data: buf,
+      ...PDF_CMAP_OPTIONS,
       // Книга — чужой файл. У pdf.js есть известная дыра, где специально
       // собранный шрифт выполняет свой код через eval; отключение eval —
       // штатное лечение от неё (CVE-2024-4367). На вёрстку не влияет.
@@ -6890,40 +6912,6 @@ function hlCommentMd(hl) {
   const c = hl && hl.comment ? String(hl.comment).trim() : "";
   return c ? `\n\n**${__ertr("Комментарий к выделению")}：** ${c.replace(/\n/g, "\n\n")}` : "";
 }
-const LEGACY_READING_HIGHLIGHTS_RE = /<!-- book-reader:highlights:start -->[\s\S]*?<!-- book-reader:highlights:end -->/g;
-const READING_SECTION_RE = /^##[ \t]+(?:划线与批注|Quotes|Цитаты)[ \t]*$/gm;
-function readingSectionRanges(text) {
-  const headings = [];
-  READING_SECTION_RE.lastIndex = 0;
-  for (const match of text.matchAll(READING_SECTION_RE)) headings.push({ start: match.index, headingEnd: match.index + match[0].length });
-  return headings.map((heading) => {
-    const next = /^##[ \t]+(?!#)/gm;
-    next.lastIndex = heading.headingEnd;
-    const found = next.exec(text);
-    return { start: heading.start, end: found ? found.index : text.length };
-  });
-}
-function replaceManagedReadingHighlights(data, block) {
-  let text = String(data || "");
-  const hadLegacyMarkers = LEGACY_READING_HIGHLIGHTS_RE.test(text);
-  LEGACY_READING_HIGHLIGHTS_RE.lastIndex = 0;
-  if (hadLegacyMarkers) {
-    // Older builds exposed HTML sentinels in the note source. Remove the whole
-    // generated block, but preserve any older untracked excerpts by renaming
-    // their same-named section before the new source-of-truth section is added.
-    text = text.replace(LEGACY_READING_HIGHLIGHTS_RE, "").replace(/\n{3,}/g, "\n\n");
-    READING_SECTION_RE.lastIndex = 0;
-    text = text.replace(READING_SECTION_RE, `## ${__ertr("Старые цитаты")}`);
-    return `${text.replace(/\s*$/, "")}${block ? `\n\n${block}` : ""}\n`;
-  }
-  const ranges = readingSectionRanges(text);
-  if (!ranges.length) return `${text.replace(/\s*$/, "")}${block ? `\n\n${block}` : ""}\n`;
-  const insertAt = ranges[0].start;
-  for (let i = ranges.length - 1; i >= 0; i--) {
-    text = text.slice(0, ranges[i].start) + text.slice(ranges[i].end);
-  }
-  return `${text.slice(0, insertAt).replace(/\s*$/, "")}${block ? `\n\n${block}` : ""}${text.slice(insertAt)}`.replace(/\s*$/, "") + "\n";
-}
 function renderManagedReadingHighlights(plugin, bookFile, highlights) {
   const list = [...(highlights || [])].filter((hl) => hl && hl.text).sort((a, b) => (a.block || 0) - (b.block || 0) || (a.occ || 0) - (b.occ || 0));
   if (!list.length) return "";
@@ -6942,7 +6930,7 @@ function renderManagedReadingHighlights(plugin, bookFile, highlights) {
   });
   return `${__ertr("## Цитаты")}\n\n${rows.join("\n\n")}`;
 }
-async function syncHighlightsToReadingNote(app, plugin, bookPath, highlights) {
+async function syncHighlightsToReadingNote(app, plugin, bookPath, highlights, options = {}) {
   try {
     const bookFile = app.vault.getAbstractFileByPath(bookPath);
     if (!(bookFile instanceof TFile)) return;
@@ -6955,7 +6943,9 @@ async function syncHighlightsToReadingNote(app, plugin, bookPath, highlights) {
     const note = resolveBookNote(app, name);
     if (!(note instanceof TFile) || isUnsafeReadingNote(app, note)) return;
     const block = renderManagedReadingHighlights(plugin, bookFile, highlights);
-    const update = (data) => replaceManagedReadingHighlights(data, block);
+    const update = options.migrateManualExcerpts
+      ? (data) => migrateAndReplaceReadingHighlights(data, block, __ertr("Старые цитаты"), __ertr("## Отрывки"))
+      : (data) => replaceManagedReadingHighlights(data, block, __ertr("Старые цитаты"));
     if (typeof app.vault.process === "function") await app.vault.process(note, update);
     else await app.vault.modify(note, update(await app.vault.read(note)));
   } catch (e) {
@@ -7103,23 +7093,16 @@ async function exportHighlightsToBookNote(app, plugin, bookFile, highlights) {
     new Notice(__ertr("Нет выделений для экспорта"));
     return;
   }
-  const heading = __ertr("## Цитаты");
+  const heading = __ertr("## Отрывки");
   const block = groups.map((g) => (g.chapter ? `**${g.chapter}**
 
 ` : "") + g.lines.join("\n\n")).join("\n\n");
   let targetLine = 0;
   const add = (data) => {
-    const base = data.replace(/\s*$/, "");
-    const prefix = data.includes(heading) ? `${base}
-
-` : `${base}
-
-${heading}
-
-`;
-    targetLine = (prefix.match(/\n/g) || []).length;
-    return `${prefix}${block}
-`;
+    const next = appendReadingNoteExcerpts(data, heading, block);
+    const blockAt = next.indexOf(block);
+    targetLine = blockAt < 0 ? 0 : (next.slice(0, blockAt).match(/\n/g) || []).length;
+    return next;
   };
   try {
     if (typeof app.vault.process === "function") await app.vault.process(noteFile, add);
@@ -7562,6 +7545,10 @@ function bookNoteAction(settings, bookPath) {
   return asked[bookPath] ? "prompted" : "ask";
 }
 const WHATS_NEW = [
+  { v: "3.9.1", items: [
+    __ertr("手动追加到阅读笔记的摘录不再被后续划线或批注同步覆盖"),
+    __ertr("补全台湾与香港繁体中文 PDF 的离线字符映射，避免缺字和乱码")
+  ]},
   { v: "3.8.0", items: [
     __ertr("阅读进度、设置与划线写入改为顺序保存，避免连续操作互相覆盖"),
     __ertr("检测到损坏的阅读数据时停止覆盖并保留原文件副本"),

@@ -16,6 +16,9 @@ import { createOpenAiSseParser } from "../src/ai-stream.js";
 import { deriveAiSetupState } from "../src/ai-setup-state.js";
 import { resolveEpubResourcePath, rewriteEpubImageResources } from "../src/epub-resources.js";
 import { isChineseSourceText, translateUiText } from "../src/i18n-runtime.js";
+import { EmbeddedPdfBinaryDataFactory, PDF_CMAP_OPTIONS } from "../src/pdf-cmaps.js";
+import { EMBEDDED_PDF_CMAPS } from "../src/pdf-cmaps-data.js";
+import { appendReadingNoteExcerpts, migrateAndReplaceReadingHighlights, replaceManagedReadingHighlights } from "../src/reading-note.js";
 import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
 
 test("EPUB resource paths resolve relative to the chapter instead of keeping parent segments", () => {
@@ -53,6 +56,56 @@ test("EPUB image rewriting supports HTML images and SVG href variants", async ()
   assert.equal(htmlImage.attributes.src, "data:image/test;base64,/OEBPS/Text/Images/page.jpeg");
   assert.equal(svgImage.attributes["xlink:href"], "data:image/test;base64,/OEBPS/media/chart.png");
   assert.deepEqual(result, { rewritten: 2, failed: 0 });
+});
+
+test("Traditional Chinese PDF CMaps are embedded for offline extraction", async () => {
+  assert.ok(Object.keys(EMBEDDED_PDF_CMAPS).length >= 40);
+  assert.ok(EMBEDDED_PDF_CMAPS["Adobe-CNS1-UCS2.bcmap"]);
+  assert.equal(PDF_CMAP_OPTIONS.cMapPacked, true);
+  assert.equal(PDF_CMAP_OPTIONS.useWorkerFetch, false);
+  const bytes = await new EmbeddedPdfBinaryDataFactory().fetch({
+    kind: "cMapUrl",
+    filename: "Adobe-CNS1-UCS2.bcmap",
+  });
+  assert.ok(bytes instanceof Uint8Array);
+  assert.ok(bytes.byteLength > 40_000);
+});
+
+test("manual reading-note excerpts survive later highlight synchronisation", () => {
+  const original = "# 阅读笔记\n\n## 划线与批注\n\n> 已有划线\n";
+  const appended = appendReadingNoteExcerpts(original, "## 手动摘录", "> 手动追加内容");
+  const synced = replaceManagedReadingHighlights(
+    appended,
+    "## 划线与批注\n\n> 已有划线\n\n> 新增划线",
+    "旧版摘录",
+  );
+
+  assert.match(synced, /## 划线与批注[\s\S]*> 新增划线/);
+  assert.match(synced, /## 手动摘录\n\n> 手动追加内容/);
+  assert.equal((synced.match(/手动追加内容/g) || []).length, 1);
+});
+
+test("existing untracked excerpts are rescued from the old managed section", () => {
+  const oldNote = [
+    "# 阅读笔记",
+    "",
+    "## 划线与批注",
+    "",
+    "> <mark style=\"background:#fff2a8\">已有划线</mark> *(第1页)*",
+    "",
+    "> 手动追加内容 *(第2页)*",
+    "",
+  ].join("\n");
+  const migrated = migrateAndReplaceReadingHighlights(
+    oldNote,
+    "## 划线与批注\n\n> <mark style=\"background:#fff2a8\">已有划线</mark> *(第1页)*",
+    "旧版摘录",
+    "## 手动摘录",
+  );
+
+  assert.match(migrated, /## 手动摘录\n\n> 手动追加内容/);
+  assert.equal((migrated.match(/已有划线/g) || []).length, 1);
+  assert.equal((migrated.match(/手动追加内容/g) || []).length, 1);
 });
 
 test("flattened EPUB HTML preserves rewritten SVG image nodes", () => {
