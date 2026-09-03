@@ -7,7 +7,7 @@
   "scripts": {
     "postinstall": "node patch-pdfjs.cjs",
     "dev": "node esbuild.config.mjs",
-    "build": "node esbuild.config.mjs production && node patch-pdfjs.cjs",
+    "build": "node scripts/generate-pdf-cmaps.mjs && node esbuild.config.mjs production && node patch-pdfjs.cjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify:release": "node scripts/verify-release.mjs"

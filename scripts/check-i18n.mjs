@@ -4,6 +4,7 @@ import { parse } from "acorn";
 import { ER_ZH_CN } from "../src/i18n-zh.js";
 
 const source = await fs.readFile(new URL("../src/main.js", import.meta.url), "utf8");
+const readingNoteSource = await fs.readFile(new URL("../src/reading-note.js", import.meta.url), "utf8");
 const manifest = JSON.parse(await fs.readFile(new URL("../manifest.json", import.meta.url), "utf8"));
 const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
 
@@ -122,7 +123,7 @@ if (!source.includes("if (!isMarkedReadingNote(app, md)) continue")) {
 if (!source.includes('fm["book-reader-note"] = true')) {
   errors.push("Created reading notes are not marked explicitly");
 }
-if (!source.includes("readingSectionRanges") || !source.includes("syncHighlightsToReadingNote")) {
+if (!readingNoteSource.includes("function headingRanges") || !source.includes("syncHighlightsToReadingNote")) {
   errors.push("Highlights and comments are not synchronised through a heading-managed reading-note section");
 }
 if (source.includes("const READING_HIGHLIGHTS_START") || source.includes("const READING_HIGHLIGHTS_END")) {
