@@ -179,7 +179,10 @@ for (const font of ["Georgia", "Lora", "Inter"]) {
     errors.push(`English font label has an unnecessary Chinese suffix: ${font}`);
   }
 }
-if (!source.includes('const quick = c.createDiv("er-rs-quick")') || !source.includes('label: __ertr("Доп. настройки")')) {
+if (!source.includes('c.createDiv("er-rs-card er-rs-theme-card")')
+  || !source.includes('createEl("input", {')
+  || !source.includes('type: "range"')
+  || !source.includes('label: __ertr("Доп. настройки")')) {
   errors.push("Reading settings do not use primary controls with progressive disclosure");
 }
 if (/\bname:\s*__ertr\("(?:Жёлтый|Зелёный|Голубой|Розовый)"\)/.test(source)) {
