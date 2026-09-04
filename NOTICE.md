@@ -23,3 +23,22 @@ apply to their respective code and are reproduced in the bundled `main.js`
 
 - @xmldom/xmldom — MIT — Copyright (c) xmldom contributors
   https://github.com/xmldom/xmldom
+
+The plugin also embeds five Chinese reading fonts in `main.js` so BRAT and
+manual three-file installs work without system fonts:
+
+- Source Han Serif CN Regular 2.003R — SIL OFL 1.1 — Copyright 2017-2022 Adobe
+  https://github.com/adobe-fonts/source-han-serif
+- Source Han Sans CN Regular 2.005R — SIL OFL 1.1 — Copyright 2014-2025 Adobe
+  https://github.com/adobe-fonts/source-han-sans
+- LXGW WenKai GB Screen Regular v1.522 — SIL OFL 1.1 — Copyright 2020-2026
+  The Klee Project Authors and LXGW contributors
+  https://github.com/lxgw/LxgwWenKai-Screen
+- LXGW ZhenKai GB Regular v0.825 — SIL OFL 1.1 — LXGW contributors
+  https://github.com/lxgw/LxgwZhenKai
+- Zhuque Fangsong Regular v0.212 technical preview — SIL OFL 1.1 —
+  Copyright 2025 Triones Type / 璇玑造字
+  https://github.com/TrionesType/zhuque
+
+Their complete attribution, source hashes and license text are in `fonts/` and
+are reproduced in the generated `main.js` banner.

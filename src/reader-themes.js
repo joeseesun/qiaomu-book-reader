@@ -35,6 +35,15 @@ export const READER_THEMES = {
     accent: "#4f6d5a",
     muted: "#667269",
   },
+  moon: {
+    label: "月白",
+    bg: "#eef2f3",
+    text: "#263238",
+    ui: "#e2e8ea",
+    border: "#c9d2d5",
+    accent: "#516c78",
+    muted: "#5f6d74",
+  },
   night: {
     label: "夜间",
     bg: "#181a1b",
@@ -55,11 +64,12 @@ export const READER_THEMES = {
   },
 };
 
-export const READER_THEME_CHOICES = ["auto", "paper", "warm", "celadon", "night", "eink"];
+export const READER_THEME_CHOICES = ["auto", "paper", "warm", "celadon", "moon", "night"];
 
 export function migrateReaderTheme(value) {
   if (value === "light") return "paper";
   if (value === "sepia") return "warm";
   if (value === "dark") return "night";
+  if (value === "eink") return "moon";
   return READER_THEMES[value] ? value : "auto";
 }

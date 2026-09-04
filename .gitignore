@@ -11,6 +11,9 @@ node_modules/
 # Working notes between sessions, not part of the plugin.
 NOTES-3.0.md
 SUBMIT.md
+/backups/
+/design-previews/
+/tmp/
 
 # Local editor / OS noise
 .DS_Store

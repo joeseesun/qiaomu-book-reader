@@ -6,18 +6,28 @@ import { AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions,
 import {
   buildCliInvocation,
   buildCliPrompt,
+  classifyAcpFailure,
+  acpPathCandidates,
+  cliAcpSupport,
   cliReasoningEfforts,
   cliPathCandidates,
   createCliStreamParser,
+  effectiveCliEffort,
+  acpNpmInstallArgs,
   isCliAiProvider,
+  retryAcpFailureOnce,
+  shouldRetryAcpFailure,
 } from "../src/ai-cli.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "../src/reader-themes.js";
 import { createOpenAiSseParser } from "../src/ai-stream.js";
+import { composeAiAnswerNote } from "../src/ai-note.js";
 import { deriveAiSetupState } from "../src/ai-setup-state.js";
 import { resolveEpubResourcePath, rewriteEpubImageResources } from "../src/epub-resources.js";
 import { isChineseSourceText, translateUiText } from "../src/i18n-runtime.js";
 import { EmbeddedPdfBinaryDataFactory, PDF_CMAP_OPTIONS } from "../src/pdf-cmaps.js";
 import { EMBEDDED_PDF_CMAPS } from "../src/pdf-cmaps-data.js";
+import { PDF_AI_CONTEXT_MAX_CHARS, READER_BLOCK_SELECTOR, packPdfDocumentContext, pdfPageKind, pdfPageShell, pdfPageTextForAi } from "../src/pdf-page-mode.js";
+import { PDF_ZOOM_MAX, PDF_ZOOM_MIN, clampPdfZoom, pdfZoomFromWheel, pdfZoomPercent, pdfZoomShortcut, stepPdfZoom } from "../src/pdf-zoom.js";
 import { appendReadingNoteExcerpts, migrateAndReplaceReadingHighlights, replaceManagedReadingHighlights } from "../src/reading-note.js";
 import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
 
@@ -69,6 +79,121 @@ test("Traditional Chinese PDF CMaps are embedded for offline extraction", async 
   });
   assert.ok(bytes instanceof Uint8Array);
   assert.ok(bytes.byteLength > 40_000);
+});
+
+test("PDF pages keep their fixed layout and expose text capabilities per page", () => {
+  assert.equal(pdfPageKind(120, false), "text");
+  assert.equal(pdfPageKind(0, false), "scan");
+  assert.equal(pdfPageKind(120, true), "scan");
+  assert.match(READER_BLOCK_SELECTOR, /\.er-pdf-text-layer/);
+
+  const textPage = pdfPageShell({
+    pageNumber: 5,
+    width: 595,
+    height: 842,
+    kind: "text",
+    isLast: true,
+    textLayerHtml: '<div class="er-pdf-text-layer">正文</div>',
+  });
+  assert.match(textPage, /er-pdf-text-page/);
+  assert.match(textPage, /er-pdf-last-page/);
+  assert.match(textPage, /er-pdf-page-img er-pdf-lazy/);
+  assert.match(textPage, /er-pdf-text-layer/);
+  assert.match(textPage, /data-pdf-page-no="5"/);
+  assert.doesNotMatch(textPage, /er-pdf-note-btn/);
+
+  const scanPage = pdfPageShell({
+    pageNumber: 1,
+    width: 472,
+    height: 692,
+    kind: "scan",
+    textLayerHtml: '<div class="er-pdf-text-layer">must not leak</div>',
+  });
+  assert.match(scanPage, /er-pdf-scan-page/);
+  assert.doesNotMatch(scanPage, /must not leak/);
+});
+
+test("PDF AI context keeps page boundaries and represents the whole document", () => {
+  assert.equal(PDF_AI_CONTEXT_MAX_CHARS, 180_000);
+  assert.equal(pdfPageTextForAi([
+    { str: "第一行", hasEOL: true },
+    { str: "第二", hasEOL: false },
+    { str: "行", hasEOL: true },
+  ]), "第一行\n第二 行");
+
+  const complete = packPdfDocumentContext([
+    { page: 1, text: "第一页正文" },
+    { page: 3, text: "第三页正文" },
+  ], 2_000);
+  assert.deepEqual(complete, {
+    text: "[第 1 页]\n第一页正文\n\n[第 3 页]\n第三页正文",
+    pageCount: 2,
+    sourceChars: 10,
+    truncated: false,
+  });
+
+  const condensed = packPdfDocumentContext([
+    { page: 1, text: "甲".repeat(800) },
+    { page: 2, text: "乙".repeat(800) },
+    { page: 3, text: "丙".repeat(800) },
+  ], 1_200);
+  assert.equal(condensed.truncated, true);
+  assert.equal(condensed.pageCount, 3);
+  assert.equal(condensed.sourceChars, 2_400);
+  assert.ok(condensed.text.length <= 1_200);
+  assert.match(condensed.text, /\[第 1 页\]/);
+  assert.match(condensed.text, /\[第 2 页\]/);
+  assert.match(condensed.text, /\[第 3 页\]/);
+});
+
+test("PDF zoom stays bounded and supports buttons, gestures, and shortcuts", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.equal(clampPdfZoom(0.1), PDF_ZOOM_MIN);
+  assert.equal(clampPdfZoom(8), PDF_ZOOM_MAX);
+  assert.equal(clampPdfZoom("bad"), 1);
+  assert.equal(stepPdfZoom(1, 1), 1.25);
+  assert.equal(stepPdfZoom(1, -1), 0.75);
+  assert.equal(pdfZoomPercent(1.254), "125%");
+  assert.ok(pdfZoomFromWheel(1, -100) > 1);
+  assert.ok(pdfZoomFromWheel(1, 100) < 1);
+  assert.equal(pdfZoomShortcut({ metaKey: true, ctrlKey: false, altKey: false, key: "=" }), "in");
+  assert.equal(pdfZoomShortcut({ metaKey: false, ctrlKey: true, altKey: false, key: "-" }), "out");
+  assert.equal(pdfZoomShortcut({ metaKey: true, ctrlKey: false, altKey: false, key: "0" }), "reset");
+  assert.equal(pdfZoomShortcut({ metaKey: false, ctrlKey: false, altKey: false, key: "+" }), null);
+  assert.match(source, /"minus": `<svg[^`]+<line x1="5" y1="12" x2="19" y2="12"\/><\/svg>`/);
+  assert.match(source, /svgIcon\(out, "minus"\)/);
+});
+
+test("saving an AI response keeps the answer as the note body", () => {
+  const note = composeAiAnswerNote({
+    answer: "## AI 的结论\n\n- 第一点\n- 第二点",
+    sourceText: "用户选中的原文",
+    attribution: "— 来自 [[测试书籍]]",
+    sourceHeading: "原文",
+    tagLine: "#阅读\n\n",
+  });
+  assert.ok(note.startsWith("#阅读\n\n## AI 的结论"));
+  assert.match(note, /- 第一点\n- 第二点/);
+  assert.match(note, /## 原文\n\n> 用户选中的原文/);
+  assert.ok(note.indexOf("AI 的结论") < note.indexOf("用户选中的原文"));
+});
+
+test("PDF extraction renders every page image and overlays PDF.js text instead of reflowing it", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /pdfjs-dist\/legacy\/build\/pdf\.mjs/);
+  assert.match(source, /new pdfjsLib\.TextLayer/);
+  assert.match(source, /parts\.push\(pdfPageShell/);
+  assert.match(source, /\.er-pdf-page-break\{[\s\S]*break-after:column/);
+  assert.match(source, /\.er-pdf-text-layer\{/);
+  assert.match(source, /currentPdfPageElement\(\)/);
+  assert.match(source, /data-pdf-page-kind"\) !== "text"\) return -1/);
+  assert.match(source, /readerSupportsAiContext\(view\)/);
+  assert.match(source, /setupPdfZoomInteractions\(this\)/);
+  assert.match(source, /--er-pdf-zoom/);
+  assert.match(source, /data-pdf-page-kind"\) !== "text"\) return null/);
+  assert.match(source, /resolveHighlightAnchor\(blocks, hl, this\.file\.extension === "pdf"\)/);
+  assert.doesNotMatch(source, /const alsoFigOnText/);
+  assert.doesNotMatch(source, /setName\(__ertr\("Показывать картинки из книги"\)\)/);
 });
 
 test("manual reading-note excerpts survive later highlight synchronisation", () => {
@@ -220,10 +345,10 @@ function contrast(a, b) {
 
 test("AI presets contain supported providers and no legacy Elton service", () => {
   assert.equal(aiProviderFor("eltonlabs"), null);
-  for (const id of ["codex-cli", "claude-cli", "grok-cli", "deepseek", "kimi", "qwen", "zhipu", "minimax", "siliconflow", "doubao", "openrouter", "openai", "ollama", "lmstudio", "custom"]) {
+  for (const id of ["codex-cli", "claude-cli", "grok-cli", "kimi-cli", "zcode-cli", "deepseek", "kimi", "qwen", "zhipu", "minimax", "siliconflow", "doubao", "openrouter", "openai", "ollama", "lmstudio", "custom"]) {
     assert.ok(AI_PROVIDERS[id], `missing provider: ${id}`);
   }
-  for (const id of ["codex-cli", "claude-cli", "grok-cli"]) {
+  for (const id of ["codex-cli", "claude-cli", "grok-cli", "kimi-cli", "zcode-cli"]) {
     assert.equal(AI_PROVIDERS[id].transport, "cli");
     assert.equal(AI_PROVIDERS[id].needsKey, false);
     assert.equal(AI_PROVIDERS[id].desktopOnly, true);
@@ -353,6 +478,105 @@ test("CLI reasoning options are provider-specific", () => {
   assert.deepEqual(cliReasoningEfforts("codex-cli"), ["", "minimal", "low", "medium", "high", "xhigh"]);
   assert.deepEqual(cliReasoningEfforts("claude-cli"), ["", "low", "medium", "high", "xhigh", "max"]);
   assert.ok(!cliReasoningEfforts("grok-cli").includes("max"));
+  assert.equal(effectiveCliEffort("grok-cli", ""), "low");
+  assert.equal(effectiveCliEffort("grok-cli", "high"), "high");
+  assert.equal(effectiveCliEffort("codex-cli", ""), "");
+});
+
+test("CLI chat uses persistent, tool-free ACP sessions", () => {
+  const source = fs.readFileSync(new URL("../src/ai-cli.js", import.meta.url), "utf8");
+  assert.match(source, /args\.push\("--no-auto-update", "agent", "--no-leader"\)/);
+  assert.match(source, /\["--no-auto-update", "--version"\]/);
+  assert.match(source, /args: \["--no-auto-update", "models"\]/);
+  assert.match(source, /args\.push\("stdio"\)/);
+  assert.match(source, /protocolVersion: 1/);
+  assert.match(source, /clientCapabilities: \{ fs: \{ readTextFile: false, writeTextFile: false \}, terminal: false \}/);
+  assert.match(source, /"session\/new", \{ cwd: this\.cwd, mcpServers: \[\] \}/);
+  assert.match(source, /"session\/prompt"/);
+  assert.match(source, /"session\/cancel"/);
+  assert.match(source, /env\.HOME = paths\.fakeHome/);
+  assert.match(source, /env\.GROK_HOME = paths\.grokHome/);
+  assert.match(source, /const CLI_PATH_CACHE = new Map\(\)/);
+  assert.equal(cliAcpSupport("grok-cli").mode, "native");
+  assert.equal(cliAcpSupport("grok-cli").binary, "grok");
+  assert.equal(cliAcpSupport("kimi-cli").mode, "native");
+  assert.equal(cliAcpSupport("codex-cli").mode, "adapter");
+  assert.equal(cliAcpSupport("claude-cli").mode, "adapter");
+  assert.equal(cliAcpSupport("zcode-cli").mode, "adapter");
+  assert.equal(cliAcpSupport("codex-cli").installCommand, "npm install -g @agentclientprotocol/codex-acp");
+  assert.equal(cliAcpSupport("claude-cli").installCommand, "npm install -g @agentclientprotocol/claude-agent-acp");
+  assert.equal(cliAcpSupport("zcode-cli").installCommand, "npm install -g zcode-acp-server");
+  assert.equal(cliAcpSupport("grok-cli").installCommand, "");
+  assert.equal(cliAcpSupport("kimi-cli").installCommand, "");
+  assert.equal(cliAcpSupport("zcode-cli").community, true);
+  assert.equal(cliAcpSupport("claude-cli").autoInstall, true);
+  assert.equal(cliAcpSupport("zcode-cli").autoInstall, true);
+  assert.equal(cliAcpSupport("codex-cli").autoInstall, false);
+  assert.deepEqual(acpNpmInstallArgs("claude-cli", "/plugin/acp/claude"), [
+    "install", "--prefix", "/plugin/acp/claude", "--omit", "dev", "--ignore-scripts",
+    "--no-package-lock", "--no-save", "--no-audit", "--no-fund", "--loglevel", "error",
+    "@agentclientprotocol/claude-agent-acp@0.73.0",
+  ]);
+  assert.deepEqual(acpNpmInstallArgs("zcode-cli", "/plugin/acp/zcode"), [
+    "install", "--prefix", "/plugin/acp/zcode", "--omit", "dev", "--ignore-scripts",
+    "--no-package-lock", "--no-save", "--no-audit", "--no-fund", "--loglevel", "error",
+    "zcode-acp-server@0.21.0",
+  ]);
+  assert.deepEqual(acpNpmInstallArgs("codex-cli", "/plugin/acp/codex"), []);
+  assert.ok(acpPathCandidates("codex-cli", { home: "/Users/test", envPath: "" }).includes("/opt/homebrew/bin/codex-acp"));
+  assert.match(source, /export async function probeCliAcp/);
+  assert.match(source, /export async function warmCliAiSession/);
+  assert.match(source, /this\.sessionPending = new Map\(\)/);
+  assert.match(source, /async probe\(sessionKey/);
+  assert.match(source, /this\.forgetSession\(sessionKey\)/);
+  assert.match(source, /evictCliAcpManager\(manager\)/);
+  const runCliSource = source.slice(source.indexOf("export async function runCliAi"));
+  assert.ok(runCliSource.indexOf("if (options.sessionKey") < runCliSource.indexOf("const prompt = buildCliPrompt"));
+});
+
+test("ACP failures distinguish login, stale sessions, and stopped transports", () => {
+  assert.equal(classifyAcpFailure({ message: "Authentication required" }), "cliauth");
+  assert.equal(classifyAcpFailure({ message: "Unknown session: abc" }), "acpsession");
+  assert.equal(classifyAcpFailure({ message: "Session id does not exist" }), "acpsession");
+  assert.equal(classifyAcpFailure({ message: "transport closed" }), "acpstopped");
+  assert.equal(classifyAcpFailure({ message: "broken pipe" }), "acpstopped");
+  assert.equal(classifyAcpFailure({ message: "provider returned an internal error" }), "cli");
+  assert.equal(shouldRetryAcpFailure({ erReason: "acpsession" }), true);
+  assert.equal(shouldRetryAcpFailure({ erReason: "acpstopped" }), true);
+  assert.equal(shouldRetryAcpFailure({ erReason: "acpstopped", erHadOutput: true }), false);
+  assert.equal(shouldRetryAcpFailure({ erReason: "cli" }), false);
+});
+
+test("ACP recovery retries exactly once and never repeats partial output", async () => {
+  let attempts = 0;
+  let recoveries = 0;
+  const recovered = await retryAcpFailureOnce(
+    async () => {
+      attempts += 1;
+      if (attempts === 1) throw Object.assign(new Error("session expired"), { erReason: "acpsession" });
+      return "ok";
+    },
+    async () => { recoveries += 1; },
+    "acpsession",
+  );
+  assert.equal(recovered, "ok");
+  assert.equal(attempts, 2);
+  assert.equal(recoveries, 1);
+
+  attempts = 0;
+  await assert.rejects(
+    retryAcpFailureOnce(
+      async () => {
+        attempts += 1;
+        throw Object.assign(new Error("transport closed"), { erReason: "acpstopped", erHadOutput: true });
+      },
+      async () => { recoveries += 1; },
+      "acpstopped",
+    ),
+    /transport closed/,
+  );
+  assert.equal(attempts, 1);
+  assert.equal(recoveries, 1);
 });
 
 test("CLI stream parsers separate thoughts from the visible answer", () => {
@@ -408,7 +632,9 @@ test("reading themes migrate legacy names and meet WCAG AA contrast", () => {
   assert.equal(migrateReaderTheme("light"), "paper");
   assert.equal(migrateReaderTheme("sepia"), "warm");
   assert.equal(migrateReaderTheme("dark"), "night");
-  assert.deepEqual(READER_THEME_CHOICES, ["auto", "paper", "warm", "celadon", "night", "eink"]);
+  assert.equal(migrateReaderTheme("eink"), "moon");
+  assert.deepEqual(READER_THEME_CHOICES, ["auto", "paper", "warm", "celadon", "moon", "night"]);
+  assert.ok(READER_THEMES.eink, "e-ink device mode keeps its internal high-contrast palette");
   for (const id of READER_THEME_CHOICES.filter((name) => name !== "auto")) {
     const theme = READER_THEMES[id];
     assert.ok(contrast(theme.bg, theme.text) >= 4.5, `${id} contrast is too low`);
@@ -448,7 +674,7 @@ test("selection popup keeps primary actions compact and moves note tools into Mo
   assert.match(popupSource, /const aiState = aiSetupState\(view\.plugin\)/);
   assert.match(popupSource, /aiState\.ready && aiState\.enabled/);
   assert.match(popupSource, /act\("er-hl-ai", "wand-sparkles"/);
-  assert.match(popupSource, /new AiExplainModal\(view\.app, view\.plugin, cur\.text, view\.file, view\)\.open\(\)/);
+  assert.match(popupSource, /kind: "selection"[\s\S]*text: cur\.text[\s\S]*bookFile: view\.file/);
   assert.match(popupSource, /act\("er-hl-menu", "more"/);
   assert.match(popupSource, /setTitle\(__ertr\("Создать заметку"\)\)/);
   assert.match(popupSource, /setTitle\(__ertr\("Удалить выделение"\)\)/);
@@ -470,12 +696,126 @@ test("AI dialog offers editable quick prompts and keeps reasoning separate", () 
   assert.match(source, /const DEFAULT_AI_QUICK_PROMPTS/);
   assert.match(source, /const AiPromptLibraryModal = class extends Modal/);
   assert.match(source, /new AiPromptLibraryModal\(this\.app, this\.plugin/);
-  assert.match(source, /chip\.addEventListener\("click", \(\) => this\._send\(item\.prompt\)\)/);
+  assert.match(source, /button\.addEventListener\("click", \(\) => \{[\s\S]*chat\._send\(item\.prompt\)/);
   assert.match(source, /this\.plugin\.settings\.aiQuickPrompts = this\.usingDefaults \? null : clean/);
   assert.match(source, /this\.items\.splice\(index, 1\)/);
   assert.match(source, /createEl\("details", \{ cls: "er-ai-reason" \}\)/);
   assert.match(source, /reasoningBox\.open = false/);
   assert.match(source, /onDelta/);
+  assert.match(source, /createAiStreamingMarkdownRenderer/);
+  assert.match(source, /markdownRenderer\.update\(answer\)/);
+  assert.match(source, /await markdownRenderer\.finish\(answer\)/);
+  assert.doesNotMatch(source, /bubble\.setText\(answer\)/);
+});
+
+test("desktop AI chat keeps per-book threads and structured document or selection context", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(source, /const AI_CHAT_VIEW_TYPE = "qiaomu-book-reader-ai-chat"/);
+  assert.match(source, /registerView\(AI_CHAT_VIEW_TYPE, \(leaf\) => new AiChatView\(leaf, this\)\)/);
+  assert.match(source, /getRightLeaf\(false\) \|\| this\.app\.workspace\.getRightLeaf\(true\)/);
+  assert.match(source, /const AiChatView = class extends ItemView/);
+  assert.match(source, /setContext\(value(?:, options = \{\})?\)/);
+  assert.match(source, /find\(\(item\) => item\.bookPath && item\.bookPath === bookPath\)/);
+  assert.match(source, /loadSession\(recent, \{[\s\S]*readerView,[\s\S]*bookFile,[\s\S]*pendingContext,[\s\S]*draft,[\s\S]*\}\)/);
+  assert.doesNotMatch(source, /buildAiChatModelPicker\(footer, this\)/);
+  assert.match(source, /function renderAiHeadMeta\(host, chat\)/);
+  assert.doesNotMatch(source, /er-ai-active-model/);
+  assert.match(source, /AI_MARKDOWN_RENDER_INTERVAL_MS = 50/);
+  assert.match(source, /enhanceAiMarkdown/);
+  assert.match(source, /er-ai-table-scroll/);
+  assert.match(source, /checkbox\.disabled = true/);
+  assert.match(source, /createNoteFromAiAnswer\(this\.app, this\.plugin, answer, source\.question, source\.context/);
+  assert.match(source, /noteKind: "ai-answer"/);
+  assert.match(source, /quote = composeAiAnswerNote\(\{/);
+  assert.match(source, /act\("note", __ertr\("保存 AI 回复"\)/);
+  assert.match(source, /if \(note && typeof this\.close === "function"\) this\.close\(\)/);
+  assert.match(source, /aiAnswer \? "Сохранить в заметку" : "Создать заметку"/);
+  assert.match(source, /bookLinkHeading: __ertr\("## Заметки AI"\)/);
+  assert.doesNotMatch(source, /extra: "\\n\\n" \+ answer/);
+  assert.match(source, /new ReadSettingsModal\(this\.app, this\.readerView, "ai"\)\.open\(\)/);
+  assert.match(source, /aiMessages\(text, settings, turns, book\)/);
+  assert.match(css, /\.er-ai-sidebar \{[^}]*height: 100%;[^}]*display: flex;[^}]*overflow: hidden/s);
+  assert.match(css, /\.er-ai-sidebar \.er-ai-log \{ min-height: 0; max-height: none; \}/);
+  assert.match(source, /const AiChatHistoryModal = class extends Modal/);
+  assert.match(source, /createEl\("textarea", \{ cls: "er-ai-input" \}\)/);
+  assert.match(source, /event\.key === "Enter" && !event\.shiftKey/);
+  assert.match(source, /items\.slice\(0, 3\)/);
+  assert.match(source, /new AiChatHistoryModal\(this\.app, this\)\.open\(\)/);
+  assert.match(source, /normalizeAiChatHistory\(this\.plugin\.settings\.aiChatHistory\)/);
+  assert.match(source, /function readerPageContext\(view\)/);
+  assert.match(source, /function readerDefaultAiContext\(view\)/);
+  assert.match(source, /kind: "document"/);
+  assert.match(source, /pdfDocumentContext: packPdfDocumentContext/);
+  assert.match(source, /getClientRects/);
+  assert.match(source, /kind: "page"/);
+  assert.match(source, /turn\.context/);
+  assert.match(source, /renderAiUserTurn/);
+  assert.match(source, /function renderAiContextQuote\(host, value, options = \{\}\)/);
+  assert.match(source, /!isDocument && \(context\.text\.length > 120 \|\| context\.text\.includes\("\\n"\)\)/);
+  assert.match(source, /cls: "er-ai-context-preview", text: previewText/);
+  assert.match(source, /!this\.pendingContext && !this\.turns\.length && this\.readerView/);
+  assert.match(source, /function syncOpenAiSelectionContext\(view\)/);
+  assert.match(source, /getLeavesOfType\(AI_CHAT_VIEW_TYPE\)\[0\]/);
+  assert.match(source, /leaf\.view\.setContext\(\{[\s\S]*kind: "selection"[\s\S]*text: pending\.text[\s\S]*\}, \{ focusInput: false, silent: true \}\)/);
+  assert.equal((source.match(/syncOpenAiSelectionContext\(this\);/g) || []).length, 2);
+  assert.match(source, /function renderAiComposerPrompts\(host, chat\)/);
+  assert.equal((source.match(/renderAiComposerPrompts\(bar, this\);/g) || []).length, 2);
+  assert.match(source, /function bindAiSlashPrompts\(menu, input, chat\)/);
+  assert.match(source, /raw\.startsWith\("\/"\)/);
+  assert.match(source, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/);
+  assert.match(source, /event\.key === "Enter" && matches\.length/);
+  assert.match(source, /event\.key === "Escape"/);
+  assert.doesNotMatch(source, /createEl\("button", \{ cls: "er-ai-context-refresh"/);
+  assert.match(source, /清除本轮上下文/);
+  assert.match(source, /用当前页与 AI 对话/);
+  assert.match(source, /用整份 PDF 与 AI 对话/);
+  assert.doesNotMatch(source, /er-pdf-note-btn|createNoteFromPdfPage|pdfNoteBtn/);
+  assert.doesNotMatch(source, /bar\.createDiv\(\{ cls: "er-ai-composer-hint"/);
+  assert.match(source, /\[\["book", __ertr\("本书"\)\], \["all", __ertr\("全部"\)\]\]/);
+  assert.match(source, /确定清空全部对话记录吗/);
+  assert.match(css, /\.er-ai-composer \{/);
+  assert.match(css, /\.er-ai-composer:focus-within \{/);
+  assert.match(css, /\.er-ai-context \{/);
+  assert.match(css, /-webkit-line-clamp:3/);
+  assert.match(css, /\.er-ai-context-text \{[^}]*max-height:180px;[^}]*overflow-y:auto/s);
+  assert.match(css, /\.er-ai-composer-prompts \{[^}]*overflow-x:auto/s);
+  assert.match(css, /\.er-ai-slash-menu \{[^}]*position:absolute;[^}]*max-height:min\(44vh,260px\)/s);
+  assert.match(css, /\.er-ai-modal \.er-ai-slash-item \{[^}]*display:grid;[^}]*height:auto;[^}]*min-height:40px/s);
+  assert.match(css, /\.er-ai-modal \.er-ai-slash-item\.is-active \{[^}]*box-shadow:inset 2px 0 var\(--interactive-accent\)/s);
+  assert.doesNotMatch(css, /\.er-ai-context-refresh/);
+  assert.match(css, /\.er-ai-modal \.er-ai-send:disabled:not\(\.is-stop\)/);
+  assert.match(css, /\.er-ai-msg-context \{/);
+  assert.match(css, /\.er-ai-history-scopes \{/);
+  assert.match(css, /\.er-ai-msg-streaming::after \{/);
+  assert.match(css, /\.er-ai-table-scroll \{/);
+  assert.match(css, /\.er-ai-msg-ai \.er-ai-table-scroll table \{/);
+  assert.match(css, /\.er-ai-msg-ai blockquote \{/);
+  assert.match(css, /\.er-ai-msg-ai \.task-list-item \{/);
+  assert.match(css, /\.er-ai-msg-me \{[^}]*interactive-accent\) 7%[^}]*color: var\(--text-normal\)/s);
+  assert.match(css, /\.er-ai-msg-ai \{[^}]*border: 0;[^}]*background: transparent;/s);
+  assert.match(css, /\.er-ai-msg-ai \.task-list-item \{[^}]*padding-left:1\.55em/s);
+  assert.match(css, /\.er-ai-msg-ai \.task-list-item > input\[type="checkbox"\] \{[^}]*position:absolute;[^}]*left:0;/s);
+  assert.doesNotMatch(css, /\.er-ai-msg-ai \.task-list-item \{[^}]*margin-left:-/s);
+});
+
+test("AI settings explain and verify provider-specific ACP instead of a generic install", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /cliAcpSupport\(s\.aiProvider\)/);
+  assert.match(source, /probeCliAcp\(s\.aiProvider/);
+  assert.match(source, /warmCliAiSession\(cfg\.id/);
+  assert.match(source, /此 CLI 内置 ACP/);
+  assert.match(source, /此 CLI 需要单独安装 \{0\} 适配器/);
+  assert.match(source, /ACP 适配器路径/);
+  assert.match(source, /resolveAcpPath\(s\.aiProvider/);
+  assert.match(source, /为什么建议启用 ACP/);
+  assert.match(source, /原生 ACP · 无需另装/);
+  assert.match(source, /社区适配器 · 需要安装/);
+  assert.match(source, /copyToClipboard\(acp\.installCommand\)/);
+  assert.match(source, /pluginAcpInstallRoot\(plugin, cfg\.id, acp\.installVersion\)/);
+  assert.match(source, /一键准备 ACP/);
+  assert.match(source, /installCliAcp\(cfg\.id, \{ installRoot \}\)/);
+  assert.match(source, /不使用 sudo，也不会修改全局 npm/);
 });
 
 test("book-note append asks to open only once", () => {
@@ -493,8 +833,38 @@ test("reader themes stay on the page while navigation follows Obsidian", () => {
   const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
   assert.match(css, /\.er-top \{[^}]*background:var\(--background-primary\)/s);
   assert.match(css, /\.er-bot \{[^}]*background:var\(--background-primary\)/s);
+  assert.match(css, /\.er-navbtn \{[^}]*background:color-mix\(in srgb,var\(--text-normal\) 4%/s);
   assert.match(css, /\.er-area \{[^}]*background:var\(--er-bg/s);
   assert.doesNotMatch(css, /\.er-top, \.er-bot \{ background:color-mix\([^}]*--er-bg/s);
+});
+
+test("immersive reader chrome overlays the page and retracts without reserving rows", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const chinese = fs.readFileSync(new URL("../src/i18n-zh.js", import.meta.url), "utf8");
+  assert.match(css, /\.er-top \{[^}]*position:absolute;[^}]*height:48px;[^}]*border-radius:14px/s);
+  assert.match(css, /\.er-bot \{[^}]*position:absolute;[^}]*height:48px;[^}]*border-radius:14px/s);
+  assert.match(css, /\.er-ibtn \{[^}]*width:36px;[^}]*height:36px;[^}]*border-radius:10px/s);
+  assert.match(css, /\.er-timerbtn \{[^}]*height:36px;[^}]*border-radius:10px/s);
+  assert.match(css, /\.er-area \{[^}]*margin:0;[^}]*border:0;[^}]*box-shadow:none/s);
+  assert.match(css, /\.er-immersive \.er-top \{[^}]*opacity:0;[^}]*translateY/s);
+  assert.match(css, /\.er-immersive \.er-bot \{[^}]*opacity:0;[^}]*transform:translate\(-50%,calc\(100% \+ 16px\)\)/s);
+  assert.match(css, /\.er-fullscreen-modal \.er-pbar \{\s*position:absolute/s);
+  assert.match(css, /\.er-bot-center \{[^}]*flex-direction:row/s);
+  assert.match(css, /\.er-pct::before \{ content:"·"/);
+  assert.match(source, /function setupImmersiveChrome\(view, root\)/);
+  assert.match(source, /root\.addEventListener\("focusin", reveal\)/);
+  assert.match(source, /event\.clientY <= rect\.top \+ 64/);
+  assert.match(source, /\.er-panel-open,\.er-overlay-on,\.er-hl-popup-on/);
+  assert.equal((source.match(/setupImmersiveChrome\(this, root\);/g) || []).length, 2);
+  assert.match(source, /function setReaderTitle\(el, value, limit = 18\)/);
+  assert.match(source, /glyphs\.slice\(0, limit\)\.join\(""\).*…/);
+  assert.equal((source.match(/setReaderTitle\(this\.titleEl,/g) || []).length, 3);
+  assert.match(source, /"reading-note": `<svg[^`]+<path[^`]+<path[^`]+<path/s);
+  assert.match(source, /svgIcon\(noteBtn, "reading-note"\)/);
+  assert.match(source, /svgIcon\(settingsBtn, "sliders"\)/);
+  assert.equal((source.match(/addBookFileMenu\(this\.app, menu, this\.file\);/g) || []).length, 1);
+  assert.match(chinese, /上下控制层会完全收起/);
 });
 
 test("settings use task tabs, concise intros, and Chinese-first copy", () => {
@@ -524,6 +894,33 @@ test("settings use task tabs, concise intros, and Chinese-first copy", () => {
   assert.match(source, /labels: \{ ru: "Georgia", en: "Georgia", zh: "Georgia" \}/);
   assert.match(source, /labels: \{ ru: "Lora", en: "Lora", zh: "Lora" \}/);
   assert.match(source, /labels: \{ ru: "Inter", en: "Inter", zh: "Inter" \}/);
+  assert.match(source, /BUNDLED_FONT_FAMILIES\.zhenkai/);
+  assert.match(source, /labels: \{ ru: "LXGW ZhenKai GB", en: "LXGW ZhenKai GB", zh: "霞鹜臻楷 GB" \}/);
+  assert.match(source, /BUNDLED_FONT_FAMILIES\.zhuque/);
+  assert.match(source, /labels: \{ ru: "Zhuque Fangsong", en: "Zhuque Fangsong", zh: "朱雀仿宋" \}/);
+});
+
+test("folder and template settings use searchable vault pickers", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const chinese = fs.readFileSync(new URL("../src/i18n-zh.js", import.meta.url), "utf8");
+  assert.match(source, /const FolderPicker = class extends FuzzySuggestModal/);
+  assert.match(source, /const CreateFolderModal = class extends Modal/);
+  assert.match(source, /file instanceof TFolder && erPath\(file\.path\)/);
+  assert.match(source, /\{ kind: "root", path: "", label: __ertr\("Корень хранилища"\) \}/);
+  assert.match(source, /\{ kind: "create", path: "", label: __ertr\("Создать новую папку…"\) \}/);
+  assert.match(source, /if \(item\.kind === "create"\)/);
+  assert.match(source, /\.setIcon\("folder-open"\)/);
+  assert.match(source, /\.setIcon\("file-search"\)/);
+  assert.equal((source.match(/addFolderPathControl\(new Setting\(c\)/g) || []).length, 4);
+  assert.equal((source.match(/addMarkdownFilePathControl\(new Setting\(c\)/g) || []).length, 2);
+  assert.match(source, /target instanceof TFolder/);
+  assert.match(source, /await this\.app\.vault\.createFolder\(path\)/);
+  assert.match(css, /\.er-folder-setting \.setting-item-control \{[^}]*grid-template-columns:minmax\(180px,1fr\) 32px/s);
+  assert.match(css, /\.er-folder-path-input\[aria-invalid="true"\]/);
+  assert.match(css, /@media \(pointer:coarse\) \{[^}]*\.er-folder-setting \.setting-item-control/s);
+  assert.match(chinese, /"Выбрать папку": "选择文件夹"/);
+  assert.match(chinese, /"Создать новую папку…": "新建文件夹…"/);
 });
 
 test("quote template is language-neutral and migrates the old Russian fragment", () => {
@@ -584,4 +981,21 @@ test("AI setup uses one status-driven flow and enables only after a successful t
   assert.match(source, /s\.aiEnabled = true;[\s\S]*await this\.plugin\.saveAll\(\)/);
   assert.match(source, /s\.aiNeedsVerification = false/);
   assert.match(source, /s\.aiNeedsVerification = true/);
+});
+
+test("confirming AI settings automatically prepares, tests, and enables the selected provider", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const modalStart = source.indexOf("const SettingsGroupModal");
+  const modalEnd = source.indexOf("const SettingsTab", modalStart);
+  const modalSource = source.slice(modalStart, modalEnd);
+  assert.match(modalSource, /constructor\(app, title, build, options = \{\}\)/);
+  assert.match(modalSource, /typeof this\.options\.onDone === "function"/);
+  assert.match(modalSource, /async function ensureAiCliReady\(plugin, onStage = \(\) => \{\}\)/);
+  assert.match(modalSource, /installCliAcp\(cfg\.id, \{ installRoot \}\)/);
+  assert.match(modalSource, /probeCliAcp\(cfg\.id/);
+  assert.match(modalSource, /async function testAndEnableAi\(plugin, onStage = \(\) => \{\}\)/);
+  assert.match(modalSource, /await testAndEnableAi\(plugin, setButtonText\)/);
+  assert.match(modalSource, /plugin\.settings\.aiEnabled = true/);
+  assert.match(modalSource, /plugin\.settings\.aiNeedsVerification = false/);
+  assert.match(modalSource, /return false/);
 });
