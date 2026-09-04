@@ -96,6 +96,13 @@ if (!source.includes("Object.values(READER_FONTS)")) errors.push("Font controls 
 if (!source.includes('id: "sourceHanSerif"') || !source.includes('id: "sourceHanSans"')) {
   errors.push("Source Han Serif and Source Han Sans are missing from the reader font registry");
 }
+if (!source.includes("BUNDLED_FONT_FAMILIES.sourceHanSerif")
+  || !source.includes("BUNDLED_FONT_FAMILIES.sourceHanSans")
+  || !source.includes("BUNDLED_FONT_FAMILIES.lxgw")
+  || !source.includes("BUNDLED_FONT_FAMILIES.zhenkai")
+  || !source.includes("BUNDLED_FONT_FAMILIES.zhuque")) {
+  errors.push("The five Chinese reading fonts are not wired to their bundled font data");
+}
 if (!source.includes('function backlinkLabel() { return "↩"; }')) {
   errors.push("Reading-note backlinks are not rendered as a quiet icon-only link");
 }
@@ -148,8 +155,11 @@ if (runtimeSource.includes("saveNow(") || runtimeSource.includes("snap.manual"))
 if (!source.includes('await reader.plugin.saveProgress(reader.file.path, current, total, block)')) {
   errors.push("Automatic reading progress is not flushed when the reader closes");
 }
-if (!source.includes("openOrCreateBookNoteBeside") || !source.includes('svgIcon(noteBtn, "note")') || !source.includes('{ mode: "split" }')) {
-  errors.push("The reader toolbar does not create or open the reading note beside the book");
+if (!source.includes("openOrCreateBookNoteBeside")
+  || !source.includes('svgIcon(noteBtn, "reading-note")')
+  || !source.includes('setTitle(__ertr("Заметка книги")).setIcon("file-text")')
+  || !source.includes('{ mode: "split" }')) {
+  errors.push("The reader chrome does not create or open the reading note beside the book");
 }
 if (!source.includes('let body = "";') || !source.includes("stripGeneratedReadingNoteTitle") || !source.includes("readingNoteTitlesMigratedV4") || !source.includes("markedInText") || !source.includes("bookNoteFiles(this.app)")) {
   errors.push("Generated reading notes still repeat the filename as an H1 heading");
@@ -169,7 +179,9 @@ if (!source.includes('createDiv({ cls: "er-hl-comment-quote", text: cur.text })'
 if (!source.includes('const baseMustBeVisible = providerId === "custom"') || !source.includes('createEl("details", { cls: "er-ai-advanced" })')) {
   errors.push("Built-in AI endpoint and model overrides are not hidden behind advanced settings");
 }
-if (!source.includes("const DEFAULT_AI_QUICK_PROMPTS") || !source.includes("const AiPromptLibraryModal = class extends Modal") || !source.includes("this._send(item.prompt)")) {
+if (!source.includes("const DEFAULT_AI_QUICK_PROMPTS")
+  || !source.includes("const AiPromptLibraryModal = class extends Modal")
+  || (!source.includes("this._send(item.prompt)") && !source.includes("chat._send(item.prompt)"))) {
   errors.push("AI quick prompts do not separate editable labels from the actual prompt text");
 }
 if (!source.includes("bookNoteAppendPromptSeen !== true") || !source.includes("bookNoteAppendPromptSeen = true")) {

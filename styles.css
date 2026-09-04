@@ -56,14 +56,29 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 }
 .er-pbar { position:absolute; top:0; left:0; right:0; height:3px; background:rgba(0,0,0,.06); z-index:20; pointer-events:none; }
 .er-pbar-fill { height:100%; width:0%; background:linear-gradient(90deg,var(--er-accent,#5548d9),color-mix(in srgb,var(--er-accent) 60%,#fff)); border-radius:0 2px 2px 0; transition:width .5s cubic-bezier(.4,0,.2,1); }
-.er-top { height:50px; display:flex; align-items:center; padding:0 8px; gap:4px; background:var(--background-primary); border-bottom:1px solid var(--background-modifier-border); flex-shrink:0; z-index:10; transition:background .25s; }
-.er-top-title { flex:1; text-align:center; font-size:14px; font-weight:600; font-family:'Inter',system-ui,sans-serif; color:var(--text-normal); opacity:.72; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.er-top-right { display:flex; gap:2px; align-items:center; }
-.er-ibtn { width:38px; height:38px; padding:0; display:flex; align-items:center; justify-content:center; border:0; box-shadow:none; background:transparent; border-radius:8px; cursor:pointer; color:var(--text-muted); opacity:.72; transition:opacity .15s,background .13s,transform .1s; flex-shrink:0; }
-.er-ibtn:hover { opacity:1; background:var(--background-modifier-hover); }
+.er-top { position:absolute; top:8px; left:8px; right:8px; height:48px; display:flex; align-items:center; padding:6px; gap:6px; box-sizing:border-box; background:var(--background-primary); border:1px solid var(--background-modifier-border); border-radius:14px; box-shadow:rgba(0,0,0,.04) 0 4px 18px,rgba(0,0,0,.027) 0 2px 8px,rgba(0,0,0,.02) 0 1px 3px; z-index:16; }
+.er-top-title { flex:1 1 auto; min-width:0; text-align:center; font-size:14px; font-weight:600; font-family:'Inter',system-ui,sans-serif; color:var(--text-normal); opacity:.76; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.er-top-right { display:flex; gap:6px; align-items:center; }
+.er-ibtn { width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; box-sizing:border-box; border:1px solid var(--background-modifier-border); box-shadow:none; background:color-mix(in srgb,var(--text-normal) 4%,transparent); border-radius:10px; cursor:pointer; color:var(--text-muted); opacity:.82; transition:opacity .15s,background .13s,border-color .13s,transform .1s; flex-shrink:0; }
+.er-ibtn:hover { opacity:1; background:var(--background-modifier-hover); border-color:color-mix(in srgb,var(--text-muted) 35%,var(--background-modifier-border)); }
 .er-ibtn:active { transform:scale(.87); }
 .er-ibtn svg { width:18px; height:18px; }
-.er-area { flex:1; overflow:hidden; position:relative; min-height:0; display:flex; align-items:stretch; margin:12px 16px 14px; border:1px solid var(--er-border,#ddd9ce); border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.10); background:var(--er-bg,#faf8f3); box-sizing:border-box; }
+.er-pdf-zoom-control { height:36px; display:none; grid-template-columns:30px 52px 30px; align-items:stretch;
+  flex:none; overflow:hidden; border:1px solid var(--background-modifier-border); border-radius:10px;
+  background:color-mix(in srgb,var(--text-normal) 4%,transparent); color:var(--text-muted); }
+.er-pdf-document .er-pdf-zoom-control { display:grid; }
+.er-pdf-zoom-control button { min-width:0; height:34px; margin:0; padding:0; border:0; border-radius:0;
+  box-shadow:none; background:transparent; color:inherit; font-family:var(--font-interface);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.er-pdf-zoom-control button:hover:not(:disabled) { background:var(--background-modifier-hover); color:var(--text-normal); }
+.er-pdf-zoom-control button:active:not(:disabled) { background:var(--background-modifier-active-hover); }
+.er-pdf-zoom-control button:focus-visible { position:relative; z-index:1; outline:2px solid var(--interactive-accent); outline-offset:-2px; }
+.er-pdf-zoom-control button:disabled { opacity:.32; cursor:default; }
+.er-pdf-zoom-step svg { width:15px; height:15px; }
+.er-pdf-zoom-value { border-right:1px solid var(--background-modifier-border)!important;
+  border-left:1px solid var(--background-modifier-border)!important; font-size:11px!important;
+  font-weight:600!important; font-variant-numeric:tabular-nums; }
+.er-area { flex:1; overflow:hidden; position:relative; min-height:0; display:flex; align-items:stretch; margin:0; border:0; border-radius:0; box-shadow:none; background:var(--er-bg,#faf8f3); box-sizing:border-box; }
 /* Mobile full-screen reader: no frame, use all the space */
 .er-marea { margin:0; border:none; border-radius:0; box-shadow:none; background:transparent; }
 .er-clip { position:relative; overflow:hidden; flex-shrink:0; }
@@ -77,17 +92,18 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-spin { width:36px; height:36px; border:3px solid rgba(0,0,0,.1); border-top-color:var(--er-accent,#5548d9); border-radius:50%; animation:er-spin .7s linear infinite; }
 @keyframes er-spin { to { transform:rotate(360deg); } }
 .er-loading-text { font-size:13px; opacity:.65; }
-.er-bot { height:50px; display:flex; align-items:center; padding:0 6px; gap:2px; background:var(--background-primary); border-top:1px solid var(--background-modifier-border); flex-shrink:0; z-index:10; transition:background .25s; }
-.er-navbtn { width:44px; height:44px; padding:0; display:flex; align-items:center; justify-content:center; border:0; box-shadow:none; background:transparent; border-radius:8px; cursor:pointer; color:var(--text-muted); opacity:.72; transition:opacity .15s,background .13s,transform .1s; flex-shrink:0; }
-.er-navbtn:hover { opacity:1; background:var(--background-modifier-hover); }
+.er-bot { position:absolute; left:50%; right:auto; bottom:8px; width:min(520px,calc(100% - 16px)); height:48px; display:grid; grid-template-columns:36px minmax(0,1fr) 36px; align-items:center; padding:6px; gap:6px; box-sizing:border-box; background:var(--background-primary); border:1px solid var(--background-modifier-border); border-radius:14px; box-shadow:rgba(0,0,0,.04) 0 4px 18px,rgba(0,0,0,.027) 0 2px 8px,rgba(0,0,0,.02) 0 1px 3px; transform:translateX(-50%); z-index:16; pointer-events:auto; }
+.er-navbtn { width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; box-sizing:border-box; border:1px solid var(--background-modifier-border); box-shadow:none; background:color-mix(in srgb,var(--text-normal) 4%,transparent); border-radius:10px; cursor:pointer; color:var(--text-muted); opacity:.82; transition:opacity .15s,background .13s,border-color .13s,transform .1s; pointer-events:auto; flex-shrink:0; }
+.er-navbtn:hover { opacity:1; background:var(--background-modifier-hover); border-color:color-mix(in srgb,var(--text-muted) 35%,var(--background-modifier-border)); }
 .er-navbtn:active { transform:scale(.88); }
-.er-navbtn svg { width:22px; height:22px; }
-.er-bot-center { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; min-width:0; padding:0 8px; }
+.er-navbtn svg { width:20px; height:20px; }
+.er-bot-center { justify-self:stretch; width:auto; max-width:100%; height:36px; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:6px; min-width:0; padding:0 12px; box-sizing:border-box; border:0; border-radius:10px; background:transparent; box-shadow:none; pointer-events:auto; }
 .er-loc { font-family:'Inter',system-ui,sans-serif; font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center; }
 .er-loc-clickable { cursor:pointer; border:0; box-shadow:none; background:transparent; border-radius:5px; padding:1px 6px; transition:background .13s,color .13s; }
 .er-loc-clickable:hover { color:var(--text-normal); background:var(--background-modifier-hover); }
 .er-gotopage-input { width:100%; box-sizing:border-box; margin:2px 0 14px; padding:8px 10px; font-size:15px; border:1px solid var(--background-modifier-border); border-radius:8px; background:var(--background-primary); color:var(--text-normal); }
 .er-pct { font-family:'Inter',system-ui,sans-serif; font-size:14px; font-weight:700; color:var(--text-accent); }
+.er-pct::before { content:"·"; margin-right:6px; color:var(--text-muted); font-weight:500; }
 .er-overlay { position:absolute; inset:0; background:rgba(0,0,0,.35); z-index:30; opacity:0; pointer-events:none; transition:opacity .2s; backdrop-filter:blur(3px); }
 .er-overlay.er-overlay-on { opacity:1; pointer-events:all; }
 .er-panel { position:absolute; top:0; right:0; bottom:0; width:300px; background:var(--er-ui); border-left:1px solid var(--er-border); z-index:40; overflow-y:auto; display:none; flex-direction:column; }
@@ -106,8 +122,8 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-theme-paper { background:#f8f6f0; color:#24231f; box-shadow:inset 0 0 0 1px #dcd5c8; }
 .er-theme-warm { background:#f3ebdd; color:#30291f; box-shadow:inset 0 0 0 1px #d5c5ab; }
 .er-theme-celadon { background:#eaf0e8; color:#243029; box-shadow:inset 0 0 0 1px #c6d3c4; }
+.er-theme-moon { background:#eef2f3; color:#263238; box-shadow:inset 0 0 0 1px #c9d2d5; }
 .er-theme-night { background:#181a1b; color:#d9d7d1; box-shadow:inset 0 0 0 1px #383c3d; }
-.er-theme-eink { background:#fff; color:#000; box-shadow:inset 0 0 0 1px #000; }
 .er-theme-btn.active { border-color:var(--er-accent)!important; box-shadow:0 0 0 1px var(--er-accent)!important; }
 .er-sz-row { display:flex; align-items:center; gap:8px; padding:0 14px 4px; }
 .er-sz-label { flex:1; text-align:center; font-size:14px; font-weight:700; color:var(--er-text); font-family:'Inter',system-ui,sans-serif; }
@@ -262,12 +278,13 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
   .er-panel.er-panel-open { animation:er-panel-slide-up .22s cubic-bezier(.4,0,.2,1); }
   @keyframes er-panel-slide-up { from { transform:translateY(110%); } to { transform:translateY(0); } }
   /* Larger touch targets on mobile */
-  .er-navbtn { width:52px; height:52px; }
-  .er-navbtn svg { width:26px; height:26px; }
+  .er-navbtn { width:44px; height:44px; }
+  .er-navbtn svg { width:24px; height:24px; }
   .er-ibtn { width:44px; height:44px; }
-  .er-top { height:54px; gap:6px; padding:0 6px; }
-  .er-top-right { gap:5px; }
-  .er-bot { height:58px; padding:0 2px; }
+  .er-top { top:6px; left:6px; right:6px; height:52px; gap:4px; padding:4px; border-radius:15px; }
+  .er-top-right { gap:4px; }
+  .er-bot { left:50%; right:auto; bottom:max(6px,var(--safe-area-inset-bottom,0px)); width:calc(100% - 12px); height:52px; grid-template-columns:44px minmax(0,1fr) 44px; padding:4px; gap:4px; border-radius:15px; }
+  .er-bot-center { height:42px; }
 
   /* The page fills the screen. On a desktop the book sits on a card with a
      16px margin, a border and a shadow — it reads as a book on a table. On a
@@ -281,39 +298,20 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
      bottom edges of the book stopped being findable at all. A page needs a top
      and a bottom. So: a whisper of the panel colour over the page, and a real
      line, which is enough to bound the text without becoming two stripes. */
-  .er-top, .er-bot { background:var(--background-primary); }
-  .er-top { border-bottom:1px solid var(--background-modifier-border); }
-  .er-bot { border-top:1px solid var(--background-modifier-border); }
+  .er-top { background:var(--background-primary); }
   /* Give the book its name back. The top bar had the title squeezed to
      "Выготски…" while the timer pill held a 22px reset button used about once a
      session. On a phone the pill keeps only the state and the clock; the reset
      moved into the ⋯ menu (added there in the same change — hiding a control
      without somewhere else to reach it would just be losing it). */
   .er-timer-reset { display:none; }
-  .er-timerbtn { padding:0 8px; margin-right:2px; }
+  .er-timerbtn { height:44px; padding:0 8px; margin-right:0; }
   .er-top-title { font-size:13.5px; opacity:.75; }
   /* Reach: the arrows move out to the edges they belong to, and the page
      counter keeps the middle. */
   .er-bot .er-navbtn:first-child { margin-right:auto; }
   .er-bot .er-navbtn:last-child { margin-left:auto; }
 }
-/* Obsidian's own variable, not env() straight: on desktop it is 0, and under
-   app.emulateMobile(true) it becomes a real 34px — so the home-bar gap can be
-   checked without a phone in hand. */
-.er-bot { padding-bottom:var(--safe-area-inset-bottom, 0px); height:calc(50px + var(--safe-area-inset-bottom, 0px)); }
-
-/* Clear Obsidian's floating status bar on a desktop.
-   It is `position: fixed; bottom: 0; right: 0` and sits ON TOP of whatever is in
-   the bottom-right corner of the window — which here is the "next page" arrow
-   and the page counter: "нижняя часть, футер, скрывается за строкой проводника,
-   и не вижу что там есть внизу". --status-bar-scroll-padding is the reserve
-   Obsidian itself publishes for exactly this, so the gap follows the reader's
-   own font size and stays right if the theme changes it. */
-body:not(.is-mobile) .er-bot {
-  padding-right: max(6px, var(--status-bar-scroll-padding, 30px));
-}
-
-
 /* ── Highlights ─────────────────────────────────────────────────────────── */
 .er-hl { border-radius:3px; padding:.05em 0; box-decoration-break:clone; -webkit-box-decoration-break:clone; cursor:pointer; transition:filter .12s; }
 .er-hl:hover { filter:brightness(.92); }
@@ -447,6 +445,20 @@ body:not(.is-mobile) .er-bot {
 /* Settings explanatory note */
 .er-set-note { font-size:12.5px; line-height:1.6; color:var(--text-muted); background:var(--background-secondary); border:1px solid var(--background-modifier-border); border-radius:9px; padding:11px 13px; margin:6px 0 14px; }
 .er-set-note code { font-size:11.5px; background:var(--background-modifier-hover); padding:1px 5px; border-radius:4px; word-break:break-all; }
+/* ACP setup: one compact explanation, followed by the provider-specific step. */
+.er-acp-guide { margin:10px 0 14px; padding:12px 13px; border:1px solid color-mix(in srgb,var(--interactive-accent) 24%,var(--background-modifier-border)); border-radius:10px; background:color-mix(in srgb,var(--interactive-accent) 5%,var(--background-secondary)); }
+.er-acp-guide-heading { display:flex; align-items:center; gap:7px; color:var(--text-normal); font-size:13px; font-weight:700; }
+.er-acp-guide-icon { display:inline-flex; color:var(--interactive-accent); }
+.er-acp-guide-icon svg { width:15px; height:15px; }
+.er-acp-guide-copy { margin-top:5px; color:var(--text-muted); font-size:12.5px; line-height:1.55; }
+.er-acp-install { display:flex; flex-direction:column; align-items:flex-start; gap:7px; margin-top:10px; padding-top:10px; border-top:1px solid var(--background-modifier-border); }
+.er-acp-guide-badge { display:inline-flex; align-items:center; min-height:22px; padding:2px 8px; border-radius:999px; background:color-mix(in srgb,var(--interactive-accent) 13%,transparent); color:var(--interactive-accent); font-size:11.5px; font-weight:650; }
+.er-acp-guide-badge.is-community { background:color-mix(in srgb,var(--text-warning,#d98a00) 13%,transparent); color:var(--text-warning,#b87300); }
+.er-acp-install-note { color:var(--text-muted); font-size:12.5px; line-height:1.5; }
+.er-acp-install-command { display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
+.er-acp-install-command code { flex:1 1 auto; min-width:0; overflow-x:auto; padding:7px 9px; border-radius:6px; background:var(--background-primary); color:var(--text-normal); font-size:11.5px; line-height:1.4; white-space:nowrap; }
+.er-acp-install-command button { flex:0 0 auto; min-height:30px; padding:4px 10px; font-size:11.5px; }
+@media (max-width:500px) { .er-acp-install-command { align-items:stretch; flex-direction:column; } .er-acp-install-command code { width:100%; } }
 /* Info / help modal */
 .er-info-modal { max-width:560px; }
 .er-info-title { font-size:19px; font-weight:700; color:var(--text-normal); }
@@ -525,8 +537,8 @@ body:not(.is-mobile) .er-bot {
 @media (max-width:600px) { .er-goalbar { height:24px; } }
 
 /* ── Toolbar reading-timer button (manual start/pause, next to save) ─────── */
-.er-timerbtn { display:flex; align-items:center; gap:5px; height:32px; padding:0 10px 0 9px; margin-right:4px; border-radius:8px; cursor:pointer; color:var(--er-text); background:color-mix(in srgb,var(--er-text,#1a1a2e) 6%,transparent); border:1px solid var(--er-border,#ddd9ce); opacity:.72; transition:opacity .15s,background .13s,border-color .13s,transform .1s; flex-shrink:0; user-select:none; }
-.er-timer-reset { display:flex; align-items:center; justify-content:center; width:22px; height:22px; margin-left:2px; border-radius:5px; cursor:pointer; opacity:.5; transition:opacity .13s,background .1s; }
+.er-timerbtn { display:flex; align-items:center; gap:5px; height:36px; padding:0 10px; margin:0; box-sizing:border-box; border-radius:10px; cursor:pointer; color:var(--er-text); background:color-mix(in srgb,var(--er-text,#1a1a2e) 6%,transparent); border:1px solid var(--er-border,#ddd9ce); box-shadow:none; opacity:.82; transition:opacity .15s,background .13s,border-color .13s,transform .1s; flex-shrink:0; user-select:none; }
+.er-timer-reset { display:none; align-items:center; justify-content:center; width:22px; height:22px; margin-left:2px; border-radius:5px; cursor:pointer; opacity:.5; transition:opacity .13s,background .1s; }
 .er-timer-reset:hover { opacity:1; background:rgba(0,0,0,.08); }
 .er-timer-reset:active { transform:scale(.9); }
 .er-timer-reset svg { width:12px; height:12px; }
@@ -539,7 +551,7 @@ body:not(.is-mobile) .er-bot {
 .er-timerbtn.er-timer-run:hover { background:color-mix(in srgb,var(--er-accent) 18%,transparent); }
 .er-timerbtn.er-timer-done { color:color-mix(in srgb,#3ea564 78%,var(--er-text)); border-color:rgba(76,175,110,.45); background:rgba(76,175,110,.14); opacity:1; }
 .er-timerbtn.er-timer-done:hover { background:rgba(76,175,110,.2); }
-@media (max-width:600px) { .er-timerbtn { height:36px; } }
+@media (max-width:600px) { .er-timerbtn { height:44px; } }
 
 /* ── Click-to-turn affordance (faint edge tint on hover, no cursor change so
       text selection still feels natural; the middle stays neutral) ────────── */
@@ -548,10 +560,11 @@ body:not(.is-mobile) .er-bot {
 .er-navclick .er-area::after  { right:0; background:linear-gradient(270deg,color-mix(in srgb,var(--er-accent) 14%,transparent),transparent); }
 .er-navclick .er-area:hover::before, .er-navclick .er-area:hover::after { opacity:1; }
 
-/* ── Immersive: gently dim chrome after a few idle seconds ────────────────── */
-.er-top, .er-bot { transition:opacity .55s ease, background .25s; }
-.er-immersive .er-top, .er-immersive .er-bot { opacity:.42; }
-.er-immersive .er-goalbar { opacity:.62; }
+/* ── Immersive: chrome overlays the page, then fully retracts when idle ──── */
+.er-top, .er-bot { transition:opacity .22s ease-out,transform .22s cubic-bezier(.2,.8,.2,1),background .2s; }
+.er-immersive .er-top { opacity:0; transform:translateY(calc(-100% - 16px)); pointer-events:none; }
+.er-immersive .er-bot { opacity:0; transform:translate(-50%,calc(100% + 16px)); pointer-events:none; }
+.er-immersive .er-goalbar { opacity:0; pointer-events:none; }
 
 /* ── Panel hint text (used under nav-mode / goal controls) ───────────────── */
 .er-pan-hint { padding:2px 16px 12px; font-family:'Inter',system-ui,sans-serif; font-size:11px; line-height:1.5; color:var(--er-muted); opacity:.85; }
@@ -684,10 +697,54 @@ body:not(.is-mobile) .er-bot {
 .er-settings-disclosure > summary:hover { background:var(--background-modifier-hover); }
 .er-settings-disclosure[open] > summary { border-bottom:1px solid var(--background-modifier-border); }
 .er-settings-disclosure-body { padding:2px 14px 8px; min-width:0; }
+.er-folder-setting .setting-item-control {
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) 32px;
+  align-items:center;
+  gap:4px 6px;
+  min-width:min(100%,320px);
+}
+.er-folder-setting .er-folder-path-input,
+.er-file-path-setting input {
+  width:100%;
+  min-width:0;
+}
+.er-folder-setting .clickable-icon,
+.er-file-path-setting .clickable-icon {
+  margin:0;
+}
+.er-folder-path-status {
+  grid-column:1 / -1;
+  min-width:0;
+  color:var(--text-muted);
+  font-size:var(--font-ui-smaller);
+  line-height:1.4;
+  overflow-wrap:anywhere;
+}
+.er-folder-path-status.is-error { color:var(--text-error); }
+.er-folder-path-input[aria-invalid="true"] {
+  border-color:var(--text-error);
+  box-shadow:0 0 0 1px var(--text-error);
+}
+.er-folder-create-error {
+  min-height:0;
+  color:var(--text-error);
+  font-size:var(--font-ui-small);
+  line-height:1.45;
+}
+.er-folder-create-error:not(:empty) { margin:0 0 10px; }
+.er-folder-create-actions { border-top:0; }
 .is-mobile .er-settings-head { align-items: stretch; flex-direction: column; }
 .is-mobile .er-settings-language { width: 100%; }
 .is-mobile .er-set-tabs { margin-bottom:18px; }
 .is-mobile .er-set-tab { flex:0 0 auto; padding:8px 12px; }
+.is-mobile .er-folder-setting .setting-item-control,
+.is-mobile .er-file-path-setting .setting-item-control { width:100%; }
+@media (pointer:coarse) {
+  .er-folder-setting .setting-item-control { grid-template-columns:minmax(0,1fr) 44px; }
+  .er-folder-setting .clickable-icon,
+  .er-file-path-setting .clickable-icon { min-height:44px; }
+}
 
 /* Per-book settings, now living in the reading panel instead of the help dialog.
    They keep their markup but must wear the reader's theme, not Obsidian's. */
@@ -1300,12 +1357,15 @@ body:not(.is-mobile) .er-bot {
     var(--er-extra-top, 0px)
   );
 }
-/* The progress line joins the flow instead of floating.
-   Floating, it had to be pushed down by the status bar strip — and landed on the
-   top bar's own bottom border, so the reader saw two lines a pixel apart. As the
-   first child in the flow it sits directly under the clock, above the toolbar,
-   which is where a progress line belongs anyway. */
-.er-fullscreen-modal .er-pbar { position: static; flex: 0 0 auto; }
+/* The reading-progress hairline is an overlay too: it communicates position
+   without reserving a row. On phones it begins below the system status inset. */
+.er-fullscreen-modal .er-pbar {
+  position:absolute;
+  top:max(var(--safe-area-inset-top,0px),env(safe-area-inset-top,0px),var(--er-extra-top,0px));
+}
+.er-fullscreen-modal .er-top {
+  top:calc(max(var(--safe-area-inset-top,0px),env(safe-area-inset-top,0px),var(--er-extra-top,0px)) + 6px);
+}
 /* One way out, and it is ours: the reader's own ← in the top bar closes the book
    properly, so Obsidian's floating ✕ is a duplicate.
 
@@ -1338,6 +1398,7 @@ body:not(.is-mobile) .er-bot {
 /* Scrolling mode: nothing to turn, so the page arrows and the tap-to-turn
    zones go away instead of sitting there doing nothing. */
 .er-scrolling .er-navbtn { display: none; }
+.er-scrolling .er-bot { width:max-content; min-width:132px; grid-template-columns:minmax(0,1fr); }
 .er-scrolling .er-area::before, .er-scrolling .er-area::after { display: none; }
 /* Loading curtain. The pages are being laid out behind it; a blank screen makes
    people think the book (or the plugin) hung, so this shows a page-shaped
@@ -1415,6 +1476,9 @@ body:not(.is-mobile) .er-bot {
 /* Keyboard focus. Only on :focus-visible, so a mouse click never leaves a ring
    behind, but tabbing through the reader always shows where you are. */
 .er-ibtn:focus-visible,
+.er-timerbtn:focus-visible,
+.er-navbtn:focus-visible,
+.er-loc-clickable:focus-visible,
 .er-lib-card:focus-visible,
 .er-hl-popup button:focus-visible,
 .er-panel-input:focus-visible,
@@ -1637,6 +1701,30 @@ body:not(.is-mobile) .er-bot {
 }
 .er-ai-head { flex: 0 0 auto; display: flex; align-items: flex-start; gap: var(--size-4-2); }
 .er-ai-headtext { flex: 1 1 auto; min-width: 0; }
+.er-ai-head-actions { display:flex; align-items:center; gap:2px; }
+.er-ai-sidebar {
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  padding: var(--size-4-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  overflow: hidden;
+  background: var(--background-primary);
+}
+.er-ai-sidebar .er-ai-log { min-height: 0; max-height: none; }
+.er-ai-sidebar-waiting {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-5) var(--size-4-3);
+  text-align: center;
+}
 .er-ai-modal .er-ai-prompt-settings {
   flex:0 0 auto; display:flex; align-items:center; justify-content:center;
   width:32px; height:32px; padding:0; border:0; box-shadow:none;
@@ -1669,36 +1757,96 @@ body:not(.is-mobile) .er-bot {
   font-weight: 600;
   color: var(--text-normal);
 }
-/* Which book this is from — the model is told, so the reader should see it too. */
+.er-ai-head-meta {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+}
+/* The book stays primary. Provider/model details belong in settings, not in the
+   reading conversation header. */
 .er-ai-book {
+  flex:1 1 auto;
+  min-width:0;
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Context, not the subject: two lines, opens on a tap. */
-.er-ai-quote {
-  flex: 0 0 auto;
-  padding: var(--size-2-3) var(--size-4-2);
-  border-left: 2px solid var(--background-modifier-border);
-  background: var(--background-secondary);
-  border-radius: 0 var(--radius-s) var(--radius-s) 0;
-  font-size: var(--font-ui-smaller);
-  line-height: 1.5;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  max-height: calc(3em + var(--size-2-3) * 2);
+.er-ai-context {
+  position:relative;
+  flex:0 0 auto;
+  border:1px solid var(--background-modifier-border);
+  border-radius:var(--radius-m);
+  background:var(--background-secondary);
+  overflow:hidden;
+  color:var(--text-muted);
 }
-.er-ai-quote-open {
-  display: block;
-  max-height: 24vh;
-  overflow-y: auto;
+.er-ai-context summary,
+.er-ai-context-summary {
+  min-height:0;
+  padding:9px 34px 8px 10px;
+  display:block;
+  cursor:pointer;
+  list-style:none;
+  font-size:var(--font-ui-smaller);
 }
+.er-ai-context.is-short .er-ai-context-summary { cursor:default; }
+.er-ai-context summary::-webkit-details-marker { display:none; }
+.er-ai-context-preview-row {
+  display:grid;
+  grid-template-columns:16px minmax(0,1fr);
+  gap:7px;
+  align-items:start;
+}
+.er-ai-context-icon { display:flex; color:var(--text-faint); margin-top:2px; }
+.er-ai-context-icon svg { width:14px; height:14px; }
+.er-ai-context-preview {
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+  overflow:hidden;
+  color:var(--text-normal);
+  line-height:1.55;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.er-ai-context-meta {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin:5px 0 0 23px;
+  color:var(--text-faint);
+  font-size:10px;
+  font-variant-numeric:tabular-nums;
+}
+.er-ai-context-toggle { display:flex; transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
+.er-ai-context-toggle svg { width:13px; height:13px; }
+.er-ai-context[open] .er-ai-context-toggle { transform:rotate(180deg); }
+.er-ai-context-text {
+  max-height:180px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:9px 10px 11px 33px;
+  border-top:1px solid var(--background-modifier-border);
+  white-space:pre-wrap;
+  font-size:var(--font-ui-smaller);
+  line-height:1.55;
+  color:var(--text-muted);
+  user-select:text;
+  overflow-wrap:anywhere;
+}
+.er-ai-context-attached { background:color-mix(in srgb,var(--interactive-accent) 5%,var(--background-secondary)); }
+.er-ai-context-clear {
+  flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  width:28px; height:28px; padding:0; border:0; box-shadow:none;
+  border-radius:var(--radius-s); background:transparent; color:var(--text-muted); cursor:pointer;
+}
+.er-ai-context-clear { position:absolute; top:6px; right:6px; z-index:1; }
+.er-ai-context-clear:hover { background:var(--background-modifier-hover); color:var(--text-normal); }
+.er-ai-context-clear svg { width:14px; height:14px; }
 .er-ai-log {
   flex: 1 1 auto;
   min-height: 180px;
@@ -1729,28 +1877,160 @@ body:not(.is-mobile) .er-bot {
   max-width: 280px;
   line-height: 1.5;
 }
-.er-ai-prompts {
-  width: min(100%, 420px);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--size-4-1);
-  margin-top: var(--size-4-2);
+.er-ai-composer {
+  position:relative;
+  flex:0 0 auto;
+  display:flex;
+  flex-direction:column;
+  gap:var(--size-2-2);
+  padding:7px;
+  border:1px solid color-mix(in srgb,var(--text-muted) 46%,var(--background-modifier-border));
+  border-radius:var(--radius-l);
+  background:var(--background-primary);
+  box-shadow:0 1px 2px rgba(0,0,0,.06),0 4px 18px rgba(0,0,0,.04);
+  transition:border-color 150ms cubic-bezier(0.23,1,0.32,1),box-shadow 150ms cubic-bezier(0.23,1,0.32,1);
 }
-.er-ai-modal .er-ai-chip {
-  margin: 0;
-  padding: var(--size-2-3) var(--size-4-3);
-  min-height: 36px;
-  border-radius: var(--radius-m);
-  font-size: var(--font-ui-small);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+.er-ai-composer:focus-within {
+  border-color:color-mix(in srgb,var(--interactive-accent) 72%,var(--background-modifier-border));
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--interactive-accent) 16%,transparent),0 4px 18px rgba(0,0,0,.05);
 }
-.er-ai-modal .er-ai-chip:active { transform: scale(0.97); }
-.er-ai-prompts-empty {
-  grid-column:1 / -1; padding:var(--size-4-3); color:var(--text-muted);
-  font-size:var(--font-ui-smaller); line-height:1.5;
+.er-ai-composer-prompts {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  min-width:0;
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+  scrollbar-width:none;
+  padding:1px;
 }
+.er-ai-composer-prompts::-webkit-scrollbar { display:none; }
+.er-ai-modal .er-ai-composer-prompt {
+  flex:0 0 auto;
+  min-height:28px;
+  margin:0;
+  padding:4px 9px;
+  border:1px solid var(--background-modifier-border);
+  border-radius:999px;
+  box-shadow:none;
+  background:var(--background-secondary);
+  color:var(--text-muted);
+  font-size:var(--font-ui-smaller);
+  line-height:1.25;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.er-ai-modal .er-ai-composer-prompt:hover,
+.er-ai-modal .er-ai-composer-prompt:focus-visible {
+  border-color:color-mix(in srgb,var(--interactive-accent) 54%,var(--background-modifier-border));
+  background:var(--background-modifier-hover);
+  color:var(--text-normal);
+}
+.er-ai-modal .er-ai-composer-prompt:focus-visible {
+  outline:2px solid color-mix(in srgb,var(--interactive-accent) 22%,transparent);
+  outline-offset:1px;
+}
+.er-ai-modal .er-ai-composer-prompt:active { transform:scale(.97); }
+.er-ai-modal .er-ai-composer-prompt:disabled { opacity:.48; cursor:default; transform:none; }
+.er-ai-composer-prompt-more { color:var(--text-faint); }
+.er-ai-slash-menu {
+  position:absolute;
+  z-index:12;
+  left:0;
+  right:0;
+  bottom:calc(100% + 6px);
+  max-height:min(44vh,260px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:4px;
+  border:1px solid var(--background-modifier-border);
+  border-radius:var(--radius-l);
+  background:var(--background-primary);
+  box-shadow:0 1px 2px rgba(0,0,0,.08),0 10px 30px rgba(0,0,0,.16);
+}
+.er-ai-slash-menu[hidden] { display:none; }
+.er-ai-modal .er-ai-slash-item {
+  display:grid;
+  grid-template-columns:minmax(84px,auto) minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  width:100%;
+  height:auto;
+  min-height:40px;
+  margin:0;
+  padding:7px 9px;
+  border:0;
+  border-radius:var(--radius-m);
+  box-shadow:none;
+  background:transparent;
+  color:var(--text-normal);
+  text-align:left;
+  cursor:pointer;
+}
+.er-ai-modal .er-ai-slash-item:hover,
+.er-ai-modal .er-ai-slash-item.is-active {
+  background:var(--background-modifier-hover);
+  box-shadow:inset 2px 0 var(--interactive-accent);
+}
+.er-ai-slash-name {
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--text-normal);
+  font-size:var(--font-ui-small);
+  font-weight:600;
+  line-height:1.3;
+}
+.er-ai-slash-prompt {
+  min-width:0;
+  margin:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--text-muted);
+  font-size:var(--font-ui-smaller);
+  line-height:1.3;
+}
+.er-ai-composer .er-ai-input {
+  box-sizing:border-box;
+  width:100%;
+  min-height:42px;
+  max-height:128px;
+  padding:8px 9px;
+  resize:none;
+  overflow-y:auto;
+  border:0;
+  background:transparent;
+  color:var(--text-normal);
+  box-shadow:none;
+  line-height:1.5;
+}
+.er-ai-composer .er-ai-input::placeholder { color:var(--text-muted); opacity:.78; }
+.er-ai-composer .er-ai-input:focus { outline:0; box-shadow:none; }
+.er-ai-composer-foot { display:flex; align-items:flex-end; justify-content:flex-end; gap:var(--size-4-2); min-width:0; }
+.er-ai-composer-mobile .er-ai-composer-foot { align-items:center; }
+.er-ai-composer-mobile .er-ai-input { min-height:40px; height:40px; }
+.er-ai-composer-foot .er-ai-send { flex:0 0 auto; }
+
+.modal.er-ai-history-modal { width:min(100%,560px); }
+.er-ai-history-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.er-ai-history-head h3 { margin:0; }
+.er-ai-history-scopes {
+  display:inline-flex; gap:2px; margin-top:12px; padding:2px;
+  border:1px solid var(--background-modifier-border); border-radius:var(--radius-m); background:var(--background-secondary);
+}
+.er-ai-history-scopes button { min-height:28px; padding:3px 12px; border:0; box-shadow:none; background:transparent; color:var(--text-muted); }
+.er-ai-history-scopes button.is-active { background:var(--background-primary); color:var(--text-normal); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.er-ai-history-list { display:flex; flex-direction:column; gap:6px; max-height:60vh; overflow-y:auto; margin-top:12px; }
+.er-ai-history-item { display:flex; align-items:center; gap:4px; border-bottom:1px solid var(--background-modifier-border); padding:4px 0; }
+.er-ai-history-open { flex:1 1 auto; min-width:0; padding:8px; text-align:left; border:0; box-shadow:none; background:transparent; }
+.er-ai-history-open:hover { background:var(--background-modifier-hover); }
+.er-ai-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-normal); }
+.er-ai-history-meta { margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-faint); font-size:var(--font-ui-smaller); }
+.er-ai-history-delete { flex:0 0 auto; width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; border:0; box-shadow:none; background:transparent; color:var(--text-muted); }
+.er-ai-history-delete:hover { color:var(--text-error); background:var(--background-modifier-hover); }
+.er-ai-history-delete svg { width:15px; height:15px; }
+.er-ai-history-empty { padding:32px; text-align:center; color:var(--text-muted); }
 
 /* Quick-prompt manager. A prompt is a small named document, not another
    settings row: label and full text need the width of the dialog and a clear
@@ -1798,9 +2078,8 @@ body:not(.is-mobile) .er-bot {
 }
 .er-prompt-actions { display:flex; gap:var(--size-4-2); }
 .er-prompt-restore { color:var(--text-muted); }
-/* Messages. The reader's own line is a bubble on the right; the answer is a card
-   on the left, because it is long and a page of markdown inside a tight bubble
-   is harder to read, not friendlier. */
+/* Messages. The reader's own line stays compact on the right. Long assistant
+   output follows the page instead of sitting inside a second heavy card. */
 .er-ai-msg {
   max-width: 88%;
   padding: var(--size-2-3) var(--size-4-2);
@@ -1814,10 +2093,30 @@ body:not(.is-mobile) .er-bot {
 .er-ai-msg-me {
   align-self: flex-end;
   border-bottom-right-radius: var(--radius-s);
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 18%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--interactive-accent) 7%, var(--background-secondary));
+  color: var(--text-normal);
   white-space: pre-wrap;
 }
+.er-ai-msg-context {
+  margin:-2px -2px 7px;
+  border-color:var(--background-modifier-border);
+  background:color-mix(in srgb,var(--background-primary) 72%,transparent);
+  color:var(--text-normal);
+}
+.er-ai-msg-context summary,
+.er-ai-msg-context .er-ai-context-summary { padding:7px 8px; }
+.er-ai-msg-context .er-ai-context-preview { -webkit-line-clamp:2; color:var(--text-normal); }
+.er-ai-msg-context .er-ai-context-icon,
+.er-ai-msg-context .er-ai-context-meta,
+.er-ai-msg-context .er-ai-context-text { color:var(--text-muted); }
+.er-ai-msg-context .er-ai-context-meta { margin-left:21px; }
+.er-ai-msg-context .er-ai-context-text {
+  border-color:var(--background-modifier-border);
+  max-height:150px;
+  padding-left:29px;
+}
+.er-ai-msg-text { white-space:pre-wrap; }
 .er-ai-group { align-self: stretch; display: flex; flex-direction: column; gap: 2px; }
 .er-ai-reason {
   margin: 0 0 var(--size-4-1);
@@ -1847,21 +2146,126 @@ body:not(.is-mobile) .er-bot {
 }
 .er-ai-msg-ai {
   max-width: 100%;
-  border-bottom-left-radius: var(--radius-s);
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
+  padding-inline: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
-.er-ai-msg-streaming { white-space: pre-wrap; }
-.er-ai-msg-err { color: var(--text-error); border-color: var(--text-error); }
-.er-ai-msg-ai h1, .er-ai-msg-ai h2, .er-ai-msg-ai h3, .er-ai-msg-ai h4 {
-  font-size: var(--font-ui-medium);
-  margin: var(--size-4-3) 0 var(--size-4-1);
+.er-ai-msg-streaming::after {
+  content:"";
+  display:inline-block;
+  width:5px;
+  height:1em;
+  margin-left:3px;
+  border-radius:2px;
+  vertical-align:-0.14em;
+  background:var(--text-faint);
+  animation:er-ai-caret 900ms steps(1,end) infinite;
 }
+@keyframes er-ai-caret { 50% { opacity:.18; } }
+.er-ai-msg-err {
+  padding-inline:var(--size-4-2);
+  color:var(--text-error);
+  border:1px solid var(--text-error);
+  border-radius:var(--radius-m);
+  background:color-mix(in srgb,var(--text-error) 5%,transparent);
+}
+.er-ai-markdown { white-space:normal; }
+.er-ai-markdown-fallback { white-space:pre-wrap; }
+.er-ai-msg-ai h1, .er-ai-msg-ai h2, .er-ai-msg-ai h3,
+.er-ai-msg-ai h4, .er-ai-msg-ai h5, .er-ai-msg-ai h6 {
+  margin:var(--size-4-4) 0 var(--size-4-1);
+  color:var(--text-normal);
+  font-weight:600;
+  line-height:1.35;
+}
+.er-ai-msg-ai h1 { font-size:1.25em; }
+.er-ai-msg-ai h2 { font-size:1.16em; }
+.er-ai-msg-ai h3 { font-size:1.08em; }
+.er-ai-msg-ai h4, .er-ai-msg-ai h5, .er-ai-msg-ai h6 { font-size:1em; }
 .er-ai-msg-ai > :first-child { margin-top: 0; }
 .er-ai-msg-ai > :last-child { margin-bottom: 0; }
-.er-ai-msg-ai ul, .er-ai-msg-ai ol { margin: var(--size-4-1) 0; padding-left: var(--size-4-5); }
-.er-ai-msg-ai li { margin: var(--size-2-2) 0; }
-.er-ai-msg-ai pre { overflow-x: auto; }
+.er-ai-msg-ai p { margin:.62em 0; }
+.er-ai-msg-ai strong { color:var(--text-normal); font-weight:600; }
+.er-ai-msg-ai em { font-style:normal; font-weight:500; }
+.er-ai-msg-ai del { color:var(--text-muted); text-decoration-thickness:1px; }
+.er-ai-msg-ai a { overflow-wrap:anywhere; text-underline-offset:2px; }
+.er-ai-msg-ai ul, .er-ai-msg-ai ol { margin:.55em 0; padding-left:1.55em; }
+.er-ai-msg-ai li { margin:.22em 0; }
+.er-ai-msg-ai li > ul, .er-ai-msg-ai li > ol { margin:.2em 0; }
+.er-ai-msg-ai ul.contains-task-list { padding-left:.15em; }
+.er-ai-msg-ai .task-list-item {
+  position:relative;
+  min-height:1.35em;
+  margin-left:0;
+  padding-left:1.55em;
+  list-style:none;
+}
+.er-ai-msg-ai .task-list-item > input[type="checkbox"] {
+  position:absolute;
+  top:.24em;
+  left:0;
+  width:16px;
+  height:16px;
+  margin:0;
+  opacity:1;
+}
+.er-ai-msg-ai blockquote {
+  margin:.7em 0;
+  padding:.55em .7em;
+  border:1px solid var(--background-modifier-border);
+  border-radius:var(--radius-s);
+  background:color-mix(in srgb,var(--background-primary) 64%,transparent);
+  color:var(--text-muted);
+}
+.er-ai-msg-ai blockquote > :first-child { margin-top:0; }
+.er-ai-msg-ai blockquote > :last-child { margin-bottom:0; }
+.er-ai-msg-ai code, .er-ai-msg-ai kbd {
+  border:1px solid var(--background-modifier-border);
+  border-radius:4px;
+  background:var(--code-background);
+  color:var(--code-normal);
+  font-family:var(--font-monospace);
+  font-size:.9em;
+}
+.er-ai-msg-ai :not(pre) > code, .er-ai-msg-ai kbd { padding:.08em .3em; }
+.er-ai-msg-ai pre {
+  max-width:100%;
+  margin:.7em 0;
+  padding:.7em .8em;
+  overflow:auto;
+  overscroll-behavior-x:contain;
+  border:1px solid var(--background-modifier-border);
+  border-radius:var(--radius-s);
+  background:var(--code-background);
+  tab-size:2;
+}
+.er-ai-msg-ai pre code { padding:0; border:0; background:transparent; }
+.er-ai-table-scroll {
+  max-width:100%;
+  margin:.7em 0;
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+}
+.er-ai-msg-ai .er-ai-table-scroll table {
+  width:max-content;
+  min-width:100%;
+  margin:0;
+  border-collapse:collapse;
+  font-size:.92em;
+}
+.er-ai-msg-ai th, .er-ai-msg-ai td {
+  min-width:5.5em;
+  padding:.45em .58em;
+  border:1px solid var(--background-modifier-border);
+  text-align:left;
+  vertical-align:top;
+}
+.er-ai-msg-ai th { background:var(--background-primary-alt); color:var(--text-normal); font-weight:600; }
+.er-ai-msg-ai tr:nth-child(even) td { background:color-mix(in srgb,var(--background-primary) 52%,transparent); }
+.er-ai-msg-ai hr { margin:.9em 0; border:0; border-top:1px solid var(--background-modifier-border); }
+.er-ai-msg-ai img, .er-ai-msg-ai svg { max-width:100%; height:auto; }
+.er-ai-msg-ai .footnotes { margin-top:1em; color:var(--text-muted); font-size:.9em; }
 /* Copy / keep, under the answer they belong to. */
 .er-ai-acts { display: flex; gap: var(--size-4-1); padding-left: var(--size-2-2); }
 .er-ai-modal .er-ai-act {
@@ -1934,23 +2338,9 @@ body:not(.is-mobile) .er-bot {
 }
 .er-ai-advanced-body { padding: 2px 10px 6px; }
 .er-ai-advanced-body .setting-item:last-child { border-bottom: 0; }
-/* The composer. One line and one round button: the word "Отправить" in a pill
-   took a third of the row and said nothing an arrow does not. */
-.er-ai-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--size-4-2);
-  padding-top: var(--size-4-2);
-  /* Строка ввода стояла впритык к нижнему краю окна: на телефоне у модалки
-     своего нижнего поля нет, а под ним ещё домашняя полоса iPhone. */
-  padding-bottom: var(--size-4-2);
-  border-top: 1px solid var(--background-modifier-border);
-}
 .er-ai-modal .er-ai-input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 36px;
   border-radius: var(--radius-m);
 }
 .er-ai-modal .er-ai-send {
@@ -1974,12 +2364,22 @@ body:not(.is-mobile) .er-bot {
   height: 16px;
   fill: none;
   stroke: currentColor;
-  color: var(--text-on-accent);
+  color: currentColor;
 }
 .er-ai-modal .er-ai-send:active { transform: scale(0.94); }
 .er-ai-modal .er-ai-send.is-stop { background: var(--background-modifier-error); }
+.er-ai-modal .er-ai-send.is-empty,
+.er-ai-modal .er-ai-send:disabled:not(.is-stop) {
+  background:var(--background-modifier-border);
+  color:var(--text-faint);
+  cursor:default;
+}
+.er-ai-modal .er-ai-send:focus-visible {
+  outline:2px solid color-mix(in srgb,var(--interactive-accent) 58%,transparent);
+  outline-offset:2px;
+}
 @media (hover: hover) and (pointer: fine) {
-  .er-ai-modal .er-ai-send:hover { background: var(--interactive-accent-hover); color: var(--text-on-accent); }
+  .er-ai-modal .er-ai-send:not(:disabled):hover { background: var(--interactive-accent-hover); color: var(--text-on-accent); }
 }
 /* On a phone the window is the screen: the conversation gets the space instead
    of being a slit between the quote and the buttons. */
@@ -2003,15 +2403,15 @@ body:not(.is-mobile) .er-bot {
     padding-bottom: calc(var(--er-pad) + var(--er-safe-bottom));
   }
   /* Домашняя полоса iPhone: под ней ничего нажимать нельзя. */
-  .er-ai-bar { padding-bottom: calc(var(--size-4-3) + env(safe-area-inset-bottom, 0px)); }
+  .er-ai-composer-mobile { margin-bottom:env(safe-area-inset-bottom,0px); }
   .er-ai-log { max-height: none; }
-  .er-ai-modal .er-ai-input { height: 40px; }
+  .er-ai-composer-mobile .er-ai-input { height:40px; min-height:40px; }
   .er-ai-modal .er-ai-send { width: 40px; height: 40px; }
   .er-ai-modal .er-ai-act { padding: 6px 8px; }
-  .er-ai-prompts { grid-template-columns: 1fr; }
+  .er-ai-modal .er-ai-composer-prompt { min-height:36px; padding-inline:11px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .er-ai-typing-dot, .er-ai-msg { animation: none; opacity: 1; }
+  .er-ai-typing-dot, .er-ai-msg, .er-ai-msg-streaming::after { animation: none; opacity: 1; }
 }
 .er-ai-sys {
   width: 100%;
@@ -2039,7 +2439,7 @@ body:not(.is-mobile) .er-bot {
 .er-note-back {
   position: absolute;
   left: 50%;
-  bottom: calc(58px + 14px + var(--safe-area-inset-bottom, 0px));
+  bottom: calc(68px + var(--safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -2074,7 +2474,7 @@ body:not(.is-mobile) .er-bot {
    flow can be as tall as the book needs. Momentum scrolling on iOS is opt-in. */
 .er-clip.er-clip-scroll {
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 }
