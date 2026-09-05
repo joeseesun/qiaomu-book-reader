@@ -7,6 +7,10 @@
 
 中文优先、本地优先、每本书一篇阅读笔记。阅读本身完全离线，AI 能力由你选择服务并主动启用。
 
+[真实 Obsidian 界面](docs/assets/4.0.1-epub-ai.jpg) · [交互优化与验收清单](docs/interaction-polish-4.0.1.md) · [构建验证](https://github.com/joeseesun/qiaomu-book-reader/actions)
+
+当前源码包含 4.0.1 交互优化；BRAT 和手动下载版本以 GitHub Releases 为准，合并 main 不会自动更新已安装插件。
+
 ## 你会得到什么
 
 | 能力 | 实际效果 |
@@ -51,6 +55,10 @@ PDF 不再被拆成容易错位的普通段落，而是始终保留原始页面�
 </details>
 
 ## AI 辅助阅读
+
+“保存 AI 回复”把完整 Markdown 回答作为笔记正文，原文放在后面的来源区。标题在本地根据回答的主题标题、重点短语或内容句自动提取，过滤“总结”“关键概念”等通用小标题；保存前可修改，不额外调用模型。保存成功后按钮变为“已保存 · 打开笔记”，不会关闭对话，也不会自动抢走阅读焦点。
+
+同一面板内，未发送草稿按书分别保留（最多 30 本，关闭面板或重启后不保留）。新建对话保留当前草稿；已发送的来源固定在对应问题下。单条删除与批量清空都需要确认，删除当前对话后不会在关闭面板时重新写回。
 
 AI 默认关闭。启用后，文本型 PDF 会把整份可提取文字作为新对话的默认上下文；如果选中了原文，则本轮改用选文上下文做精读。常规 PDF 发送全文，超过 180,000 字符时按页均匀精简并明确标注，避免只截掉后半本。你可以通俗解释、举例、提炼要点、联系实际、换角度分析或生成测试题，并继续自由追问。书内“阅读设置”新增“AI 助读”标签，可就近开关 AI、查看当前服务与模型、调节思考模式/强度、回答语言和快捷问题；API 密钥、接口地址等低频敏感配置仍留在插件系统设置。DeepSeek V4 可单独开关思考模式；模型提供思考过程时会单独显示，回答完成后自动折叠，不与正式回答混在一起。
 
@@ -126,6 +134,8 @@ Qiaomu Book Reader is a Chinese-first EPUB, FB2 and PDF reader for Obsidian. PDF
 Install it with BRAT using `joeseesun/qiaomu-book-reader`, or download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/joeseesun/qiaomu-book-reader/releases/latest).
 
 Reading works fully offline. In-reader settings are split into Reading and AI Assistance tabs, keeping frequent AI controls close to the book while API keys and endpoint URLs remain in Obsidian plugin settings. Optional AI reading assistance includes editable quick prompts and supports signed-in Codex CLI, Claude Code CLI, Grok CLI, Kimi Code CLI, and ZCode CLI accounts without additional API-key setup, plus DeepSeek, Kimi, Qwen, GLM, MiniMax, SiliconFlow, Doubao, OpenRouter, OpenAI, Ollama, LM Studio, and custom OpenAI-compatible endpoints. CLI chats use persistent ACP sessions: Grok and Kimi provide ACP natively, while Codex, Claude, and ZCode use separately installed adapters. If an ACP session expires or its process exits before returning any content, the plugin rebuilds it and retries once; authentication, model, session, and process failures are reported separately. Grok ACP is launched with background auto-update disabled so an updater cannot delay the first streamed token. CLI providers are desktop-only and still send the page or selection you explicitly attach to their cloud service. AI is off by default and keys are stored with Obsidian SecretStorage.
+
+Saving an AI reply preserves its complete Markdown body with the source below it. An editable title is extracted locally from the reply's topic, emphasis or content, with no extra model request. Saving keeps the chat open, and the saved action opens the existing note. Unsent drafts stay separate for up to 30 books during the sidebar lifetime, but are not persisted across restarts. Deleting conversations requires confirmation. These 4.0.1 source changes are separate from the latest GitHub Release used by BRAT.
 
 ## Acknowledgements and provenance
 

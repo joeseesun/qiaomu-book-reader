@@ -30,6 +30,28 @@ import { PDF_AI_CONTEXT_MAX_CHARS, READER_BLOCK_SELECTOR, packPdfDocumentContext
 import { PDF_ZOOM_MAX, PDF_ZOOM_MIN, clampPdfZoom, pdfZoomFromWheel, pdfZoomPercent, pdfZoomShortcut, stepPdfZoom } from "../src/pdf-zoom.js";
 import { appendReadingNoteExcerpts, migrateAndReplaceReadingHighlights, replaceManagedReadingHighlights } from "../src/reading-note.js";
 import { corruptBackupPath, createSerialTaskQueue, parseJsonRecord, readJsonRecordStore } from "../src/storage.js";
+import { createReaderLoadCoordinator, isReaderLoadAbort, throwIfReaderLoadAborted } from "../src/reader-load.js";
+
+test("reader loads cancel stale work and only let the latest result commit", () => {
+  const coordinator = createReaderLoadCoordinator();
+  const first = coordinator.begin();
+  assert.equal(coordinator.isCurrent(first), true);
+
+  const second = coordinator.begin();
+  assert.equal(first.signal.aborted, true);
+  assert.equal(coordinator.isCurrent(first), false);
+  assert.equal(coordinator.isCurrent(second), true);
+  assert.throws(() => throwIfReaderLoadAborted(first.signal), { name: "AbortError" });
+  assert.equal(isReaderLoadAbort(new Error("irrelevant"), first.signal), true);
+
+  coordinator.finish(second);
+  assert.equal(coordinator.isCurrent(second), false);
+
+  const third = coordinator.begin();
+  coordinator.cancel();
+  assert.equal(third.signal.aborted, true);
+  assert.equal(coordinator.isCurrent(third), false);
+});
 
 test("EPUB resource paths resolve relative to the chapter instead of keeping parent segments", () => {
   assert.equal(
@@ -287,15 +309,49 @@ test("read failures block the store without inventing a backup that was never wr
   assert.match(result.error.message, /sync placeholder unavailable/);
 });
 
+test("empty synced JSON placeholders stay blocked until the user restores or removes them", async () => {
+  const files = new Map([["reading-progress.json", ""]]);
+  const writes = [];
+  const adapter = {
+    async exists(file) { return files.has(file); },
+    async read(file) { return files.get(file); },
+    async write(file, value) { writes.push([file, value]); },
+  };
+  const result = await readJsonRecordStore(adapter, "reading-progress.json", "progress");
+  assert.equal(result.status, "unreadable");
+  assert.equal(result.value, null);
+  assert.equal(result.backupPath, "");
+  assert.deepEqual(writes, []);
+});
+
 test("reader persistence refuses to overwrite unreadable stores and reports real save failures", () => {
   const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
   assert.match(source, /this\._blockedStores\.add\(path5\)/);
-  assert.match(source, /if \(this\._blockedStores\.has\(path5\)\) return Promise\.resolve\(false\)/);
+  assert.match(source, /this\._unreadableStores\.set\(path5/);
+  assert.match(source, /async retryUnreadableStore\(path5\)/);
+  assert.match(source, /为避免覆盖仍可恢复的数据/);
+  assert.match(source, /if \(this\._blockedStores\.has\(path5\)\) return false/);
   assert.match(source, /results\.some\(\(result\) => result === false\)/);
   assert.match(source, /const saved = await this\._persistHighlights/);
   assert.match(source, /if \(!saved\) \{[\s\S]*Не удалось сохранить комментарий/);
   assert.match(source, /function renderReaderLoadError/);
   assert.match(source, /Попробовать снова/);
+});
+
+test("fixed-layout PDF pages show a reserved loading state instead of a blank sheet", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const styles = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(source, /surface\.addClass\("er-pdf-rendering"\)/);
+  assert.match(source, /surface\.removeClass\("er-pdf-rendering"\)/);
+  assert.match(styles, /\.er-pdf-page-surface\.er-pdf-rendering::after/);
+  assert.match(styles, /prefers-reduced-motion:reduce/);
+  assert.match(source, /function erMarkSlowLayout\(view, delay = 3000\)/);
+  assert.match(source, /async function erPaintVeil\(view\)/);
+  assert.match(source, /await erPaintVeil\(this\);/);
+  assert.match(source, /function readerPaginationMappingCollapsed\(pager\)/);
+  assert.match(source, /if \(readerPaginationMappingCollapsed\(pager\)\)/);
+  assert.match(source, /页面较多，仍在布置/);
+  assert.doesNotMatch(source, /if \(this\.areaEl\) this\.areaEl\.removeClass\("er-booting"\);\s*erHideVeil\(this\);/);
 });
 
 test("runtime diagnostics use the maintained plugin identity", () => {
@@ -729,7 +785,9 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(source, /noteKind: "ai-answer"/);
   assert.match(source, /quote = composeAiAnswerNote\(\{/);
   assert.match(source, /act\("note", __ertr\("保存 AI 回复"\)/);
-  assert.match(source, /if \(note && typeof this\.close === "function"\) this\.close\(\)/);
+  assert.match(source, /createNoteFromAiAnswer[\s\S]*?open: false/);
+  assert.match(source, /savedNote = note/);
+  assert.doesNotMatch(source, /if \(note && typeof this\.close === "function"\) this\.close\(\)/);
   assert.match(source, /aiAnswer \? "Сохранить в заметку" : "Создать заметку"/);
   assert.match(source, /bookLinkHeading: __ertr\("## Заметки AI"\)/);
   assert.doesNotMatch(source, /extra: "\\n\\n" \+ answer/);
@@ -739,12 +797,14 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(css, /\.er-ai-sidebar \.er-ai-log \{ min-height: 0; max-height: none; \}/);
   assert.match(source, /const AiChatHistoryModal = class extends Modal/);
   assert.match(source, /createEl\("textarea", \{ cls: "er-ai-input" \}\)/);
-  assert.match(source, /event\.key === "Enter" && !event\.shiftKey/);
+  assert.match(source, /this\.inputController = bindAiComposer\(input, send, this\)/);
   assert.match(source, /items\.slice\(0, 3\)/);
   assert.match(source, /new AiChatHistoryModal\(this\.app, this\)\.open\(\)/);
   assert.match(source, /normalizeAiChatHistory\(this\.plugin\.settings\.aiChatHistory\)/);
   assert.match(source, /function readerPageContext\(view\)/);
   assert.match(source, /function readerDefaultAiContext\(view\)/);
+  assert.match(source, /function readerAiPanelContext\(view\)/);
+  assert.match(source, /unavailable: true,[\s\S]*bookFile: view\.file,[\s\S]*readerView: view/);
   assert.match(source, /kind: "document"/);
   assert.match(source, /pdfDocumentContext: packPdfDocumentContext/);
   assert.match(source, /getClientRects/);
@@ -756,7 +816,13 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(source, /cls: "er-ai-context-preview", text: previewText/);
   assert.match(source, /!this\.pendingContext && !this\.turns\.length && this\.readerView/);
   assert.match(source, /function syncOpenAiSelectionContext\(view\)/);
+  assert.match(source, /function syncOpenAiReaderContext\(view\)/);
+  assert.match(source, /if \(!readerIsPdf\(view\)\) \{\s*return \{\s*bookFile: view\.file/);
+  assert.match(source, /nextContext\?\.text \|\| \(sameBook \? this\.text : ""\)/);
   assert.match(source, /getLeavesOfType\(AI_CHAT_VIEW_TYPE\)\[0\]/);
+  assert.match(source, /readerAiPanelContext\(target\)/);
+  assert.match(source, /syncOpenAiReaderContext\(this\);/);
+  assert.match(source, /contextUnavailable/);
   assert.match(source, /leaf\.view\.setContext\(\{[\s\S]*kind: "selection"[\s\S]*text: pending\.text[\s\S]*\}, \{ focusInput: false, silent: true \}\)/);
   assert.equal((source.match(/syncOpenAiSelectionContext\(this\);/g) || []).length, 2);
   assert.match(source, /function renderAiComposerPrompts\(host, chat\)/);
@@ -774,6 +840,9 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.doesNotMatch(source, /bar\.createDiv\(\{ cls: "er-ai-composer-hint"/);
   assert.match(source, /\[\["book", __ertr\("本书"\)\], \["all", __ertr\("全部"\)\]\]/);
   assert.match(source, /确定清空全部对话记录吗/);
+  assert.match(source, /this\.chat\._removeHistory\(\(item\) => !clearBook \|\| item\.bookPath === bookPath\)/);
+  assert.match(source, /new ConfirmModal\(this\.app, \{/);
+  assert.doesNotMatch(source, /window\.confirm\(/);
   assert.match(css, /\.er-ai-composer \{/);
   assert.match(css, /\.er-ai-composer:focus-within \{/);
   assert.match(css, /\.er-ai-context \{/);
@@ -782,7 +851,8 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(css, /\.er-ai-composer-prompts \{[^}]*overflow-x:auto/s);
   assert.match(css, /\.er-ai-slash-menu \{[^}]*position:absolute;[^}]*max-height:min\(44vh,260px\)/s);
   assert.match(css, /\.er-ai-modal \.er-ai-slash-item \{[^}]*display:grid;[^}]*height:auto;[^}]*min-height:40px/s);
-  assert.match(css, /\.er-ai-modal \.er-ai-slash-item\.is-active \{[^}]*box-shadow:inset 2px 0 var\(--interactive-accent\)/s);
+  assert.match(css, /\.er-ai-modal \.er-ai-slash-item\.is-active \{[^}]*box-shadow:inset 0 0 0 1px/s);
+  assert.doesNotMatch(css, /\.er-ai-modal \.er-ai-slash-item\.is-active \{[^}]*inset 2px 0/s);
   assert.doesNotMatch(css, /\.er-ai-context-refresh/);
   assert.match(css, /\.er-ai-modal \.er-ai-send:disabled:not\(\.is-stop\)/);
   assert.match(css, /\.er-ai-msg-context \{/);
@@ -797,6 +867,24 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(css, /\.er-ai-msg-ai \.task-list-item \{[^}]*padding-left:1\.55em/s);
   assert.match(css, /\.er-ai-msg-ai \.task-list-item > input\[type="checkbox"\] \{[^}]*position:absolute;[^}]*left:0;/s);
   assert.doesNotMatch(css, /\.er-ai-msg-ai \.task-list-item \{[^}]*margin-left:-/s);
+});
+
+test("reader lifecycle cancels stale loads and releases PDF resources", () => {
+  const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert.match(source, /async function extractPdf\(file, app, _settings = \{\}, onProgress, options = \{\}\)/);
+  assert.match(source, /const signal = options\.signal/);
+  assert.match(source, /throwIfReaderLoadAborted\(signal\)/);
+  assert.match(source, /async function loadReaderDocument\(file, app, settings, onProgress, options = \{\}\)/);
+  assert.match(source, /extractPdf\(file, app, settings, onProgress, options\)/);
+  assert.match(source, /const loadToken = this\._loadCoordinator\.begin\(\)/);
+  assert.match(source, /loadReaderDocument\(this\.file, this\.app, this\.plugin\.settings,[\s\S]*signal: loadToken\.signal/);
+  assert.match(source, /if \(!this\._loadCoordinator\.isCurrent\(loadToken\)\) \{[\s\S]*lazy\?\.destroy\?\.\(\)/);
+  assert.equal((source.match(/this\._loadCoordinator\.cancel\(\);/g) || []).length, 2);
+  assert.match(source, /this\._pdfLazy\?\.destroy\?\.\(\)/);
+  assert.match(source, /_loadingTask: loadingTask/);
+  assert.match(source, /try \{ void loadingTask\.destroy\(\); \} catch/);
+  assert.match(source, /async makePdfThumb\(file\)[\s\S]*const loadingTask = pdfjsLib\.getDocument\([\s\S]*finally \{[\s\S]*await loadingTask\.destroy\(\)/);
+  assert.doesNotMatch(source, /doc\.destroy\(\)/);
 });
 
 test("AI settings explain and verify provider-specific ACP instead of a generic install", () => {
@@ -993,6 +1081,8 @@ test("confirming AI settings automatically prepares, tests, and enables the sele
   assert.match(modalSource, /async function ensureAiCliReady\(plugin, onStage = \(\) => \{\}\)/);
   assert.match(modalSource, /installCliAcp\(cfg\.id, \{ installRoot \}\)/);
   assert.match(modalSource, /probeCliAcp\(cfg\.id/);
+  assert.match(modalSource, /resolveCliPath\(cfg\.id, s\.aiCliPaths\[cfg\.id\]\)/);
+  assert.doesNotMatch(modalSource, /const cliStatus = await probeCliAi/);
   assert.match(modalSource, /async function testAndEnableAi\(plugin, onStage = \(\) => \{\}\)/);
   assert.match(modalSource, /await testAndEnableAi\(plugin, setButtonText\)/);
   assert.match(modalSource, /plugin\.settings\.aiEnabled = true/);

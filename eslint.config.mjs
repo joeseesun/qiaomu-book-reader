@@ -43,5 +43,12 @@ export default [
         URL: "readonly",
       },
     },
+    rules: {
+      "obsidianmd/ui/sentence-case": ["warn", {
+        mode: "loose",
+        brands: ["Qiaomu Book Reader", "Obsidian Sync", "Remotely Save"],
+        ignoreRegex: ["^swayinfo/elton-reader$"],
+      }],
+    },
   },
 ];

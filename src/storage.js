@@ -29,6 +29,38 @@ export function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+// process() serializes a read/modify/write through Obsidian's adapter on both
+// desktop and mobile. A separate recovery snapshot is still needed: this API
+// cannot protect against an external sync client replacing a file afterwards.
+export async function writeVerifiedJsonRecord(adapter, file, value, { validateExisting = true } = {}) {
+  const raw = JSON.stringify(value, null, 2);
+  parseJsonRecord(raw, file);
+  if (await adapter.exists(file)) {
+    await adapter.process(file, (current) => {
+      if (validateExisting) {
+        try { parseJsonRecord(current, file); }
+        catch (cause) {
+          throw Object.assign(new Error("JSON store became unreadable", { cause }), { code: "ER_STORE_UNREADABLE" });
+        }
+      }
+      return raw;
+    });
+  } else {
+    await adapter.write(file, raw);
+  }
+  if (await adapter.read(file) !== raw) throw new Error("JSON store write verification failed");
+}
+
+export function mergeReadingProgress(restored, current) {
+  const merged = { ...restored };
+  for (const [book, entry] of Object.entries(current || {})) {
+    if (isPlainRecord(entry) && (!merged[book] || (entry.lastRead || 0) >= (merged[book].lastRead || 0))) {
+      merged[book] = entry;
+    }
+  }
+  return merged;
+}
+
 export function corruptBackupPath(file, now = new Date()) {
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   return `${file}.corrupt-${stamp}.bak`;
