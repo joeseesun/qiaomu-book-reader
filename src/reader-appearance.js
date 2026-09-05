@@ -1,3 +1,5 @@
+import { importedFontFamily, importedReaderFonts } from "./reader-fonts.js";
+
 // Accept font names/stacks, never arbitrary CSS. Canonical quoting also keeps
 // this value safe when used inside the reader's generated stylesheet.
 export function normalizeCustomFontFamily(value) {
@@ -23,6 +25,10 @@ export function normalizeCustomFontFamily(value) {
 
 export function resolveReaderFont(settings, fonts) {
   if (settings.fontFamily === "custom") {
+    if (settings.customFontId) {
+      const font = importedReaderFonts(settings).find((item) => item.id === settings.customFontId);
+      return font ? `"${importedFontFamily(font.id)}", serif` : fonts.georgia;
+    }
     return normalizeCustomFontFamily(settings.customFontFamily) || fonts.georgia;
   }
   return fonts[settings.fontFamily] || fonts.georgia;

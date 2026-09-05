@@ -29,6 +29,7 @@ import { cliAcpSupport, cliMeta, cliReasoningEfforts, disposeCliAiSessions, effe
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { translateUiText } from "./i18n-runtime.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
+import { FONT_FILE_ACCEPT, disposeReaderFonts, importedReaderFonts, listSystemFonts, readerFontStore } from "./reader-fonts.js";
 import { normalizeCustomFontFamily, resolveReaderFont, syncPageButtons } from "./reader-appearance.js";
 import { BUNDLED_FONT_FAMILIES, ensureBundledReaderFont } from "./bundled-fonts.js";
 import { cloneJson, createSerialTaskQueue, isPlainRecord, mergeReadingProgress, readJsonRecordStore, writeVerifiedJsonRecord } from "./storage.js";
@@ -40,6 +41,25 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "导入字体暂不可用，已使用备用字体。请检查字体文件是否同步完成，或重新导入。": "The imported font is unavailable. Using a fallback; check file sync or import it again.",
+  "搜索字体…": "Search fonts\u2026",
+  "山川与书页 · Reading 123": "Mountains and pages \u00b7 Reading 123",
+  "选择本机字体": "Choose installed font",
+  "导入字体文件": "Import font file",
+  "手动填写字体名称": "Enter font name manually",
+  "字体已保存在仓库中，随仓库文件同步。": "The font is saved in the vault and syncs with vault files.",
+  "本机字体仅在安装了该字体的设备上可用。": "Installed fonts are available only on devices where they are installed.",
+  "无法应用字体，请检查字体文件和仓库写入权限。": "Could not apply the font. Check the font file and vault write access.",
+  "尚未选择自定义字体": "No custom font selected",
+  "正在读取本机字体…": "Reading installed fonts\u2026",
+  "找到 {0} 种本机字体": "Found {0} installed font families",
+  "没有读取到本机字体，请导入字体文件。": "No installed fonts were returned. Import a font file instead.",
+  "当前设备不支持或未允许读取本机字体，请使用“导入字体文件”。": "This device cannot list installed fonts or access was denied. Use Import font file.",
+  "正在导入字体…": "Importing font\u2026",
+  "请选择有效的 TTF、OTF、WOFF 或 WOFF2 字体文件。": "Choose a valid TTF, OTF, WOFF or WOFF2 font file.",
+  "字体文件不能为空或超过 64 MB。": "Font files must not be empty or larger than 64 MB.",
+  "字体导入失败，请检查文件是否有效及仓库是否可写。": "Font import failed. Check that the font is valid and the vault is writable.",
+
   "字体名称 / font-family": "Font name / font-family",
   "填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。": "Enter an installed font name or a comma-separated fallback list. Unavailable fonts use the fallback.",
   "请输入字体名称或逗号分隔的字体列表，不要填写 CSS 规则。": "Enter font names separated by commas, not CSS rules.",
@@ -925,6 +945,8 @@ const DEFAULT = {
   fontSize: 18,
   fontFamily: "georgia",
   customFontFamily: "",
+  customFontId: "",
+  importedFonts: [],
   pageButtonsVisibility: "hover",
   lineHeight: 1.8,
   columns: "2",
@@ -1212,23 +1234,141 @@ const READER_FONTS = Object.freeze({
 const FONTS = Object.fromEntries(Object.values(READER_FONTS).map((font) => [font.id, font.stack]));
 function erReaderFonts() { return Object.values(READER_FONTS); }
 function erFontLabel(font) { return font.labels[__erLang] || font.labels.en; }
-function buildCustomFontInput(host, settings, apply) {
+async function ensureSelectedReaderFont(doc, plugin, settings = plugin.settings) {
+  if (settings.fontFamily !== "custom" || !settings.customFontId) {
+    return ensureBundledReaderFont(doc, settings.fontFamily);
+  }
+  try {
+    const font = importedReaderFonts(settings).find((item) => item.id === settings.customFontId);
+    if (!font) throw new Error("missing");
+    await readerFontStore(plugin).load(doc, font);
+    plugin._fontLoadErrors?.delete(font.id);
+    return true;
+  } catch {
+    if (!plugin._fontLoadErrors) plugin._fontLoadErrors = new Set();
+    if (!plugin._fontLoadErrors.has(settings.customFontId)) {
+      plugin._fontLoadErrors.add(settings.customFontId);
+      new Notice(__ertr("导入字体暂不可用，已使用备用字体。请检查字体文件是否同步完成，或重新导入。"));
+    }
+    return false;
+  }
+}
+const ReaderFontPicker = class extends FuzzySuggestModal {
+  constructor(app, fonts, choose) {
+    super(app);
+    this.fonts = fonts;
+    this.choose = choose;
+    this.setPlaceholder(__ertr("搜索字体…"));
+  }
+  getItems() { return this.fonts; }
+  getItemText(font) { return font.name; }
+  renderSuggestion(match, el) {
+    const font = match.item;
+    el.createDiv({ text: font.name });
+    const preview = el.createDiv({ cls: "er-font-choice-preview", text: __ertr("山川与书页 · Reading 123") });
+    preview.style.fontFamily = font.family;
+  }
+  onChooseItem(font) { void this.choose(font); }
+};
+function buildCustomFontInput(host, plugin, apply) {
+  const settings = plugin.settings;
   const wrap = host.createDiv("er-custom-font");
-  const label = wrap.createEl("label", { text: __ertr("字体名称 / font-family") });
+  const actions = wrap.createDiv("er-font-actions");
+  const system = actions.createEl("button", { text: __ertr("选择本机字体"), attr: { type: "button" } });
+  const upload = actions.createEl("button", { text: __ertr("导入字体文件"), attr: { type: "button" } });
+  const files = wrap.createEl("input", { type: "file", attr: { accept: FONT_FILE_ACCEPT, "aria-label": __ertr("导入字体文件") } });
+  files.hidden = true;
+  const saved = wrap.createDiv("er-imported-fonts");
+  const selected = wrap.createDiv("er-font-selected");
+  const status = wrap.createDiv({ cls: "er-font-status", attr: { role: "status" } });
+  const advanced = wrap.createEl("details");
+  advanced.createEl("summary", { text: __ertr("手动填写字体名称") });
+  const label = advanced.createEl("label", { text: __ertr("字体名称 / font-family") });
   const input = label.createEl("input", { type: "text", cls: "er-panel-input" });
   input.value = settings.customFontFamily || "";
   input.placeholder = '"georgia", serif';
-  wrap.createDiv({ cls: "er-pan-hint", text: __ertr("填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。") });
-  const error = wrap.createDiv({ cls: "er-custom-font-error", attr: { role: "status" } });
+  advanced.createDiv({ cls: "er-pan-hint", text: __ertr("填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。") });
+  const error = advanced.createDiv({ cls: "er-custom-font-error", attr: { role: "status" } });
+  let busy = false;
+  const setBusy = (value) => {
+    busy = value;
+    system.disabled = upload.disabled = input.disabled = value;
+    saved.querySelectorAll("button").forEach((button) => { button.disabled = value; });
+  };
+  const commit = async (family, imported = null) => {
+    const previous = { customFontFamily: settings.customFontFamily, customFontId: settings.customFontId, importedFonts: settings.importedFonts };
+    if (imported) {
+      await readerFontStore(plugin).load(docOf(wrap), imported);
+      settings.importedFonts = [...importedReaderFonts(settings).filter((font) => font.id !== imported.id), imported];
+    }
+    settings.customFontId = imported?.id || "";
+    settings.customFontFamily = family;
+    if (await plugin._saveLocalData() === false) {
+      Object.assign(settings, previous);
+      throw new Error("save");
+    }
+    refresh();
+    await apply();
+  };
+  const choose = async (font) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await commit(font.family || "", font.id ? font : null);
+      status.setText(font.id ? __ertr("字体已保存在仓库中，随仓库文件同步。") : __ertr("本机字体仅在安装了该字体的设备上可用。"));
+    } catch { status.setText(__ertr("无法应用字体，请检查字体文件和仓库写入权限。")); }
+    finally { setBusy(false); }
+  };
+  const refresh = () => {
+    wrap.hidden = settings.fontFamily !== "custom";
+    const font = importedReaderFonts(settings).find((item) => item.id === settings.customFontId);
+    selected.setText(font?.name || settings.customFontFamily || __ertr("尚未选择自定义字体"));
+    selected.style.fontFamily = resolveReaderFont(settings, FONTS);
+    input.value = settings.customFontFamily || "";
+    saved.empty();
+    for (const item of importedReaderFonts(settings)) {
+      const button = saved.createEl("button", { text: item.name, attr: { type: "button", "aria-pressed": String(item.id === settings.customFontId) } });
+      button.disabled = busy;
+      button.addEventListener("click", () => { void choose(item); });
+    }
+  };
+  system.addEventListener("click", async () => {
+    if (busy) return;
+    setBusy(true);
+    status.setText(__ertr("正在读取本机字体…"));
+    try {
+      const fonts = await listSystemFonts(winOf(wrap));
+      if (!wrap.isConnected) return;
+      status.setText(fonts.length ? __ertr("找到 {0} 种本机字体", fonts.length) : __ertr("没有读取到本机字体，请导入字体文件。"));
+      if (fonts.length) new ReaderFontPicker(plugin.app, fonts, choose).open();
+    } catch {
+      status.setText(__ertr("当前设备不支持或未允许读取本机字体，请使用“导入字体文件”。"));
+    } finally { setBusy(false); }
+  });
+  upload.addEventListener("click", () => { if (!busy) files.click(); });
+  files.addEventListener("change", async () => {
+    const file = files.files?.[0];
+    files.value = "";
+    if (!file || busy) return;
+    setBusy(true);
+    status.setText(__ertr("正在导入字体…"));
+    try {
+      const font = await readerFontStore(plugin).importFile(docOf(wrap), file);
+      await commit("", font);
+      status.setText(__ertr("字体已保存在仓库中，随仓库文件同步。"));
+    } catch (cause) {
+      status.setText(cause?.message === "format" ? __ertr("请选择有效的 TTF、OTF、WOFF 或 WOFF2 字体文件。")
+        : cause?.message === "size" ? __ertr("字体文件不能为空或超过 64 MB。")
+          : __ertr("字体导入失败，请检查文件是否有效及仓库是否可写。"));
+    } finally { setBusy(false); }
+  });
   input.addEventListener("change", async () => {
     const value = normalizeCustomFontFamily(input.value);
     input.setAttribute("aria-invalid", String(value === null));
     error.setText(value === null ? __ertr("请输入字体名称或逗号分隔的字体列表，不要填写 CSS 规则。") : "");
-    if (value === null) return;
-    settings.customFontFamily = value;
-    await apply();
+    if (value === null || busy) return;
+    await choose({ family: value });
   });
-  const refresh = () => { wrap.hidden = settings.fontFamily !== "custom"; };
   refresh();
   return refresh;
 }
@@ -1308,7 +1448,7 @@ function erPath(p) {
 // Only the LOOK is per device. Folders, templates, highlight colours and
 // reading progress stay shared — those are decisions about the vault, not about
 // the screen you happen to be holding.
-const DEVICE_KEYS = ["theme", "fontSize", "fontFamily", "customFontFamily", "pageButtonsVisibility", "lineHeight", "columns", "textAlign", "vAlign", "einkMode"];
+const DEVICE_KEYS = ["theme", "fontSize", "fontFamily", "customFontFamily", "customFontId", "pageButtonsVisibility", "lineHeight", "columns", "textAlign", "vAlign", "einkMode"];
 function erDeviceKey() {
   try {
     if (Platform) {
@@ -2286,6 +2426,7 @@ const QiaomuBookReader = class extends Plugin {
     }
   }
   onunload() {
+    disposeReaderFonts(this);
     disposeCliAiSessions();
     window.clearTimeout(this._bookCmdTimer);
     for (const timer of Object.values(this._fmTimers || {})) window.clearTimeout(timer);
@@ -3216,7 +3357,8 @@ const Paginator = class {
     // BRAT installs only main.js / manifest.json / styles.css, so the Chinese
     // reading fonts live inside main.js. Wait before measuring the pages:
     // swapping fonts after pagination would move line breaks and reading place.
-    await ensureBundledReaderFont(docOf(container), settings.fontFamily);
+    if (this.loadFont) await this.loadFont(docOf(container), settings);
+    else await ensureBundledReaderFont(docOf(container), settings.fontFamily);
     // Книга уже стоит в этом контейнере и текст тот же — значит перекладка, а не
     // открытие: узлы (и отрисованные страницы PDF вместе с ними) остаются на
     // месте, меняются только геометрия и стили потока.
@@ -3878,6 +4020,7 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
 };
 function createReaderPaginator(view) {
   const pager = new Paginator();
+  pager.loadFont = (doc, settings) => ensureSelectedReaderFont(doc, view.plugin, settings);
   pager.pdfZoom = clampPdfZoom(view.pdfZoom);
   pager.onSpreadChange = (cur, total) => {
     if (view._openingBook || view._layoutPromise || view._closed) return;
@@ -7958,7 +8101,7 @@ const ReadSettingsModal = class extends Modal {
     if (!p) return;
     const s = this.view.plugin.settings;
     const t = erTheme(s);
-    void ensureBundledReaderFont(docOf(p), s.fontFamily);
+    void ensureSelectedReaderFont(docOf(p), this.view.plugin, s);
     p.style.fontFamily = resolveReaderFont(s, FONTS);
     p.style.fontSize = `${s.fontSize || 18}px`;
     p.style.lineHeight = String(s.lineHeight || 1.8);
@@ -8197,7 +8340,7 @@ const ReadSettingsModal = class extends Modal {
         await this._apply(true);
       }
     );
-    const refreshCustomFont = buildCustomFontInput(colA, s, () => this._apply(true));
+    const refreshCustomFont = buildCustomFontInput(colA, v.plugin, () => this._apply(true));
     const lineHead = colA.createDiv("er-rs-range-head");
     lineHead.createSpan({ text: __ertr("Межстрочный") });
     const lineValue = lineHead.createSpan({ cls: "er-rs-range-value" });
@@ -10696,7 +10839,7 @@ const ReaderView = class extends ItemView {
         btn.addClass("active");
       });
     });
-    const refreshCustomFont = buildCustomFontInput(adv, this.plugin.settings, async () => {
+    const refreshCustomFont = buildCustomFontInput(adv, this.plugin, async () => {
       await this.plugin.saveAll();
       if (this.bookHtml && typeof this.repaginate === "function") await this.repaginate();
       else if (this.bookHtml) await this._repaginate();
@@ -12466,7 +12609,7 @@ const ReaderModal = class extends Modal {
         btn.addClass("active");
       });
     });
-    const refreshCustomFont = buildCustomFontInput(adv, this.plugin.settings, async () => {
+    const refreshCustomFont = buildCustomFontInput(adv, this.plugin, async () => {
       await this.plugin.saveAll();
       if (this.bookHtml && typeof this.repaginate === "function") await this.repaginate();
       else if (this.bookHtml) await this._repaginate();
@@ -13654,7 +13797,7 @@ const SettingsTab = class extends PluginSettingTab {
           await applyAppearance(true);
         });
       });
-    const refreshCustomFont = buildCustomFontInput(c, s, () => applyAppearance(true));
+    const refreshCustomFont = buildCustomFontInput(c, this.plugin, () => applyAppearance(true));
     buildPageButtonsSetting(c, this.plugin);
     new Setting(c)
       .setName(__ertr("字号"))

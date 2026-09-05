@@ -2791,3 +2791,15 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-custom-font input { display:block; width:100%; max-width:100%; margin-top:6px; box-sizing:border-box; }
 .er-custom-font-error { color:var(--text-error); font-size:var(--font-ui-small); }
 .er-custom-font input[aria-invalid="true"] { border-color:var(--text-error); }
+
+.er-font-actions, .er-imported-fonts { display:flex; flex-wrap:wrap; gap:8px; }
+.er-font-actions button { flex:1 1 140px; min-height:36px; }
+.er-custom-font input[hidden] { display:none; }
+.er-imported-fonts { max-height:140px; overflow:auto; margin-top:10px; }
+.er-imported-fonts button { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.er-imported-fonts button[aria-pressed="true"] { color:var(--text-on-accent); background:var(--interactive-accent); }
+.er-font-selected { margin:10px 0; overflow-wrap:anywhere; font-size:16px; }
+.er-font-status { color:var(--text-muted); font-size:var(--font-ui-small); margin-bottom:10px; }
+.er-custom-font details > summary { cursor:pointer; color:var(--text-muted); font-size:var(--font-ui-small); }
+.er-custom-font details > label { margin-top:10px; }
+.er-font-choice-preview { margin-top:5px; font-size:18px; color:var(--text-muted); }
