@@ -172,10 +172,10 @@ test("focus mode restores both sidebar states and is idempotent", () => {
     return el;
   };
   const side = (collapsed) => ({ collapsed, collapse() { this.collapsed = true; }, expand() { this.collapsed = false; } });
-  const workspace = { leftSplit: side(true), rightSplit: side(false) };
+  const workspace = { leftSplit: side(true), rightSplit: side(false), getLeavesOfType: () => [] };
   const view = { app: { workspace }, contentEl: root };
   const fn = source.slice(source.indexOf("function setReadingFocus("), source.indexOf("function setupReaderSelection("));
-  const focus = vm.runInNewContext(`${fn}\nsetReadingFocus`, { captureReadingAnchor: () => ({ block: 15 }), __ertr: (s) => s, setIcon() {} });
+  const focus = vm.runInNewContext(`${fn}\nsetReadingFocus`, { AI_CHAT_VIEW_TYPE: "ai-chat", captureReadingAnchor: () => ({ block: 15 }), __ertr: (s) => s, setIcon() {} });
   focus(view, true);
   focus(view, true);
   assert.equal(workspace.leftSplit.collapsed, true);
@@ -186,6 +186,65 @@ test("focus mode restores both sidebar states and is idempotent", () => {
   assert.equal(workspace.leftSplit.collapsed, true);
   assert.equal(workspace.rightSplit.collapsed, false);
   assert.equal(root.querySelectorAll("button").length, 0);
+
+  workspace.leftSplit.expand();
+  const aiLeaf = { getRoot: () => workspace.rightSplit, view: { containerEl: { isShown: () => true } } };
+  workspace.getLeavesOfType = () => [aiLeaf];
+  focus(view, true);
+  assert.equal(workspace.leftSplit.collapsed, true, "file tree folds away");
+  assert.equal(workspace.rightSplit.collapsed, false, "visible right AI stays open");
+  focus(view, false);
+  assert.equal(workspace.leftSplit.collapsed, false);
+
+  aiLeaf.view.containerEl.isShown = () => false;
+  focus(view, true);
+  assert.equal(workspace.rightSplit.collapsed, true, "a dormant AI tab does not preserve unrelated right panels");
+  focus(view, false);
+  aiLeaf.view.containerEl.isShown = () => true;
+  aiLeaf.getRoot = () => workspace.leftSplit;
+  focus(view, true);
+  assert.equal(workspace.rightSplit.collapsed, true, "AI outside the right dock does not preserve that dock");
+  focus(view, false);
+});
+
+test("opening AI and activating its right dock preserve focus without restoring the file tree", async () => {
+  const start = source.indexOf('this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {');
+  const end = source.indexOf("\n    }));", start) + "\n    }));".length;
+  let onActiveLeaf, cleared = 0, exited = 0;
+  const workspace = {
+    leftSplit: { collapsed: true }, rightSplit: { collapsed: true },
+    on(_event, callback) { onActiveLeaf = callback; }
+  };
+  const reader = { app: { workspace }, _focusRestore: [{}], _hideHlPopup() {}, registerEvent() {} };
+  vm.runInNewContext(`(function() { ${source.slice(start, end)} }).call(reader)`, {
+    reader, AI_CHAT_VIEW_TYPE: "ai-chat", recheck() {}, syncOpenAiReaderContext() {},
+    clearAiSource() { cleared++; },
+    setReadingFocus(view, enabled) { assert.equal(enabled, false); view._focusRestore = null; exited++; }
+  });
+  class AiChatView {
+    getViewType() { return "ai-chat"; }
+    setContext(context) { this.context = context; }
+  }
+  const aiLeaf = { getRoot: () => workspace.rightSplit, view: new AiChatView() };
+  workspace.getLeavesOfType = () => [aiLeaf];
+  workspace.revealLeaf = (leaf) => { workspace.rightSplit.collapsed = false; onActiveLeaf(leaf); };
+  const method = source.slice(source.indexOf("  async openAiChat("), source.indexOf("  // Open the library."));
+  const plugin = vm.runInNewContext(`({${method}})`, {
+    AI_CHAT_VIEW_TYPE: "ai-chat", AiChatView,
+    setReadingFocus() { throw new Error("Opening AI must not exit focus"); }
+  });
+  plugin.app = reader.app;
+  await plugin.openAiChat({ readerView: reader, text: "current page" });
+  assert.ok(reader._focusRestore);
+  assert.equal(workspace.leftSplit.collapsed, true);
+  assert.equal(workspace.rightSplit.collapsed, false);
+  assert.equal(exited, 0);
+  assert.equal(cleared, 0);
+  assert.equal(aiLeaf.view.context.text, "current page");
+  onActiveLeaf({ view: { getViewType: () => "markdown" } });
+  assert.equal(reader._focusRestore, null, "switching away from reading still exits focus");
+  assert.equal(exited, 1);
+  assert.equal(cleared, 1);
 });
 
 test("selection toolbar stays hidden until mouse release and removes document listeners on close", () => {
