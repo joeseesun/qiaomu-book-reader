@@ -1,6 +1,29 @@
 // Generated from the complete source UI dictionary and reviewed for core reading terms.
 // Keep placeholders, Markdown and HTML structure identical to the source strings.
 export const ER_ZH_CN = {
+  "Title suggested locally from the reply. Edit it freely; no extra model request is made.": "标题已根据回复内容在本地生成，可直接修改，不会额外调用模型。",
+  "Enter a valid note title.": "请输入有效的笔记标题。",
+  "Saving…": "正在保存…",
+  "AI reply": "AI 回复",
+  "Deleting this conversation cannot be undone.": "删除这段对话后无法撤销。",
+  "Conversation could not be saved. It remains in this panel. Check vault space and sync status.": "对话记录保存失败，当前内容仍保留在面板中。请检查仓库空间和同步状态。",
+  "No source attached": "不附加原文",
+  "Attach reading context again": "重新引用原文",
+  "PDF zoom options · {0}": "PDF 缩放选项 · {0}",
+  "Custom PDF zoom": "自定义 PDF 缩放",
+  "Zoom percentage": "缩放百分比",
+  "Apply": "确定",
+  "Pan PDF": "拖动 PDF",
+  "Fit width": "适合宽度",
+  "Return to previous reading position": "返回刚才的位置",
+  "Saved · Open note": "已保存 · 打开笔记",
+  "Apply recommended layout": "应用推荐排版",
+  "Keep your font and size; adjust line spacing, line length, and alignment.": "保留字体与字号，调整行距、行长和对齐方式。",
+  "Estimated Latin characters; Chinese is about half. Auto limits line length on wide screens.": "按拉丁字符估算，中文约为一半。自动模式限制宽屏行长。",
+  "Focus reading": "专注阅读",
+  "Exit focus reading": "退出专注阅读",
+  "The reading progress file is unreadable and writes are paused. Restore it and retry in Reading settings → Data.": "阅读进度文件无法读取，已暂停覆盖。请在阅读设置 → 数据中恢复文件并重新检测。",
+  "Could not save the reading position. Check free space, sync status, and vault access.": "无法保存阅读位置，请检查可用空间、同步状态和仓库访问权限。",
   "Пожелания и ошибки — в телеграм-бота": "愿望和错误 - 在电报机器人中",
   "Всё, что хочется поменять или починить, теперь собирается в одном месте — в телеграм-боте @book_in_obsidian_bot.": "您想要更改或修复的所有内容现在都收集在一个地方 - 在电报机器人@book_in_obsidian_bot 中。",
   "Ни аккаунта на GitHub, ни формы не нужно: заметили ошибку, не хватает возможности, неудобно на телефоне — просто отправьте боту обычное сообщение.": "您不需要 GitHub 帐户或表单：您发现错误、缺少某个功能、在手机上不方便 — 只需向机器人发送常规消息即可。",
@@ -698,6 +721,8 @@ export const ER_ZH_CN = {
 // key coverage; these reviewed overrides replace literal machine translations
 // with the terms Chinese reading and note-taking apps actually use.
 Object.assign(ER_ZH_CN, {
+  "回到最新回复": "回到最新回复",
+  "回答未完成，已保留生成内容。": "回答未完成，已保留生成内容。",
   "Китайский (упрощённый)": "简体中文",
   "Английский": "英语",
   "Немецкий": "德语",

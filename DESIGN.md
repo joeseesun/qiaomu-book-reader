@@ -80,6 +80,16 @@ The reader is a quiet, content-first Obsidian surface. Reading chrome uses warm-
 - User messages use only a quiet accent tint; saturated brand colour is reserved for actions and focus. Assistant answers stay in the page flow without a full card border, while tables, code and quotes keep their own local boundaries.
 - Task lists reserve a fixed checkbox lane instead of pulling controls into the sidebar edge. Saving an answer makes the Markdown answer the note body and keeps the attached source below it as a reference.
 
+### AI conversation recovery and input
+
+- Saved answer titles come from the answer's topic heading, emphasized phrase or content sentence, never a generic quick question. Suggest locally without a model request, keep the title editable and preserve the full Markdown body. Saved-note actions remember their target and never switch source books midway.
+- Drafts are scoped to books during the sidebar lifetime. Deleting the active history resets it without re-saving the deleted conversation. Explicitly detached sources stay detached when history is normalized.
+- Use the existing host colors, 12px rounded controls and quiet 1px boundaries; draw on Claude's 1.6 body line-height and restrained secondary controls without importing its branding or fonts.
+- Desktop and mobile share input behavior: composition-confirming Enter never sends, Shift+Enter stays a newline on desktop, and input typed during generation is never replaced by a prior failure.
+- Stopping or losing a connection retains generated Markdown with an explicit interrupted label, copy/save actions, and its source. Persisted history retains that label.
+- Copy and save remain visible for every stored answer without hovering; only the latest answer can be regenerated. A stale action must never target a different turn. Action targets are at least 32px tall on desktop and 44px on coarse-pointer devices.
+- Reading earlier messages pauses automatic following, including on the final frame. A keyboard-accessible “Back to latest reply” button appears only away from the bottom; scrolling is confined to the chat log.
+
 ## 11. PDF fixed-layout architecture
 
 PDF is a page description format, not a flowing-book format. The reader must

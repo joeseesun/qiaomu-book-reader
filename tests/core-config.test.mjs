@@ -330,7 +330,7 @@ test("reader persistence refuses to overwrite unreadable stores and reports real
   assert.match(source, /this\._unreadableStores\.set\(path5/);
   assert.match(source, /async retryUnreadableStore\(path5\)/);
   assert.match(source, /为避免覆盖仍可恢复的数据/);
-  assert.match(source, /if \(this\._blockedStores\.has\(path5\)\) return Promise\.resolve\(false\)/);
+  assert.match(source, /if \(this\._blockedStores\.has\(path5\)\) return false/);
   assert.match(source, /results\.some\(\(result\) => result === false\)/);
   assert.match(source, /const saved = await this\._persistHighlights/);
   assert.match(source, /if \(!saved\) \{[\s\S]*Не удалось сохранить комментарий/);
@@ -785,7 +785,9 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(source, /noteKind: "ai-answer"/);
   assert.match(source, /quote = composeAiAnswerNote\(\{/);
   assert.match(source, /act\("note", __ertr\("保存 AI 回复"\)/);
-  assert.match(source, /if \(note && typeof this\.close === "function"\) this\.close\(\)/);
+  assert.match(source, /createNoteFromAiAnswer[\s\S]*?open: false/);
+  assert.match(source, /savedNote = note/);
+  assert.doesNotMatch(source, /if \(note && typeof this\.close === "function"\) this\.close\(\)/);
   assert.match(source, /aiAnswer \? "Сохранить в заметку" : "Создать заметку"/);
   assert.match(source, /bookLinkHeading: __ertr\("## Заметки AI"\)/);
   assert.doesNotMatch(source, /extra: "\\n\\n" \+ answer/);
@@ -795,7 +797,7 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(css, /\.er-ai-sidebar \.er-ai-log \{ min-height: 0; max-height: none; \}/);
   assert.match(source, /const AiChatHistoryModal = class extends Modal/);
   assert.match(source, /createEl\("textarea", \{ cls: "er-ai-input" \}\)/);
-  assert.match(source, /event\.key === "Enter" && !event\.shiftKey/);
+  assert.match(source, /this\.inputController = bindAiComposer\(input, send, this\)/);
   assert.match(source, /items\.slice\(0, 3\)/);
   assert.match(source, /new AiChatHistoryModal\(this\.app, this\)\.open\(\)/);
   assert.match(source, /normalizeAiChatHistory\(this\.plugin\.settings\.aiChatHistory\)/);
@@ -838,7 +840,7 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.doesNotMatch(source, /bar\.createDiv\(\{ cls: "er-ai-composer-hint"/);
   assert.match(source, /\[\["book", __ertr\("本书"\)\], \["all", __ertr\("全部"\)\]\]/);
   assert.match(source, /确定清空全部对话记录吗/);
-  assert.match(source, /aiChatHistory = clearBook\s*\? history\.filter\(\(item\) => item\.bookPath !== bookPath\)\s*: \[\]/);
+  assert.match(source, /this\.chat\._removeHistory\(\(item\) => !clearBook \|\| item\.bookPath === bookPath\)/);
   assert.match(source, /new ConfirmModal\(this\.app, \{/);
   assert.doesNotMatch(source, /window\.confirm\(/);
   assert.match(css, /\.er-ai-composer \{/);

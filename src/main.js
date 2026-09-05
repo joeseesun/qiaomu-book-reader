@@ -16,6 +16,9 @@ import ePub from "epubjs";
 import { AI_PROVIDER_CATEGORIES, AI_PROVIDERS, aiProviderFor, buildAiRequestBody, buildAiRequestOptions, classifyAiHttpStatus, normalizeAiBase } from "./ai-providers.js";
 import { createOpenAiSseParser } from "./ai-stream.js";
 import { composeAiAnswerNote } from "./ai-note.js";
+import { suggestAiNoteTitle } from "./ai-note-title.js";
+import { bindAiComposer } from "./ai-composer.js";
+import { captureReadingAnchor, restoreReadingAnchor, queueReadingLayout, shouldFollowContext, comfortableLineWidth, zoomAnchorOffset, textPoint } from "./reader-experience.js";
 import { deriveAiSetupState } from "./ai-setup-state.js";
 import { rewriteEpubImageResources } from "./epub-resources.js";
 import { PDF_CMAP_OPTIONS } from "./pdf-cmaps.js";
@@ -27,7 +30,7 @@ import { ER_ZH_CN } from "./i18n-zh.js";
 import { translateUiText } from "./i18n-runtime.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
 import { BUNDLED_FONT_FAMILIES, ensureBundledReaderFont } from "./bundled-fonts.js";
-import { cloneJson, createSerialTaskQueue, readJsonRecordStore } from "./storage.js";
+import { cloneJson, createSerialTaskQueue, isPlainRecord, mergeReadingProgress, readJsonRecordStore, writeVerifiedJsonRecord } from "./storage.js";
 import { createReaderLoadCoordinator, isReaderLoadAbort, throwIfReaderLoadAborted } from "./reader-load.js";
 
 // ---- i18n (RU source / EN / Simplified Chinese) ----
@@ -36,6 +39,31 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "标题已根据回复内容在本地生成，可直接修改，不会额外调用模型。": "Title suggested locally from the reply. Edit it freely; no extra model request is made.",
+  "请输入有效的笔记标题。": "Enter a valid note title.",
+  "正在保存…": "Saving…",
+  "AI 回复": "AI reply",
+  "删除这段对话后无法撤销。": "Deleting this conversation cannot be undone.",
+  "对话记录保存失败，当前内容仍保留在面板中。请检查仓库空间和同步状态。": "Conversation could not be saved. It remains in this panel. Check vault space and sync status.",
+  "不附加原文": "No source attached",
+  "重新引用原文": "Attach reading context again",
+  "PDF 缩放选项 · {0}": "PDF zoom options · {0}",
+  "自定义 PDF 缩放": "Custom PDF zoom",
+  "缩放百分比": "Zoom percentage",
+  "确定": "Apply",
+  "拖动 PDF": "Pan PDF",
+  "适合宽度": "Fit width",
+  "返回刚才的位置": "Return to previous reading position",
+  "已保存 · 打开笔记": "Saved · Open note",
+  "应用推荐排版": "Apply recommended layout",
+  "保留字体与字号，调整行距、行长和对齐方式。": "Keep your font and size; adjust line spacing, line length, and alignment.",
+  "按拉丁字符估算，中文约为一半。自动模式限制宽屏行长。": "Estimated Latin characters; Chinese is about half. Auto limits line length on wide screens.",
+  "专注阅读": "Focus reading",
+  "退出专注阅读": "Exit focus reading",
+  "阅读进度文件无法读取，已暂停覆盖。请在阅读设置 → 数据中恢复文件并重新检测。": "The reading progress file is unreadable and writes are paused. Restore it and retry in Reading settings → Data.",
+  "无法保存阅读位置，请检查可用空间、同步状态和仓库访问权限。": "Could not save the reading position. Check free space, sync status, and vault access.",
+  "回到最新回复": "Back to latest reply",
+  "回答未完成，已保留生成内容。": "Reply interrupted. Generated content has been kept.",
   "Панели сверху и снизу полностью убираются через пару секунд. Коснитесь страницы, подведите указатель к краю или перейдите к панели с клавиатуры, чтобы вернуть их. Выключите, чтобы панели оставались видимыми.": "The top and bottom controls fully retract after a couple of seconds. Tap the page, move the pointer to an edge, or focus the controls with the keyboard to bring them back. Turn this off to keep the controls visible.",
   "Китайский (упрощённый)": "Simplified Chinese",
   "Английский": "English",
@@ -2256,6 +2284,7 @@ const QiaomuBookReader = class extends Plugin {
       }
       return;
     }
+    if (context?.readerView?._focusRestore) setReadingFocus(context.readerView, false);
     let leaf = this.app.workspace.getLeavesOfType(AI_CHAT_VIEW_TYPE)[0];
     if (!leaf) leaf = this.app.workspace.getRightLeaf(false) || this.app.workspace.getRightLeaf(true);
     if (!leaf) {
@@ -2348,6 +2377,9 @@ const QiaomuBookReader = class extends Plugin {
   _progressFilePath() {
     const folder = this._dataFolder();
     return erPath(folder ? `${folder}/reading-progress.json` : "reading-progress.json");
+  }
+  _progressRecoveryFilePath() {
+    return erPath(`${this.manifest.dir}/reading-progress-recovery.json`);
   }
   _storeRecoveryHint() {
     const folder = this._dataFolder();
@@ -2764,23 +2796,43 @@ const QiaomuBookReader = class extends Plugin {
     const list = this.progressBackups[path5] || (this.progressBackups[path5] = []);
     const last = list[list.length - 1];
     if (last && last.percent === prev.percent) { last.ts = now; return; }
-    list.push({ pct: prev.pct, percent: prev.percent, lastRead: prev.lastRead || now, ts: now });
+    list.push({ pct: prev.pct, percent: prev.percent, lastRead: prev.lastRead || now, ts: now,
+      ...(typeof prev.block === "number" ? { block: prev.block } : {}) });
     if (list.length > 30) list.shift();
   }
   async _loadProgressFromVault() {
-    return this._loadJsonStore(this._progressFilePath(), __ertr("Прогресс"));
+    const path5 = this._progressFilePath();
+    const value = await this._loadJsonStore(path5, __ertr("Прогресс"));
+    if (value !== null) return value;
+    // Keep the damaged source blocked and untouched. The local snapshot lets
+    // reading resume across a restart while the user resolves sync/history.
+    const recovery = await readJsonRecordStore(this.app.vault.adapter, this._progressRecoveryFilePath());
+    if (recovery.status === "ok" && recovery.value.sourcePath === path5 && isPlainRecord(recovery.value.progress)) {
+      return mergeReadingProgress(recovery.value.progress, this.progress);
+    }
+    return null;
   }
   _saveProgressToVault() {
     const path5 = this._progressFilePath();
-    if (this._blockedStores.has(path5)) return Promise.resolve(false);
     const snapshot = cloneJson(this.progress || {});
     return this._progressQueue.run(async () => {
+      // Write and verify an independent snapshot BEFORE touching the synced
+      // primary. Even a blocked primary must not leave new positions in RAM only.
+      await writeVerifiedJsonRecord(this.app.vault.adapter, this._progressRecoveryFilePath(), {
+        sourcePath: path5, progress: snapshot,
+      }, { validateExisting: false });
+      if (this._blockedStores.has(path5)) return false;
       const folder = path5.substring(0, path5.lastIndexOf("/"));
       if (folder) {
         const folderExists = await this.app.vault.adapter.exists(folder);
         if (!folderExists) await this.app.vault.createFolder(folder).catch(() => {});
       }
-      await this.app.vault.adapter.write(path5, JSON.stringify(snapshot, null, 2));
+      try {
+        await writeVerifiedJsonRecord(this.app.vault.adapter, path5, snapshot);
+      } catch (error) {
+        if (error.code === "ER_STORE_UNREADABLE") await this._loadJsonStore(path5, __ertr("Прогресс"));
+        throw error;
+      }
       await this._writeRescue(false);
       return true;
     });
@@ -2817,8 +2869,15 @@ const QiaomuBookReader = class extends Plugin {
     if (!isProgress && !isHighlights) return false;
     const value = await this._loadJsonStore(path5, __ertr(isProgress ? "Прогресс" : "Выделения"));
     if (value === null) return false;
-    if (isProgress) this.progress = value;
-    else this.highlights = value;
+    if (isProgress) {
+      this.progress = mergeReadingProgress(value, this.progress);
+      try { return await this._saveProgressToVault(); }
+      catch (error) {
+        console.error("Qiaomu Book Reader: recovered progress could not be saved", error);
+        return false;
+      }
+    }
+    this.highlights = value;
     return true;
   }
   // Safety net: keep a dated copy of progress + highlights + the plugin's own
@@ -2886,7 +2945,9 @@ const QiaomuBookReader = class extends Plugin {
       const now2 = Date.now();
       if (!this._lastProgressErrorNotice || now2 - this._lastProgressErrorNotice > 15000) {
         this._lastProgressErrorNotice = now2;
-        new Notice(__ertr("Не удалось сохранить место чтения. Проверьте доступ к хранилищу — текущая позиция осталась в памяти."), 8000);
+        new Notice(this._blockedStores.has(this._progressFilePath())
+          ? __ertr("阅读进度文件无法读取，已暂停覆盖。请在阅读设置 → 数据中恢复文件并重新检测。")
+          : __ertr("无法保存阅读位置，请检查可用空间、同步状态和仓库访问权限。"), 8000);
       }
       return false;
     });
@@ -3129,6 +3190,8 @@ const Paginator = class {
 
     /* 1. Clip — measure real px after one frame */
     this.clip = переклад ? this.clip : container.createDiv("er-clip");
+    if (this._scrollHandler) this.clip.removeEventListener("scroll", this._scrollHandler);
+    window.clearTimeout(this._scrollT);
     // NO `overflow` here. It used to be inline, and an inline declaration beats
     // any class without !important — so `.er-clip-scroll { overflow-y: auto }`
     // never applied and scroll mode could not be scrolled with a finger at all.
@@ -3138,7 +3201,7 @@ const Paginator = class {
     // `transition:none` that silently killed the page-turn animation. Overflow is
     // decided in the stylesheet: hidden on .er-clip, auto on .er-clip-scroll.
     this.clip.style.cssText = `flex:1;align-self:stretch;position:relative;min-width:0;min-height:0;`;
-    if (this.scrollMode) this.clip.addClass("er-clip-scroll");
+    this.clip.toggleClass("er-clip-scroll", this.scrollMode);
     await new Promise(r => window.requestAnimationFrame(r));
     await new Promise(r => window.requestAnimationFrame(r));
     // On mobile the view may not have final dimensions yet — wait an extra tick
@@ -3153,6 +3216,7 @@ const Paginator = class {
     // concludes nothing needs rebuilding, leaving the page laid out for one width
     // and displayed at another (columns then sit off to the side).
     this.builtWidth = aW;
+    this.builtHeight = aH;
     const cols  = settings.columns === "2" && aW > 700 ? 2 : 1;
     const gap   = cols === 2 ? 48 : 0;
     // Side padding scales with width: a phone (≤600px) gets a comfortable 26px
@@ -3192,8 +3256,8 @@ const Paginator = class {
        layout constraint. */
     let pad = basePad;
     const maxCh = Number(settings.maxLineCh) || 0;
-    if (maxCh > 0) {
-      const target = maxCh * (Number(settings.fontSize) || 18) * 0.5;
+    {
+      const target = comfortableLineWidth(Number(settings.fontSize) || 18, maxCh, __erLang === "zh" || READER_FONTS[settings.fontFamily]?.cjk === true);
       if (target > 0 && target < colW - basePad * 2) pad = Math.round((colW - target) / 2);
     }
 
@@ -3263,8 +3327,12 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
 .er-flow p,.er-flow li{
   break-inside:auto;-webkit-column-break-inside:auto;orphans:1;widows:1}
 .er-flow p,.er-flow h1,.er-flow h2,.er-flow h3,.er-flow h4{
-  padding-left:${pad}px;padding-right:${pad}px;margin:0 0 .75em}
+  padding-left:${pad}px;padding-right:${pad}px;margin:0 0 .6em}
 .er-flow h1,.er-flow h2,.er-flow h3,.er-flow h4{margin-top:1.1em}
+.er-flow h1{font-size:1.55em;line-height:1.35}
+.er-flow h2{font-size:1.3em;line-height:1.4}
+.er-flow h3,.er-flow h4{font-size:1.1em;line-height:1.45}
+.er-flow p.er-verse{white-space:pre-wrap;margin-bottom:.15em}
 .er-flow>p:first-of-type,.er-flow .er-section:first-child>p:first-child,
 .er-flow .er-section:first-child>h1:first-child,.er-flow .er-section:first-child>h2:first-child,
 .er-flow .er-section:first-child>h3:first-child{padding-top:${padVt}px}
@@ -3464,16 +3532,16 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
       //
       // Debounced: a scroll fires continuously, and re-reading the position on
       // every frame would make the reading itself stutter.
-      this.clip.addEventListener("scroll", () => {
+      this._scrollHandler = () => {
         window.clearTimeout(this._scrollT);
         this._scrollT = window.setTimeout(() => {
           const h = this.clip.clientHeight || 1;
           const at = Math.max(0, Math.min(Math.round(this.clip.scrollTop / h), this.total - 1));
-          if (at === this.spread) return;
           this.spread = at;
           if (this.onSpreadChange) this.onSpreadChange(at, this.total);
         }, 140);
-      }, { passive: true });
+      };
+      this.clip.addEventListener("scroll", this._scrollHandler, { passive: true });
       return [this.spread, this.total];
     }
 
@@ -3659,7 +3727,7 @@ ${chineseTypography ? ".er-flow em,.er-flow i,.er-flow cite{font-style:normal}" 
       const mid = (lo + hi) >> 1;
       if (topAt(mid) >= want) { ans = mid; hi = mid - 1; } else lo = mid + 1;
     }
-    return ans;
+    return ans > 0 && blocks[ans - 1].getBoundingClientRect().bottom > this.clip.getBoundingClientRect().top ? ans - 1 : ans;
   }
   // Global index of the first block at the current spread's left edge. x grows
   // monotonically with DOM order under column-fill, so binary-search it.
@@ -3757,6 +3825,7 @@ function createReaderPaginator(view) {
   const pager = new Paginator();
   pager.pdfZoom = clampPdfZoom(view.pdfZoom);
   pager.onSpreadChange = (cur, total) => {
+    if (view._openingBook || view._layoutPromise || view._closed) return;
     (view.updateUI || view._updateUI).call(view, cur, total);
     if (view.file) view.plugin.saveProgress(view.file.path, cur, total, pager.currentBlockIndex());
   };
@@ -3974,12 +4043,15 @@ function normalizeAiChatHistory(value) {
     const turns = Array.isArray(item?.turns) ? item.turns.slice(-40).map((turn) => ({
       role: turn?.role === "assistant" ? "assistant" : "user",
       content: String(turn?.content || "").slice(0, 50_000),
+      ...(turn?.role === "assistant" && turn.interrupted ? { interrupted: true } : {}),
+      ...(turn?.role === "assistant" && typeof turn.savedNotePath === "string" && turn.savedNotePath.endsWith(".md")
+        ? { savedNotePath: turn.savedNotePath.slice(0, 500) } : {}),
       ...(turn?.role !== "assistant" && normalizeAiTurnContext(turn?.context)
         ? { context: normalizeAiTurnContext(turn.context) }
         : {}),
     })).filter((turn) => turn.content) : [];
     const firstUser = turns.find((turn) => turn.role === "user");
-    if (legacyText && firstUser && !firstUser.context) {
+    if (!item?.contextVersion && legacyText && firstUser && !firstUser.context) {
       firstUser.context = normalizeAiTurnContext({ kind: "selection", text: legacyText });
     }
     return {
@@ -3988,6 +4060,7 @@ function normalizeAiChatHistory(value) {
       book: String(item?.book || "").slice(0, 180),
       bookPath: String(item?.bookPath || "").slice(0, 500),
       text: legacyText,
+      contextVersion: 1,
       updatedAt: Number(item?.updatedAt) || 0,
       turns,
     };
@@ -4045,6 +4118,109 @@ function aiMessages(text, settings, turns, book) {
 }
 function aiTurnsHaveDocumentContext(turns) {
   return (turns || []).some((turn) => turn?.role === "user" && normalizeAiTurnContext(turn.context)?.kind === "document");
+}
+function clearAiSource(view) {
+  const win = view?.contentEl?.ownerDocument?.defaultView;
+  win?.CSS?.highlights?.delete("er-ai-source");
+  if (view) { view._aiSourceRange = null; view._aiSourceParts = null; }
+}
+function paintAiSource(view, range) {
+  const win = view?.contentEl?.ownerDocument?.defaultView;
+  if (!range || !win?.Highlight || !win.CSS?.highlights) return;
+  clearAiSource(view);
+  view._aiSourceParts = view._pendingSel?.parts?.map((part) => ({ ...part }));
+  view._aiSourceRange = range.cloneRange();
+  win.CSS.highlights.set("er-ai-source", new win.Highlight(view._aiSourceRange));
+}
+function restoreAiSource(view) {
+  const win = view.contentEl?.ownerDocument?.defaultView;
+  if (!view._aiSourceParts || !win?.Highlight) return;
+  const ranges = [];
+  for (const part of view._aiSourceParts) {
+    const block = view.pager.blockEl(part.block);
+    const location = block && locateHl(block.textContent, part);
+    if (!location) continue;
+    const start = textPoint(block, location.start), end = textPoint(block, location.start + location.len);
+    if (!start || !end) continue;
+    const range = block.ownerDocument.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    ranges.push(range);
+  }
+  win.CSS?.highlights?.set("er-ai-source", new win.Highlight(...ranges));
+}
+function settleReader(view, delay = 220) {
+  window.clearTimeout(view._contextSettleTimer);
+  view._contextSettleTimer = window.setTimeout(() => {
+    if (view._openingBook || view._closed || view._layoutPromise || !view.pager?.flow?.isConnected || !view.areaEl?.clientWidth) return;
+    if (Math.abs(view.areaEl.clientWidth - view.pager.builtWidth) >= 8) return;
+    const moving = view.pager.flow.getAnimations?.().some((animation) => animation.playState === "running" || animation.pending);
+    if (moving) { settleReader(view, 60); return; }
+    view._readingAnchor = captureReadingAnchor(view.pager);
+    syncOpenAiReaderContext(view);
+    if (!readerIsPdf(view)) {
+      const chapter = chapterForBlock(view.tocItems || [], view._readingAnchor?.block || 0);
+      view.pctEl?.setText(chapter ? `${chapter} · ${Math.round(view.pager.currentPct * 100)}%` : `${Math.round(view.pager.currentPct * 100)}%`);
+    }
+  }, delay);
+}
+function rememberReaderJump(view) {
+  if (!view.pager?.flow) return;
+  if (!view.pager.scrollMode) view.pager.applyTransform(false);
+  const anchor = captureReadingAnchor(view.pager);
+  showFootnoteReturn(view, anchor);
+}
+function setReadingFocus(view, enabled) {
+  if (view.app.isMobile) return;
+  const workspace = view.app.workspace;
+  if (enabled && !view._focusRestore) {
+    if (view.pager && !view.pager.scrollMode) view.pager.applyTransform(false);
+    view._readingAnchor = captureReadingAnchor(view.pager);
+    view._focusRestore = [workspace.leftSplit, workspace.rightSplit].map((side) => ({ side, collapsed: side?.collapsed }));
+    for (const { side } of view._focusRestore) side?.collapse();
+  } else if (!enabled && view._focusRestore) {
+    const restore = view._focusRestore;
+    view._focusRestore = null;
+    for (const { side, collapsed } of restore) {
+      if (collapsed === false) side?.expand();
+      else if (collapsed === true) side?.collapse();
+    }
+  }
+  view.contentEl?.toggleClass("er-reading-focus", !!view._focusRestore);
+  if (view._focusRestore && !view._focusExit) {
+    const exit = view.contentEl.createEl("button", { cls: "er-ibtn er-focus-exit", attr: { type: "button", "aria-label": __ertr("退出专注阅读") } });
+    setIcon(exit, "minimize");
+    exit.addEventListener("click", () => setReadingFocus(view, false));
+    view._focusExit = exit;
+  } else if (!view._focusRestore) {
+    view._focusExit?.remove();
+    view._focusExit = null;
+  }
+  view.focusBtn?.setAttribute("aria-pressed", String(!!view._focusRestore));
+  view.focusBtn?.setAttribute("aria-label", __ertr(view._focusRestore ? "退出专注阅读" : "专注阅读"));
+  if (view.focusBtn) setIcon(view.focusBtn, view._focusRestore ? "minimize" : "maximize");
+}
+function setupReaderSelection(view) {
+  const area = view.areaEl;
+  const doc = area.ownerDocument;
+  const down = (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    view._selectionDragging = true;
+    view.hlPopup?.classList.remove("er-hl-popup-on");
+  };
+  const up = () => {
+    if (!view._selectionDragging) return;
+    view._selectionDragging = false;
+    view._scheduleSelCheck();
+  };
+  area.addEventListener("pointerdown", down);
+  doc.addEventListener("pointerup", up);
+  doc.addEventListener("pointercancel", up);
+  view._selectionCleanup = () => {
+    area.removeEventListener("pointerdown", down);
+    doc.removeEventListener("pointerup", up);
+    doc.removeEventListener("pointercancel", up);
+  };
 }
 function readerPageContext(view) {
   const pager = view?.pager;
@@ -4145,6 +4321,26 @@ function readerIsPdf(view) {
   const extension = String(view?.file?.extension || view?.ext || "").toLowerCase();
   return extension === "pdf" || /\.pdf$/i.test(String(view?.file?.path || ""));
 }
+function readerPdfPages(view) {
+  return [...(view.pager?.flow?.querySelectorAll(".er-pdf-page-break[data-pdf-page-no]") || [])];
+}
+function openReaderPagePicker(view) {
+  if (!view.file || !view.pager?.total) return;
+  const pager = view.pager;
+  const pages = readerIsPdf(view) ? readerPdfPages(view) : [];
+  new GoToPageModal(view.app, pages.length || pager.total, pages.length ? (pager.currentPdfPageNumber() || 1) - 1 : pager.spread, (n) => {
+    rememberReaderJump(view);
+    if (pages.length && pager.scrollMode) {
+      pager.clip.scrollTop += pages[n - 1].getBoundingClientRect().top - pager.clip.getBoundingClientRect().top;
+      pager.spread = Math.min(pager.total - 1, Math.floor(pager.clip.scrollTop / Math.max(1, pager.clip.clientHeight)));
+    } else if (pages.length) {
+      const x = pages[n - 1].getBoundingClientRect().left - pager.flow.getBoundingClientRect().left;
+      pager.jumpTo(Math.floor(Math.round(x / (pager.sw / (pager.cols || 1))) / (pager.cols || 1)));
+    } else pager.jumpTo(n - 1);
+    (view.updateUI || view._updateUI).call(view, pager.spread, pager.total);
+    void view.plugin.saveProgress(view.file.path, pager.spread, pager.total, pager.currentBlockIndex());
+  }).open();
+}
 function syncPdfZoomControls(view) {
   const isPdf = readerIsPdf(view);
   const zoom = clampPdfZoom(view?.pdfZoom);
@@ -4152,8 +4348,8 @@ function syncPdfZoomControls(view) {
   if (view?.pdfZoomLabelEl) {
     const label = pdfZoomPercent(zoom);
     view.pdfZoomLabelEl.setText(label);
-    view.pdfZoomLabelEl.setAttribute("aria-label", __ertr("Сбросить масштаб PDF до размера страницы. Сейчас {0}", label));
-    view.pdfZoomLabelEl.setAttribute("title", __ertr("По размеру страницы"));
+    view.pdfZoomLabelEl.setAttribute("aria-label", __ertr("PDF 缩放选项 · {0}", label));
+    view.pdfZoomLabelEl.setAttribute("title", __ertr(view.pdfZoomMode === "width" ? "适合宽度" : "PDF 缩放选项 · {0}", label));
   }
   if (view?.pdfZoomSettingsLabelEl) view.pdfZoomSettingsLabelEl.setText(pdfZoomPercent(zoom));
   if (view?.pdfZoomOutEl) view.pdfZoomOutEl.disabled = !isPdf || zoom <= PDF_ZOOM_MIN + 0.001;
@@ -4170,12 +4366,13 @@ function visiblePdfPageScrollers(view) {
       && rect.bottom > viewport.top + 1 && rect.top < viewport.bottom - 1;
   });
 }
-function applyPdfZoom(view, value) {
+function applyPdfZoom(view, value, point = null, mode = "custom") {
   if (!readerIsPdf(view)) return;
   const pager = view?.pager;
   const flow = pager?.flow;
   const next = clampPdfZoom(value);
   const previous = clampPdfZoom(view.pdfZoom);
+  view.pdfZoomMode = mode;
   if (Math.abs(next - previous) < 0.0005) {
     syncPdfZoomControls(view);
     return;
@@ -4183,24 +4380,14 @@ function applyPdfZoom(view, value) {
 
   const ratio = next / previous;
   const clip = pager?.clip;
-  let scrollAnchor = null;
-  let pageScrollers = [];
-  if (flow && clip && pager.scrollMode) {
-    const page = pager.currentPdfPageElement?.();
-    if (page) {
-      scrollAnchor = {
-        page,
-        top: clip.scrollTop - page.offsetTop,
-        left: clip.scrollLeft,
-      };
-    }
-  } else if (flow && clip) {
-    pageScrollers = visiblePdfPageScrollers(view).map((page) => ({
-      page,
-      x: page.scrollLeft + page.clientWidth / 2,
-      y: page.scrollTop + page.clientHeight / 2,
-    }));
-  }
+  const pageScrollers = flow && clip ? visiblePdfPageScrollers(view).map((page) => {
+    const surface = page.querySelector(".er-pdf-page-surface");
+    const bounds = page.getBoundingClientRect();
+    const viewport = clip.getBoundingClientRect();
+    const x = point?.clientX ?? (Math.max(bounds.left, viewport.left) + Math.min(bounds.right, viewport.right)) / 2;
+    const y = point?.clientY ?? (Math.max(bounds.top, viewport.top) + Math.min(bounds.bottom, viewport.bottom)) / 2;
+    return { page, surface, old: surface?.getBoundingClientRect(), x, y };
+  }).filter((anchor) => anchor.old && (!point || (anchor.x >= anchor.old.left && anchor.x <= anchor.old.right && anchor.y >= anchor.old.top && anchor.y <= anchor.old.bottom))) : [];
 
   view.pdfZoom = next;
   if (pager) pager.pdfZoom = next;
@@ -4210,17 +4397,20 @@ function applyPdfZoom(view, value) {
     // offsets use the new page geometry rather than a stale layout frame.
     void flow.offsetHeight;
     if (pager.scrollMode && clip) {
-      if (scrollAnchor?.page?.isConnected) {
-        clip.scrollTop = scrollAnchor.page.offsetTop + scrollAnchor.top * ratio;
-        clip.scrollLeft = (scrollAnchor.left + clip.clientWidth / 2) * ratio - clip.clientWidth / 2;
+      const anchor = pageScrollers[0];
+      if (anchor) {
+        const nextRect = anchor.surface.getBoundingClientRect();
+        clip.scrollTop += zoomAnchorOffset(anchor.old.top, nextRect.top, anchor.y, ratio);
+        clip.scrollLeft += zoomAnchorOffset(anchor.old.left, nextRect.left, anchor.x, ratio);
       }
       const viewHeight = clip.clientHeight || 1;
       pager.total = Math.max(1, Math.ceil((clip.scrollHeight || viewHeight) / viewHeight));
       pager.spread = Math.max(0, Math.min(Math.round(clip.scrollTop / viewHeight), pager.total - 1));
     } else {
       for (const anchor of pageScrollers) {
-        anchor.page.scrollLeft = anchor.x * ratio - anchor.page.clientWidth / 2;
-        anchor.page.scrollTop = anchor.y * ratio - anchor.page.clientHeight / 2;
+        const nextRect = anchor.surface.getBoundingClientRect();
+        anchor.page.scrollLeft += zoomAnchorOffset(anchor.old.left, nextRect.left, anchor.x, ratio);
+        anchor.page.scrollTop += zoomAnchorOffset(anchor.old.top, nextRect.top, anchor.y, ratio);
       }
     }
   }
@@ -4231,6 +4421,39 @@ function applyPdfZoom(view, value) {
 }
 function changePdfZoom(view, direction) {
   applyPdfZoom(view, stepPdfZoom(view?.pdfZoom, direction));
+}
+function fitPdfWidth(view) {
+  const page = view.pager?.currentPdfPageElement?.();
+  const figure = page?.querySelector(".er-pdf-native-page");
+  const width = parseFloat(figure?.style.getPropertyValue("--er-pdf-fit-width"));
+  if (width) applyPdfZoom(view, Math.max(1, (page.clientWidth - 4) / width), null, "width");
+}
+function setPdfPanMode(view, enabled) {
+  view.pdfPanMode = enabled;
+  view.contentEl?.toggleClass("er-pdf-pan", enabled);
+  view.pdfPanButton?.setAttribute("aria-pressed", String(enabled));
+  view._hideHlPopup?.();
+}
+function showPdfZoomMenu(view, event) {
+  const menu = new Menu();
+  addPdfZoomMenuItems(menu, view);
+  menu.showAtMouseEvent(event);
+}
+class PdfZoomModal extends Modal {
+  constructor(app, view) { super(app); this.view = view; }
+  onOpen() {
+    this.setTitle(__ertr("自定义 PDF 缩放"));
+    const input = this.contentEl.createEl("input", { type: "number", attr: { min: String(PDF_ZOOM_MIN * 100), max: String(PDF_ZOOM_MAX * 100), step: "5", "aria-label": __ertr("缩放百分比") } });
+    input.value = String(Math.round(clampPdfZoom(this.view.pdfZoom) * 100));
+    const apply = () => {
+      if (!input.checkValidity() || !input.value) { input.reportValidity(); return; }
+      applyPdfZoom(this.view, Number(input.value) / 100);
+      this.close();
+    };
+    this.contentEl.createEl("button", { text: __ertr("确定"), cls: "mod-cta" }).addEventListener("click", apply);
+    input.addEventListener("keydown", (event) => { if (event.key === "Enter") apply(); });
+    erAutoFocus(input);
+  }
 }
 function createPdfZoomControls(parent, view) {
   const group = parent.createDiv("er-pdf-zoom-control");
@@ -4248,12 +4471,16 @@ function createPdfZoomControls(parent, view) {
   });
   svgIcon(input, "plus");
   out.addEventListener("click", () => changePdfZoom(view, -1));
-  label.addEventListener("click", () => applyPdfZoom(view, PDF_ZOOM_DEFAULT));
+  label.addEventListener("click", (event) => showPdfZoomMenu(view, event));
   input.addEventListener("click", () => changePdfZoom(view, 1));
   view.pdfZoomControlEl = group;
   view.pdfZoomOutEl = out;
   view.pdfZoomLabelEl = label;
   view.pdfZoomInEl = input;
+  const pan = group.createEl("button", { cls: "er-pdf-zoom-step", attr: { type: "button", "aria-label": __ertr("拖动 PDF"), "aria-pressed": "false" } });
+  setIcon(pan, "hand");
+  pan.addEventListener("click", () => setPdfPanMode(view, !view.pdfPanMode));
+  view.pdfPanButton = pan;
   syncPdfZoomControls(view);
   return group;
 }
@@ -4274,7 +4501,7 @@ function createPdfZoomSettings(parent, view) {
   });
   svgIcon(input, "plus");
   out.addEventListener("click", () => changePdfZoom(view, -1));
-  label.addEventListener("click", () => applyPdfZoom(view, PDF_ZOOM_DEFAULT));
+  label.addEventListener("click", (event) => showPdfZoomMenu(view, event));
   input.addEventListener("click", () => changePdfZoom(view, 1));
   view.pdfZoomSettingsLabelEl = label;
   syncPdfZoomControls(view);
@@ -4293,7 +4520,10 @@ function addPdfZoomMenuItems(menu, view) {
     .setTitle(__ertr("По размеру страницы (100%)"))
     .setIcon("scan")
     .setDisabled(Math.abs(zoom - PDF_ZOOM_DEFAULT) < 0.001)
-    .onClick(() => applyPdfZoom(view, PDF_ZOOM_DEFAULT)));
+    .onClick(() => applyPdfZoom(view, PDF_ZOOM_DEFAULT, null, "page")));
+  menu.addItem((item) => item.setTitle(__ertr("适合宽度")).setIcon("move-horizontal").onClick(() => fitPdfWidth(view)));
+  menu.addItem((item) => item.setTitle(__ertr("自定义 PDF 缩放")).setIcon("percent").onClick(() => new PdfZoomModal(view.app, view).open()));
+  menu.addItem((item) => item.setTitle(__ertr("拖动 PDF")).setIcon("hand").setChecked(!!view.pdfPanMode).onClick(() => setPdfPanMode(view, !view.pdfPanMode)));
   menu.addItem((item) => item
     .setTitle(__ertr("Увеличить PDF ({0})", pdfZoomPercent(zoom)))
     .setIcon("zoom-in")
@@ -4303,10 +4533,35 @@ function addPdfZoomMenuItems(menu, view) {
 function setupPdfZoomInteractions(view) {
   const area = view?.areaEl;
   if (!area) return;
+  let drag = null;
+  area.addEventListener("pointerdown", (event) => {
+    if (!readerIsPdf(view) || event.pointerType === "touch" || !(view.pdfPanMode || event.button === 1)) return;
+    const page = event.target.closest?.(".er-pdf-page-break");
+    const scroller = view.pager.scrollMode ? view.pager.clip : page;
+    if (!scroller) return;
+    event.preventDefault();
+    event.stopPropagation();
+    drag = { scroller, x: event.clientX, y: event.clientY, left: scroller.scrollLeft, top: scroller.scrollTop };
+    view._pdfPanning = true;
+    area.setPointerCapture(event.pointerId);
+  }, true);
+  area.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    event.preventDefault();
+    drag.scroller.scrollLeft = drag.left + drag.x - event.clientX;
+    drag.scroller.scrollTop = drag.top + drag.y - event.clientY;
+  });
+  const endDrag = () => { if (drag) view._pdfPanEndedAt = Date.now(); drag = null; view._pdfPanning = false; };
+  area.addEventListener("pointerup", endDrag);
+  area.addEventListener("pointercancel", endDrag);
+  area.addEventListener("lostpointercapture", endDrag);
+  area.addEventListener("click", (event) => {
+    if (view.pdfPanMode || Date.now() - (view._pdfPanEndedAt || 0) < 300) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
   area.addEventListener("wheel", (event) => {
     if (!readerIsPdf(view) || (!event.ctrlKey && !event.metaKey)) return;
     event.preventDefault();
-    applyPdfZoom(view, pdfZoomFromWheel(view.pdfZoom, event.deltaY));
+    applyPdfZoom(view, pdfZoomFromWheel(view.pdfZoom, event.deltaY), event);
   }, { passive: false });
 
   let pinchDistance = 0;
@@ -4323,7 +4578,10 @@ function setupPdfZoomInteractions(view) {
   area.addEventListener("touchmove", (event) => {
     if (!readerIsPdf(view) || event.touches.length !== 2 || pinchDistance <= 0) return;
     event.preventDefault();
-    applyPdfZoom(view, pinchZoom * distance(event.touches) / pinchDistance);
+    applyPdfZoom(view, pinchZoom * distance(event.touches) / pinchDistance, {
+      clientX: (event.touches[0].clientX + event.touches[1].clientX) / 2,
+      clientY: (event.touches[0].clientY + event.touches[1].clientY) / 2,
+    });
   }, { passive: false });
   area.addEventListener("touchend", (event) => {
     if (event.touches.length < 2) pinchDistance = 0;
@@ -4629,6 +4887,7 @@ function erIsMobile(app) {
 function positionHlPopup(view, rect, fallbackW, fallbackH) {
   const pop = view.hlPopup;
   const root = view.contentEl;
+  pop.style.maxWidth = `${Math.max(120, root.clientWidth - 16)}px`;
   if (erIsMobile(view.app)) {
     // Docked rather than floated: Android and iOS draw their own selection
     // toolbar (copy / share / select all) directly over the selection, as an
@@ -4693,28 +4952,37 @@ function followFootnote(view, ref) {
   if (!flow || !ref) return false;
   const target = flow.querySelector(`[data-er-id="${CSS.escape(ref)}"]`);
   if (!target) return false;
-  const from = view.pager.currentSpread;
+  const from = captureReadingAnchor(view.pager);
   const fRect = flow.getBoundingClientRect();
   const x = target.getBoundingClientRect().left - fRect.left;
   const spread = Math.max(0, Math.min(
     Math.floor(Math.round(x / (view.pager.sw / (view.pager.cols || 1))) / (view.pager.cols || 1)),
     view.pager.total - 1));
-  const [cur, tot] = view.pager.jumpTo(spread);
+  let cur, tot;
+  if (view.pager.scrollMode) {
+    const clip = view.pager.clip;
+    clip.scrollTop += target.getBoundingClientRect().top - clip.getBoundingClientRect().top;
+    view.pager.spread = Math.min(view.pager.total - 1, Math.floor(clip.scrollTop / Math.max(1, clip.clientHeight)));
+    [cur, tot] = [view.pager.spread, view.pager.total];
+  } else [cur, tot] = view.pager.jumpTo(spread);
   (view.updateUI || view._updateUI).call(view, cur, tot);
+  if (view.file) void view.plugin.saveProgress(view.file.path, cur, tot, view.pager.currentBlockIndex());
   showFootnoteReturn(view, from);
   return true;
 }
 function showFootnoteReturn(view, spread) {
   hideFootnoteReturn(view);
-  const host = view.areaEl;
+  const host = view.contentEl;
   if (!host) return;
   const pill = host.createDiv("er-note-back");
-  iconLabel(pill, "arrow-left", __ertr("Вернуться к тексту"));
+  view.contentEl.addClass("er-has-return");
+  iconLabel(pill, "arrow-left", __ertr("返回刚才的位置"));
   pill.setAttribute("role", "button");
   pill.setAttribute("tabindex", "0");
   const go = () => {
-    const [cur, tot] = view.pager.jumpTo(spread);
+    const [cur, tot] = typeof spread === "object" ? restoreReadingAnchor(view.pager, spread) : view.pager.jumpTo(spread);
     (view.updateUI || view._updateUI).call(view, cur, tot);
+    if (view.file) void view.plugin.saveProgress(view.file.path, cur, tot, view.pager.currentBlockIndex());
     hideFootnoteReturn(view);
   };
   pill.addEventListener("click", go);
@@ -4725,6 +4993,7 @@ function showFootnoteReturn(view, spread) {
 }
 function hideFootnoteReturn(view) {
   if (view._noteBackEl) { view._noteBackEl.remove(); view._noteBackEl = null; }
+  view.contentEl?.removeClass("er-has-return");
 }
 // The two views spell the same two methods differently (buildHlPanel /
 // togglePanel in the leaf, _buildHlPanel / _togglePanel in the phone modal).
@@ -4882,6 +5151,8 @@ function addBarButtons(view, pop) {
   if (aiState.ready && aiState.enabled) {
     act("er-hl-ai", "wand-sparkles", __ertr("AI 解读"), () => {
       const cur = view._currentHl();
+      const selection = selOf(view.areaEl);
+      if (selection?.rangeCount) paintAiSource(view, selection.getRangeAt(0));
       view._hideHlPopup();
       selOf(view.areaEl)?.removeAllRanges();
       if (!cur) return;
@@ -5090,6 +5361,29 @@ async function renderAiMarkdown(owner, element, markdown, sourcePath = "") {
 function aiLogFollowsTail(log) {
   if (!log) return false;
   return log.scrollHeight - log.scrollTop - log.clientHeight < 96;
+}
+
+function createAiChatLog(host, chat) {
+  const wrap = host.createDiv("er-ai-log-wrap");
+  const log = wrap.createDiv("er-ai-log");
+  const jump = wrap.createEl("button", { cls: "er-ai-jump-latest", text: __ertr("回到最新回复") });
+  jump.hidden = true;
+  chat._readingEarlier = false;
+  log.tabIndex = 0;
+  log.setAttribute("aria-label", __ertr("对话记录"));
+  const pause = () => { chat._readingEarlier = true; };
+  log.addEventListener("wheel", (event) => { if (event.deltaY < 0) pause(); }, { passive: true });
+  log.addEventListener("touchstart", pause, { passive: true });
+  log.addEventListener("keydown", (event) => {
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key)) pause();
+  });
+  log.addEventListener("scroll", () => {
+    const atEnd = aiLogFollowsTail(log);
+    if (atEnd) chat._readingEarlier = false;
+    jump.hidden = atEnd;
+  }, { passive: true });
+  jump.addEventListener("click", () => { chat._scroll(); jump.hidden = true; log.focus(); });
+  return log;
 }
 
 function createAiStreamingMarkdownRenderer(owner, element, sourcePath = "", options = {}) {
@@ -5309,7 +5603,7 @@ function bindAiSlashPrompts(menu, input, chat) {
   };
   input.addEventListener("input", draw);
   input.addEventListener("keydown", (event) => {
-    if (menu.hidden) return;
+    if (menu.hidden || chat.inputController?.isComposing(event)) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -5347,6 +5641,7 @@ const AiChatHistoryModal = class extends Modal {
     const clearBook = this.scope === "book" && !!this.chat.bookFile?.path;
     const clear = head.createEl("button", { text: __ertr(clearBook ? "清空本书记录" : "清空全部记录") });
     clear.addEventListener("click", () => {
+      if (this.chat.busy) return;
       const bookPath = this.chat.bookFile?.path || "";
       new ConfirmModal(this.app, {
         title: __ertr(clearBook ? "清空本书记录" : "清空全部记录"),
@@ -5356,11 +5651,7 @@ const AiChatHistoryModal = class extends Modal {
         okText: __ertr("Очистить"),
         cancelText: __ertr("Отмена"),
         onYes: async () => {
-          const history = normalizeAiChatHistory(this.chat.plugin.settings.aiChatHistory);
-          this.chat.plugin.settings.aiChatHistory = clearBook
-            ? history.filter((item) => item.bookPath !== bookPath)
-            : [];
-          await this.chat.plugin.saveAll();
+          await this.chat._removeHistory((item) => !clearBook || item.bookPath === bookPath);
           this.onOpen();
         },
       }).open();
@@ -5389,16 +5680,25 @@ const AiChatHistoryModal = class extends Modal {
       const when = item.updatedAt ? new Date(item.updatedAt).toLocaleString(__erLocale()) : "";
       open.createDiv({ cls: "er-ai-history-meta", text: [item.book, when].filter(Boolean).join(" · ") });
       open.addEventListener("click", () => {
+        if (this.chat.busy) return;
         this.chat.loadSession(item);
         this.close();
       });
       const del = row.createEl("button", { cls: "er-ai-history-delete" });
       svgIcon(del, "trash");
-      del.setAttribute("aria-label", __ertr("Удалить"));
-      del.addEventListener("click", async () => {
-        this.chat.plugin.settings.aiChatHistory = allItems.filter((candidate) => candidate.id !== item.id);
-        await this.chat.plugin.saveAll();
-        this.onOpen();
+      del.setAttribute("aria-label", `${__ertr("Удалить")} · ${item.title}`);
+      del.addEventListener("click", () => {
+        if (this.chat.busy) return;
+        new ConfirmModal(this.app, {
+          title: `${__ertr("Удалить")} · ${item.title}`,
+          body: __ertr("删除这段对话后无法撤销。"),
+          okText: __ertr("Удалить"),
+          cancelText: __ertr("Отмена"),
+          onYes: async () => {
+            await this.chat._removeHistory((candidate) => candidate.id === item.id);
+            this.onOpen();
+          },
+        }).open();
       });
     }
   }
@@ -5439,7 +5739,7 @@ const AiExplainModal = class extends Modal {
       if (this.readerView) new ReadSettingsModal(this.app, this.readerView, "ai").open();
       else openPluginAiSettings(this.app, this.plugin);
     });
-    this.log = c.createDiv("er-ai-log");
+    this.log = createAiChatLog(c, this);
     this._buildEmpty();
     const bar = c.createDiv("er-ai-composer er-ai-composer-mobile");
     const rendered = renderAiContextQuote(bar, this.pendingContext, {
@@ -5464,41 +5764,17 @@ const AiExplainModal = class extends Modal {
     this.sendEl = send;
     this.canCancel = true;
     bindAiSlashPrompts(slashMenu, input, this);
-    this._setSending(false);
-    const fire = async () => {
-      const q = input.value.trim();
-      if (!q) return;
-      // Клавиатура уходит сразу: пока ждёшь ответ, она закрывает всё окно, а на
-      // телефоне убрать её можно только сняв фокус — другого способа в вебвью нет.
-      input.blur();
-      // Поле пустеет в тот же момент, когда сообщение встало в ленту — как в
-      // любом мессенджере. Раньше текст висел там до конца ответа и выглядел
-      // так, будто ничего не отправилось. Если отправить не удалось, текст
-      // возвращается на место, чтобы не набирать заново.
-      input.value = "";
-      if (!await this._send(q)) {
-        input.value = q;
-        this._setSending(false);
-      }
-    };
-    send.addEventListener("click", () => {
-      if (this.busy && this.canCancel && this.abortController) {
-        this.abortController.abort();
-        return;
-      }
-      fire();
-    });
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); fire(); }
-    });
-    input.addEventListener("input", () => {
-      if (!this.busy) this._setSending(false);
-    });
+    this.inputController = bindAiComposer(input, send, this, { blurOnSend: true });
     erAutoFocus(input);
     erBlurOnTapOutside(c, input);
     this._watchKeyboard();
   }
   _setSending(busy) {
+    if (!busy && this._deferredContext) {
+      const deferred = this._deferredContext;
+      this._deferredContext = null;
+      queueMicrotask(() => this.setContext?.(deferred.value, deferred.options));
+    }
     if (!this.sendEl) return;
     const stopping = !!busy && this.canCancel;
     this.sendEl.empty();
@@ -5509,6 +5785,7 @@ const AiExplainModal = class extends Modal {
     this.sendEl.toggleClass("is-empty", !busy && !this.inputEl?.value.trim());
     if (this.contextClearEl) this.contextClearEl.disabled = !!busy;
     for (const button of this.quickPromptButtons || []) button.disabled = !!busy;
+    for (const button of this.sessionButtons || []) button.disabled = !!busy;
     if (busy) this.slashPromptController?.close();
   }
   // Obsidian на телефоне собран на Capacitor, и у окна есть честные события
@@ -5548,11 +5825,22 @@ const AiExplainModal = class extends Modal {
     empty.createDiv({ cls: "er-ai-empty-sub", text: __ertr("Выберите быстрый вопрос или напишите свой.") });
     this.empty = empty;
   }
-  _scroll() { this.log.scrollTop = this.log.scrollHeight; }
+  _scroll() { this._readingEarlier = false; this.log.scrollTop = this.log.scrollHeight; }
+  _consumePendingContext(attachedContext) {
+    if (this.contextMode === "selection" || this.contextMode === "follow") return;
+    const current = normalizeAiTurnContext(this.pendingContext);
+    if (attachedContext && current?.kind === attachedContext.kind && current?.text === attachedContext.text) {
+      this.pendingContext = null;
+      if (this.pendingContextEl?.isConnected) this.pendingContextEl.remove();
+    }
+  }
   // Copy / keep, hung under the answer they belong to. A single pair of buttons
   // at the bottom of the window could only ever act on the last answer, and it
   // cost a whole row of a phone screen to say so.
   _actions(group, answer, source = {}) {
+    const targetUser = source.turn || this.turns[this.turns.length - 2];
+    const answerTurn = source.answerTurn || this.turns[this.turns.indexOf(targetUser) + 1];
+    const bookFile = this.bookFile;
     const row = group.createDiv("er-ai-acts");
     const act = (icon2, label, fn) => {
       const b = row.createEl("button", { cls: "er-ai-act" });
@@ -5565,39 +5853,57 @@ const AiExplainModal = class extends Modal {
       const ok = await copyToClipboard(answer);
       new Notice(ok ? __ertr("Скопировано ✓") : __ertr("Не удалось скопировать"));
     });
-    act("note", __ertr("保存 AI 回复"), async () => {
-      const note = await createNoteFromAiAnswer(this.app, this.plugin, answer, source.question, source.context, this.bookFile, {
-        // The note is written mid-reading: it gets its own tab, but the book
-        // stays in front — the reader goes to the note when they want to.
-        openMode: "tab",
-        openBackground: true,
+    let savedNote = answerTurn?.savedNotePath ? this.app.vault.getAbstractFileByPath(answerTurn.savedNotePath) : null;
+    const save = act("note", __ertr("保存 AI 回复"), async () => {
+      if (savedNote && this.app.vault?.getAbstractFileByPath(savedNote.path)) {
+        await this.app.workspace.openLinkText(savedNote.path, bookFile?.path || "", "tab");
+        return;
+      }
+      if (save.disabled) return;
+      save.disabled = true;
+      try {
+      const note = await createNoteFromAiAnswer(this.app, this.plugin, answer, source.question, source.context, bookFile, {
+        open: false,
       });
-      // The phone uses a modal; the desktop sidebar should stay open so the
-      // reader can continue the conversation after saving.
-      if (note && typeof this.close === "function") this.close();
+      if (note) {
+        savedNote = note;
+        save.querySelector("span")?.setText(__ertr("已保存 · 打开笔记"));
+        if (answerTurn?.role === "assistant") {
+          answerTurn.savedNotePath = note.path;
+          if (this.turns.includes(answerTurn)) await this._persistSession?.();
+        }
+      }
+      } finally { save.disabled = false; }
     });
-    act("rotate-ccw", __ertr("重新生成"), () => {
+    if (savedNote) save.querySelector("span")?.setText(__ertr("已保存 · 打开笔记"));
+    if (source.regenerate === false) return;
+    const regenerate = act("rotate-ccw", __ertr("重新生成"), () => {
       if (this.busy) return;
       const assistant = this.turns[this.turns.length - 1];
       const user = this.turns[this.turns.length - 2];
-      if (assistant?.role !== "assistant" || user?.role !== "user") return;
+      if (assistant?.role !== "assistant" || user?.role !== "user" || user !== targetUser) return;
       this.turns.splice(-2, 2);
       const userBubble = group.previousElementSibling;
       group.remove();
       if (userBubble?.classList?.contains("er-ai-msg-me")) userBubble.remove();
       this.aiSessionKey = newAiSessionKey();
       this.pendingContext = normalizeAiTurnContext(user.context);
+      this._regeneratingContext = true;
       if (this.pendingContext) this.text = this.pendingContext.text;
       void this._send(user.content);
     });
+    regenerate.addClass("er-ai-regenerate");
   }
   // Sends one message and hangs the answer under it. Returns whether it went
   // through, so the input knows whether to clear itself.
   async _send(text) {
-    if (this.busy || !text) return false;
+    if (this.busy || this._historySaving || !text) return false;
+    if (!this._regeneratingContext) this._prepareContext?.();
+    this._regeneratingContext = false;
     this.busy = true;
     this.abortController = new AbortController();
     this._setSending(true);
+    for (const button of this.log.querySelectorAll(".er-ai-regenerate")) button.remove();
     if (this.empty) { this.empty.remove(); this.empty = null; }
     const attachedContext = normalizeAiTurnContext(this.pendingContext);
     const userTurn = { role: "user", content: text, ...(attachedContext ? { context: attachedContext } : {}) };
@@ -5616,7 +5922,7 @@ const AiExplainModal = class extends Modal {
       this.bookFile ? this.bookFile.path : "",
       {
         beforeRender: () => aiLogFollowsTail(this.log),
-        afterRender: (followTail) => { if (followTail) this._scroll(); },
+        afterRender: (followTail) => { if (followTail && !this._readingEarlier) this._scroll(); },
       },
     );
     this.activeMarkdownRenderer = markdownRenderer;
@@ -5658,7 +5964,31 @@ const AiExplainModal = class extends Modal {
         sessionKey: this.aiSessionKey,
       });
     } catch (e) {
-      console.error("Qiaomu Book Reader: AI chat failed", e);
+      const followTail = aiLogFollowsTail(this.log);
+      const why = e && e.erReason;
+      if (why !== "cancelled") console.error("Qiaomu Book Reader: AI chat failed", e);
+      // A partial answer is still useful reading material. Keep its Markdown,
+      // source and actions, but rebuild ACP next time after an interrupted turn.
+      this.aiSessionKey = newAiSessionKey();
+      if (answer.trim()) {
+        await markdownRenderer.finish(answer);
+        this.turns.push({ role: "assistant", content: answer, interrupted: true });
+        this._consumePendingContext(attachedContext);
+        bubble.removeClass("er-ai-msg-streaming");
+        bubble.removeAttribute("aria-busy");
+        ind.remove();
+        if (reasoning) reasoningBox.open = false;
+        else reasoningBox.remove();
+        group.createDiv({ cls: "er-ai-interrupted", text: __ertr("回答未完成，已保留生成内容。") });
+        this._actions(group, answer, { question: text, context: attachedContext, turn: userTurn });
+        if (this.activeMarkdownRenderer === markdownRenderer) this.activeMarkdownRenderer = null;
+        this.busy = false;
+        this.abortController = null;
+        this._setSending(false);
+        if (followTail && !this._readingEarlier) this._scroll();
+        if (typeof this._persistSession === "function") void this._persistSession();
+        return true;
+      }
       markdownRenderer.dispose();
       if (this.activeMarkdownRenderer === markdownRenderer) this.activeMarkdownRenderer = null;
       bubble.removeAttribute("aria-busy");
@@ -5671,8 +6001,6 @@ const AiExplainModal = class extends Modal {
       // The unanswered message leaves the thread: keeping it would send the same
       // question twice as soon as the next one is asked.
       this.turns.pop();
-      const why = e && e.erReason;
-      if (why === "cancelled") this.aiSessionKey = newAiSessionKey();
       if (why !== "cancelled") bubble.addClass("er-ai-msg-err");
       bubble.setText(
         why === "cancelled" ? __ertr("已停止生成。")
@@ -5696,18 +6024,14 @@ const AiExplainModal = class extends Modal {
                   : why === "emptyanswer" ? __ertr("模型只返回了思考过程，没有生成正式回答，请重试。")
                   : why === "http" ? __ertr("Сервис ответил ошибкой {0}.", e.erStatus)
                     : __ertr("Не удалось связаться с сервисом. Похоже, нет интернета."));
-      this._scroll();
+      if (followTail && !this._readingEarlier) this._scroll();
       this.busy = false;
       this.abortController = null;
       this._setSending(false);
       return false;
     }
     this.turns.push({ role: "assistant", content: answer });
-    const currentPending = normalizeAiTurnContext(this.pendingContext);
-    if (attachedContext && currentPending?.kind === attachedContext.kind && currentPending?.text === attachedContext.text) {
-      this.pendingContext = null;
-      if (this.pendingContextEl?.isConnected) this.pendingContextEl.remove();
-    }
+    this._consumePendingContext(attachedContext);
     this.answer = answer;
     if (!reasoning) reasoningBox.remove();
     else {
@@ -5718,10 +6042,11 @@ const AiExplainModal = class extends Modal {
     bubble.removeAttribute("aria-busy");
     // Keep the exact same Markdown renderer for the last stream frame. This
     // prevents a plain-text -> formatted-content jump when generation ends.
+    const followTail = aiLogFollowsTail(this.log);
     await markdownRenderer.finish(answer);
     if (this.activeMarkdownRenderer === markdownRenderer) this.activeMarkdownRenderer = null;
     this._actions(group, answer, { question: text, context: attachedContext });
-    this._scroll();
+    if (followTail && !this._readingEarlier) this._scroll();
     this.busy = false;
     this.abortController = null;
     this._setSending(false);
@@ -5763,6 +6088,7 @@ const AiChatView = class extends ItemView {
     this.structuredContext = true;
     this.aiSessionKey = window.crypto?.randomUUID?.() || `reader-${Date.now()}-${Math.random()}`;
     this.contextUnavailable = false;
+    this.drafts = new Map();
   }
   getViewType() { return AI_CHAT_VIEW_TYPE; }
   getDisplayText() { return __ertr("AI 助读"); }
@@ -5797,8 +6123,10 @@ const AiChatView = class extends ItemView {
       button.addEventListener("click", fn);
       return button;
     };
-    iconButton("plus", __ertr("新对话"), () => this._newChat());
-    iconButton("history", __ertr("对话记录"), () => new AiChatHistoryModal(this.app, this).open());
+    this.sessionButtons = [
+      iconButton("plus", __ertr("新对话"), () => this._newChat()),
+      iconButton("history", __ertr("对话记录"), () => new AiChatHistoryModal(this.app, this).open()),
+    ];
     this._settingsButton(actions);
   }
   _renderWaiting() {
@@ -5821,15 +6149,19 @@ const AiChatView = class extends ItemView {
   }
   setContext(value, options = {}) {
     if (this.busy) {
+      if (options.follow) this._deferredContext = { value, options };
       if (!options.silent) new Notice(__ertr("请先停止当前回答，再更换选文。"));
       return;
     }
     const context = normalizeAiTurnContext(value);
-    const draft = this.inputEl?.value || "";
     const bookFile = value?.bookFile || null;
     const readerView = value?.readerView || null;
     const bookPath = bookFile?.path || "";
     const sameBook = !!bookPath && bookPath === this.bookFile?.path;
+    this._rememberDraft();
+    const draft = this.drafts.get(bookPath) || "";
+    if (options.follow && !shouldFollowContext(this.contextMode, sameBook)) return;
+    this.contextMode = context?.kind === "selection" ? "selection" : "follow";
     const unavailable = value?.unavailable === true;
     // A persistent ACP conversation already knows the document after its first
     // document-backed turn. HTTP providers receive that turn again in history,
@@ -5842,6 +6174,7 @@ const AiChatView = class extends ItemView {
       && nextContext?.text === this.pendingContext?.text
       && nextContext?.page === this.pendingContext?.page;
     if (sameContext) return;
+    if (!sameBook || context?.kind !== "selection") clearAiSource(this.readerView);
     if (!sameBook && this.turns.length) void this._persistSession();
     this.text = nextContext?.text || (sameBook ? this.text : "");
     this.pendingContext = nextContext;
@@ -5870,6 +6203,7 @@ const AiChatView = class extends ItemView {
           bookFile,
           pendingContext,
           draft,
+          skipPersist: true,
           focusInput: options.focusInput,
         });
         return;
@@ -5878,16 +6212,37 @@ const AiChatView = class extends ItemView {
       this.chatRecordId = "";
       this.aiSessionKey = newAiSessionKey();
     }
+    if (sameBook && this.pendingContextHost?.isConnected && !unavailable) {
+      this._refreshPendingContext();
+      if (options.focusInput) erAutoFocus(this.inputEl);
+      return;
+    }
     this._renderConversation({ focusInput: options.focusInput });
-    if (draft && this.inputEl) this.inputEl.value = draft;
+    if (draft && this.inputEl) {
+      this.inputEl.value = draft;
+      this.inputController?.refresh();
+    }
   }
-  _newChat() {
+  _rememberDraft() {
+    this.drafts ||= new Map();
+    const path = this.bookFile?.path;
+    if (!path || !this.inputEl?.isConnected) return;
+    this.drafts.delete(path);
+    this.drafts.set(path, this.inputEl.value);
+    if (this.drafts.size > 30) this.drafts.delete(this.drafts.keys().next().value);
+  }
+  _newChat({ persist = true } = {}) {
     if (this.busy) return;
     if (this.contextUnavailable) {
       this._renderUnavailable();
       return;
     }
-    if (this.turns.length) void this._persistSession();
+    this._rememberDraft();
+    const draft = this.drafts.get(this.bookFile?.path) || "";
+    if (persist && this.turns.length) void this._persistSession();
+    this.contextMode = "follow";
+    this.pendingContext = null;
+    clearAiSource(this.readerView);
     this.turns = [];
     this.chatRecordId = "";
     this.aiSessionKey = newAiSessionKey();
@@ -5898,24 +6253,37 @@ const AiChatView = class extends ItemView {
     }
     if (this.bookFile || this.pendingContext) this._renderConversation();
     else this._renderWaiting();
+    if (this.inputEl?.isConnected) {
+      this.inputEl.value = draft;
+      this.inputController?.refresh();
+    }
   }
   loadSession(item, options = {}) {
     if (this.busy) return;
     const session = normalizeAiChatHistory([item])[0];
     if (!session) return;
+    if (!options.skipPersist && this.turns.length && this.chatRecordId !== session.id) void this._persistSession();
+    if (!options.skipPersist) this._rememberDraft();
+    const readerView = options.readerView || (this.readerView?.file?.path === session.bookPath ? this.readerView : null);
+    clearAiSource(this.readerView);
     this.text = session.text;
     this.book = session.book;
     this.bookFile = options.bookFile || (session.bookPath ? this.app.vault.getAbstractFileByPath(session.bookPath) : null);
     if (!(this.bookFile instanceof TFile)) this.bookFile = null;
-    this.readerView = options.readerView || null;
+    this.readerView = readerView;
     this.contextUnavailable = false;
+    this.contextMode = options.pendingContext?.kind === "selection" ? "selection" : readerView ? "follow" : "none";
     this.pendingContext = normalizeAiTurnContext(options.pendingContext);
     if (this.pendingContext) this.text = this.pendingContext.text;
     this.turns = session.turns.map((turn) => ({ ...turn }));
     this.chatRecordId = session.id;
     this.aiSessionKey = newAiSessionKey();
     this._renderConversation({ focusInput: options.focusInput });
-    if (options.draft && this.inputEl) this.inputEl.value = options.draft;
+    const draft = options.draft ?? this.drafts.get(session.bookPath) ?? "";
+    if (this.inputEl) {
+      this.inputEl.value = draft;
+      this.inputController?.refresh();
+    }
   }
   async _persistSession() {
     const lastAssistant = this.turns.findLastIndex((turn) => turn.role === "assistant");
@@ -5927,9 +6295,12 @@ const AiChatView = class extends ItemView {
       book: this.book,
       bookPath: this.bookFile?.path || "",
       text: this.text,
+      contextVersion: 1,
       turns: completeTurns.map((turn) => ({
         role: turn.role,
         content: turn.content,
+        ...(turn.interrupted ? { interrupted: true } : {}),
+        ...(turn.savedNotePath ? { savedNotePath: turn.savedNotePath } : {}),
         ...(turn.context ? { context: normalizeAiTurnContext(turn.context) } : {}),
       })),
       updatedAt: Date.now(),
@@ -5937,7 +6308,27 @@ const AiChatView = class extends ItemView {
     this.chatRecordId = record.id;
     const old = normalizeAiChatHistory(this.plugin.settings.aiChatHistory).filter((item) => item.id !== record.id);
     this.plugin.settings.aiChatHistory = [record, ...old].slice(0, 30);
-    await this.plugin.saveAll();
+    try {
+      await this.plugin.saveAll();
+      this._historySaveFailed = false;
+    } catch {
+      if (!this._historySaveFailed) new Notice(__ertr("对话记录保存失败，当前内容仍保留在面板中。请检查仓库空间和同步状态。"));
+      this._historySaveFailed = true;
+    }
+  }
+  async _removeHistory(matches) {
+    if (this.busy || this._historySaving) return;
+    this._historySaving = true;
+    const old = normalizeAiChatHistory(this.plugin.settings.aiChatHistory);
+    const removeCurrent = old.some((item) => item.id === this.chatRecordId && matches(item));
+    this.plugin.settings.aiChatHistory = old.filter((item) => !matches(item));
+    try {
+      await this.plugin.saveAll();
+      if (removeCurrent) this._newChat({ persist: false });
+    } catch {
+      this.plugin.settings.aiChatHistory = old;
+      new Notice(__ertr("对话记录保存失败，当前内容仍保留在面板中。请检查仓库空间和同步状态。"));
+    } finally { this._historySaving = false; }
   }
   _renderStoredTurns() {
     this.turns.forEach((turn, index) => {
@@ -5948,28 +6339,31 @@ const AiChatView = class extends ItemView {
       const group = this.log.createDiv("er-ai-group");
       const bubble = group.createDiv("er-ai-msg er-ai-msg-ai");
       void renderAiMarkdown(this, bubble, turn.content, this.bookFile?.path || "");
-      if (index === this.turns.length - 1) {
-        const question = this.turns[index - 1];
-        this._actions(group, turn.content, {
-          question: question?.role === "user" ? question.content : "",
-          context: question?.role === "user" ? question.context : null,
-        });
-      }
+      if (turn.interrupted) group.createDiv({ cls: "er-ai-interrupted", text: __ertr("回答未完成，已保留生成内容。") });
+      const question = this.turns[index - 1];
+      this._actions(group, turn.content, {
+        question: question?.role === "user" ? question.content : "",
+        context: question?.role === "user" ? question.context : null,
+        turn: question,
+        answerTurn: turn,
+        regenerate: index === this.turns.length - 1,
+      });
     });
   }
   _renderConversation(options = {}) {
     const c = this.contentEl;
     c.empty();
-    if (!this.pendingContext && !this.turns.length && this.readerView) {
+    if (!this.pendingContext && !this.turns.length && this.readerView && this.contextMode !== "none") {
       this.pendingContext = normalizeAiTurnContext(readerDefaultAiContext(this.readerView));
       this.text = this.pendingContext?.text || this.text;
     }
     this._renderHead(c);
-    this.log = c.createDiv("er-ai-log");
+    this.log = createAiChatLog(c, this);
     if (this.turns.length) this._renderStoredTurns();
     else this._buildEmpty();
     const bar = c.createDiv("er-ai-composer");
-    this._renderPendingContext(bar);
+    this.pendingContextHost = bar.createDiv("er-ai-context-slot");
+    this._renderPendingContext(this.pendingContextHost);
     renderAiComposerPrompts(bar, this);
     const slashMenu = bar.createDiv("er-ai-slash-menu");
     slashMenu.hidden = true;
@@ -5983,39 +6377,7 @@ const AiChatView = class extends ItemView {
     this.sendEl = send;
     this.canCancel = true;
     bindAiSlashPrompts(slashMenu, input, this);
-    this._setSending(false);
-    const fire = async () => {
-      const q = input.value.trim();
-      if (!q) return;
-      input.value = "";
-      resize();
-      if (!await this._send(q)) {
-        input.value = q;
-        resize();
-        this._setSending(false);
-      }
-    };
-    const resize = () => {
-      input.setCssProps({ height: "auto" });
-      input.setCssProps({ height: `${Math.min(input.scrollHeight, 128)}px` });
-    };
-    send.addEventListener("click", () => {
-      if (this.busy && this.canCancel && this.abortController) {
-        this.abortController.abort();
-        return;
-      }
-      void fire();
-    });
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        void fire();
-      }
-    });
-    input.addEventListener("input", () => {
-      resize();
-      if (!this.busy) this._setSending(false);
-    });
+    this.inputController = bindAiComposer(input, send, this);
     if (options.focusInput !== false) erAutoFocus(input);
     erBlurOnTapOutside(c, input);
     this._warmSession();
@@ -6035,17 +6397,45 @@ const AiChatView = class extends ItemView {
   }
   _renderPendingContext(host) {
     const context = normalizeAiTurnContext(this.pendingContext);
-    if (!context) return;
+    if (!context) {
+      if (this.contextMode === "none" && this.readerView?.file?.path === this.bookFile?.path) {
+        const row = host.createDiv("er-ai-context-detached");
+        row.createSpan({ text: __ertr("不附加原文") });
+        row.createEl("button", { text: __ertr("重新引用原文"), attr: { type: "button" } }).addEventListener("click", () => {
+          this.contextMode = "follow";
+          this._prepareContext();
+        });
+      }
+      return;
+    }
     const rendered = renderAiContextQuote(host, context, {
       className: "er-ai-context-attached",
       clearable: true,
       onClear: () => {
         this.pendingContext = null;
         this.text = "";
+        this.contextMode = "none";
+        clearAiSource(this.readerView);
+        this._refreshPendingContext();
       },
     });
     this.pendingContextEl = rendered?.card || null;
     this.contextClearEl = rendered?.clear || null;
+  }
+  _refreshPendingContext() {
+    const expanded = this.pendingContextHost?.querySelector("details")?.open;
+    this.pendingContextHost?.empty();
+    if (this.pendingContextHost) this._renderPendingContext(this.pendingContextHost);
+    const details = this.pendingContextHost?.querySelector("details");
+    if (details && expanded) details.open = true;
+  }
+  _prepareContext() {
+    if (this.contextMode !== "follow" || !this.readerView || this.readerView.file?.path !== this.bookFile?.path) return;
+    // A request snapshots its source before busy is set. End any page-turn
+    // transition first, so the source matches the destination screen.
+    if (!this.readerView.pager?.scrollMode) this.readerView.pager?.applyTransform(false);
+    void this.readerView.pager?.flow?.offsetHeight;
+    this.setContext(readerAiPanelContext(this.readerView), { follow: true, silent: true, focusInput: false });
   }
   // Keeping the sidebar open after an answer is saved preserves the reading
   // thread; closing the leaf remains an explicit Obsidian action.
@@ -6058,7 +6448,7 @@ const AiChatView = class extends ItemView {
     this.contentEl.empty();
   }
 };
-for (const method of ["_setSending", "_buildEmpty", "_scroll", "_actions", "_send"]) {
+for (const method of ["_setSending", "_buildEmpty", "_scroll", "_consumePendingContext", "_actions", "_send"]) {
   AiChatView.prototype[method] = AiExplainModal.prototype[method];
 }
 
@@ -6073,6 +6463,8 @@ function syncOpenAiSelectionContext(view) {
   const spreadPage = view.pager
     ? __ertr("第 {0}/{1} 页", (view.pager.spread || 0) + 1, Math.max(1, view.pager.total || 1))
     : "";
+  const selection = selOf(view.areaEl);
+  if (selection?.rangeCount && !leaf.view.busy) paintAiSource(view, selection.getRangeAt(0));
   leaf.view.setContext({
     kind: "selection",
     label: __ertr("选文"),
@@ -6089,7 +6481,7 @@ function syncOpenAiReaderContext(view) {
   const leaf = view.app.workspace.getLeavesOfType(AI_CHAT_VIEW_TYPE)[0];
   if (!(leaf?.view instanceof AiChatView)) return;
   const context = readerAiPanelContext(view);
-  if (context) leaf.view.setContext(context, { focusInput: false, silent: true });
+  if (context) leaf.view.setContext(context, { follow: true, focusInput: false, silent: true });
 }
 function decodeFb2(buf) {
   const bytes = new Uint8Array(buf);
@@ -6204,7 +6596,7 @@ function fb2Node(el, images, out) {
       return;
     }
     const inner = fb2Inline(el);
-    if (inner.trim()) out.push(`<p>${inner}</p>`);
+    if (inner.trim()) out.push(`<p${tag === "v" ? ' class="er-verse"' : ""}>${inner}</p>`);
     return;
   }
   if (tag === "empty-line") return;
@@ -7500,19 +7892,9 @@ const ReadSettingsModal = class extends Modal {
       // восстанавливается ПОСЛЕ. Любая новая раскладка — это другая нарезка на
       // развороты, и попытка пересчитать позицию внутри самой пересборки
       // регулярно выбрасывала книгу в самый конец.
-      let block = null;
-      try { block = v.pager ? v.pager.currentBlockIndex() : null; } catch { /* optional step; a failure here must not interrupt reading */ }
-      if (v.file && v.pager && typeof block === "number" && block >= 0) {
-        await v.plugin.saveProgress(v.file.path, v.pager.spread, v.pager.total, block);
-      }
       if (typeof v.repaginate === "function") await v.repaginate();
       else if (typeof v._repaginate === "function") await v._repaginate();
-      if (v.pager && typeof block === "number" && block >= 0) {
-        const [cur, tot] = v.pager.jumpTo(v.pager.spreadForBlock(block));
-        const ui = v.updateUI || v._updateUI;
-        if (typeof ui === "function") ui.call(v, cur, tot);
-        if (v.file) await v.plugin.saveProgress(v.file.path, cur, tot, block);
-      }
+      if (v.file && v.pager) await v.plugin.saveProgress(v.file.path, v.pager.spread, v.pager.total, v._readingAnchor?.block ?? v.pager.currentBlockIndex());
     }
     this._paintPreview();
   }
@@ -7534,15 +7916,18 @@ const ReadSettingsModal = class extends Modal {
   _seg(host, label, items, current, onPick, hint, компактный) {
     host.createDiv("er-pan-sec").setText(label);
     const row = host.createDiv("er-col-row er-rs-seg" + (компактный ? " er-rs-num" : ""));
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", label);
     const btns = [];
     for (const [value, text, шрифт] of items) {
-      const b = row.createDiv("er-col-btn");
+      const b = row.createEl("button", { cls: "er-col-btn", attr: { type: "button", "aria-pressed": String(value === current()) } });
       b.setText(text);
       if (шрифт) b.style.fontFamily = шрифт;
       if (value === current()) b.addClass("active");
       b.addEventListener("click", async () => {
-        for (const x of btns) x.removeClass("active");
+        for (const x of btns) { x.removeClass("active"); x.setAttribute("aria-pressed", "false"); }
         b.addClass("active");
+        b.setAttribute("aria-pressed", "true");
         await onPick(value);
       });
       btns.push(b);
@@ -7707,6 +8092,18 @@ const ReadSettingsModal = class extends Modal {
     );
     const grid = c.createDiv("er-rs-grid");
     const colA = grid.createDiv("er-rs-col er-rs-card");
+    if (!readerIsPdf(v)) {
+      const recommended = colA.createEl("button", { text: __ertr("应用推荐排版"), attr: { type: "button" } });
+      recommended.addEventListener("click", async () => {
+        s.lineHeight = 1.75;
+        s.maxLineCh = 0;
+        s.textAlign = "left";
+        s.vAlign = "top";
+        await this._apply(true);
+        this._draw();
+      });
+      colA.createDiv({ cls: "er-pan-hint", text: __ertr("保留字体与字号，调整行距、行长和对齐方式。") });
+    }
     const colB = grid.createDiv("er-rs-col er-rs-card");
     if (readerIsPdf(v)) {
       colA.createDiv("er-rs-h").setText(__ertr("Масштаб PDF"));
@@ -7789,11 +8186,7 @@ const ReadSettingsModal = class extends Modal {
           }
         } catch { /* optional step; a failure here must not interrupt reading */ }
         s.readMode = m;
-        await this._apply(false);
-        const file = reader.file;
-        if (!file) return;
-        if (typeof reader.openFile === "function") await reader.openFile(file);
-        else if (typeof reader._loadBook === "function") await reader._loadBook();
+        await this._apply(true);
       }
     );
     // Две страницы рядом физически не помещаются на телефоне: раскладка сама
@@ -7821,7 +8214,7 @@ const ReadSettingsModal = class extends Modal {
         s.maxLineCh = n;
         await this._apply(true);
       },
-      __ertr("Сколько знаков помещается в строку. Короткая строка читается легче."),
+      __ertr("按拉丁字符估算，中文约为一半。自动模式限制宽屏行长。"),
       true
     );
 
@@ -7885,12 +8278,21 @@ const NoteTitleModal = class extends Modal {
       const w = c.createDiv("er-setup-field");
       w.createDiv("er-setup-label").setText(label);
       const el = w.createEl("input", { type: "text" });
+      el.setAttribute("aria-label", label);
       el.addClass("er-setup-input");
       if (hint) el.placeholder = hint;
       return el;
     };
     const input = field(__ertr("Название"));
-    input.value = suggestNoteTitle(this.fragment);
+    input.value = aiAnswer ? this.fragment : suggestNoteTitle(this.fragment);
+    if (aiAnswer) c.createDiv("er-setup-hint").setText(__ertr("标题已根据回复内容在本地生成，可直接修改，不会额外调用模型。"));
+    const error = c.createDiv("er-title-error");
+    error.setAttribute("role", "alert");
+    error.hidden = true;
+    input.addEventListener("input", () => {
+      input.removeAttribute("aria-invalid");
+      error.hidden = true;
+    });
     const full = sanitizeNoteTitle(this.fragment);
     if (!aiAnswer && full && full !== input.value) {
       const useFull = c.createDiv("er-title-alt");
@@ -7929,6 +8331,7 @@ const NoteTitleModal = class extends Modal {
       toBook.addClass("er-setup-btn", "er-setup-btn-quiet");
       toBook.setAttribute("aria-label", __ertr("Дописать цитату в «{0}» вместо отдельной заметки", bookNote));
       toBook.addEventListener("click", () => {
+        if (this._answered) return;
         this._answered = true;
         this.close();
         this.onDone({ toBookNote: true });
@@ -7936,28 +8339,34 @@ const NoteTitleModal = class extends Modal {
     }
     const cancel = foot.createEl("button", { text: __ertr("Отмена") });
     cancel.addClass("er-setup-btn", "er-setup-btn-quiet");
-    const submit = async () => {
+    const submit = () => {
+      if (this._answered) return;
       const v = input.value.trim();
-      if (!v) {
+      if (!v.replace(/[\\/:*?"<>|#^[\].\s]/g, "")) {
+        input.setAttribute("aria-invalid", "true");
+        error.setText(__ertr("请输入有效的笔记标题。"));
+        error.hidden = false;
         input.focus();
         return;
       }
       this._answered = true;
+      ok.disabled = true;
+      cancel.disabled = true;
+      ok.setText(__ertr("正在保存…"));
       const folder = erPath(folderInput.value.trim());
       const tags = parseNoteTags(tagsInput.value);
       this.plugin.settings.lastNoteFolder = folder;
       this.plugin.settings.lastNoteTags = tagsInput.value.trim();
-      try {
-        await this.plugin._saveLocalData();
-      } catch { /* optional step; a failure here must not interrupt reading */ }
       this.close();
       this.onDone({ title: v, folder, tags });
+      // Folder/tag preferences must not leave a submit pending after Escape.
+      void this.plugin._saveLocalData().catch(() => { /* optional preferences */ });
     };
     ok.addEventListener("click", submit);
     cancel.addEventListener("click", () => this.close());
     for (const el of [input, folderInput, tagsInput]) {
       el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
           e.preventDefault();
           submit();
         }
@@ -8180,7 +8589,8 @@ async function createNoteFromAiAnswer(app, plugin, answer, question, context, bo
     return null;
   }
   const normalizedContext = normalizeAiTurnContext(context);
-  return createNoteFromSelection(app, plugin, question || cleanAnswer, bookFile, {
+  const title = suggestAiNoteTitle(cleanAnswer, { fallback: __ertr("AI 回复") });
+  return createNoteFromSelection(app, plugin, title, bookFile, {
     ...opts,
     noteKind: "ai-answer",
     noteBody: cleanAnswer,
@@ -9503,11 +9913,11 @@ const ReaderView = class extends ItemView {
     this.buildDOM();
     this._resizeObs = new ResizeObserver(() => {
       let _a;
-      if (!this.bookHtml) return;
+      if (!this.bookHtml || this._openingBook || this._closed) return;
       if (this.containerEl.offsetParent === null) return;
       const w = this.areaEl.clientWidth;
       if (!w) return;
-      if (Math.abs(w - (this._laidOutWidth || 0)) < 8) return;
+      if (Math.abs(w - (this._laidOutWidth || 0)) < 8 && Math.abs(this.areaEl.clientHeight - (this.pager.builtHeight || 0)) < 8) return;
       this._setRelayout(true);
       window.clearTimeout(this._resizeTimer);
       const delay = ((_a = this.app) == null ? void 0 : _a.isMobile) ? 500 : 260;
@@ -9517,7 +9927,7 @@ const ReaderView = class extends ItemView {
           this._setRelayout(false);
           return;
         }
-        if (Math.abs(fw - (this._laidOutWidth || 0)) < 8) {
+        if (Math.abs(fw - (this._laidOutWidth || 0)) < 8 && Math.abs(this.areaEl.clientHeight - (this.pager.builtHeight || 0)) < 8) {
           this._setRelayout(false);
           return;
         }
@@ -9534,11 +9944,25 @@ const ReaderView = class extends ItemView {
         recheck();
         syncOpenAiReaderContext(this);
       }
-      else this._hideHlPopup();
+      else {
+        this._hideHlPopup();
+        setReadingFocus(this, false);
+        if (leaf?.view?.getViewType?.() !== AI_CHAT_VIEW_TYPE) clearAiSource(this);
+      }
     }));
   }
   async openFile(file) {
     const loadToken = this._loadCoordinator.begin();
+    this._openingBook = loadToken;
+    this._layoutAgain = false;
+    if (this._layoutPromise) await this._layoutPromise.catch(() => {});
+    if (!this._loadCoordinator.isCurrent(loadToken)) return;
+    clearAiSource(this);
+    hideFootnoteReturn(this);
+    this._readingAnchor = null;
+    this._layoutAgain = false;
+    this.pdfZoomMode = "page";
+    setPdfPanMode(this, false);
     let _a2, _b;
     this.file = file;
     this.ext = file.extension === "epub" ? "epub" : file.extension === "fb2" ? "fb2" : "pdf";
@@ -9605,6 +10029,11 @@ const ReaderView = class extends ItemView {
       renderReaderLoadError(this, e, () => this.openFile(file));
     } finally {
       this._loadCoordinator.finish(loadToken);
+      if (this._openingBook === loadToken) {
+        this._openingBook = null;
+        settleReader(this);
+        if (this._layoutWidthStale()) void this.repaginate();
+      }
     }
   }
   // On a book's first open, offer to pick its index note (from the configured
@@ -9666,6 +10095,8 @@ const ReaderView = class extends ItemView {
     const targetSpread = hasBlock ? pager.spreadForBlock(savedBlock) : Math.round(savedPct * Math.max(0, total - 1));
     this._renderFlowHighlights();
     const [cur, tot] = pager.jumpTo(targetSpread);
+    if (hasBlock && pager.scrollMode) restoreReadingAnchor(pager, { block: savedBlock, offset: 0, pct: savedPct });
+    this._readingAnchor = captureReadingAnchor(pager);
     this.updateUI(cur, tot);
     erRevealWhenSettled(this);
     if (hasBlock) this._flashBlock(savedBlock);
@@ -9737,7 +10168,8 @@ const ReaderView = class extends ItemView {
   // Used by the TOC panel.
   _jumpToBlock(block, flash = true) {
     if (!this.bookHtml || typeof block !== "number") return;
-    const [cur, tot] = this.pager.jumpTo(this.pager.spreadForBlock(block));
+    rememberReaderJump(this);
+    const [cur, tot] = restoreReadingAnchor(this.pager, { block, offset: 0, pct: this.pager.currentPct });
     this.updateUI(cur, tot);
     if (this.file) this.plugin.saveProgress(this.file.path, cur, tot, this.pager.currentBlockIndex());
     if (flash) this._flashBlock(block);
@@ -9757,33 +10189,38 @@ const ReaderView = class extends ItemView {
     root.toggleClass("er-relayouting", !!on);
   }
   async repaginate() {
-    if (!this.bookHtml) return;
+    if (!this.bookHtml || this._openingBook || this._closed) return;
     if (!this.areaEl.clientWidth || this.containerEl.offsetParent === null) return;
-    const savedBlock = this.pager.currentBlockIndex();
-    const savedPct = this.pager.currentPct;
+    return queueReadingLayout(this, (anchor) => this._repaginateAnchored(anchor));
+  }
+  async _repaginateAnchored(anchor) {
     this._setRelayout(true);
     erShowVeil(this);
     try {
       await new Promise((r) => window.requestAnimationFrame(r));
       this.areaEl.empty();
-      const [, total] = await this.pager.build(
+      const pager = this.pager;
+      await pager.build(
         this.areaEl,
         this.bookHtml,
         this.plugin.settings,
         0
       );
+      if (pager !== this.pager || !this.bookHtml || this._closed) return;
       this._laidOutWidth = this.pager.builtWidth || this.areaEl.clientWidth;
       const w = this.areaEl.clientWidth;
       this._staleGaveUpAt = w && Math.abs(w - (this.pager.builtWidth || 0)) >= 8 ? this.pager.builtWidth : null;
-      const targetSpread = typeof savedBlock === "number" && savedBlock >= 0 ? this.pager.spreadForBlock(savedBlock) : Math.round(savedPct * Math.max(0, total - 1));
       this._renderFlowHighlights();
-      const [cur, tot] = this.pager.jumpTo(targetSpread);
+      const [cur, tot] = restoreReadingAnchor(this.pager, anchor);
+      restoreAiSource(this);
+      if (this.pdfZoomMode === "width") fitPdfWidth(this);
+      this._readingAnchor = anchor;
       this.updateUI(cur, tot);
       if (this._tocRender) this._tocRender();
       this._findCorpus = null;
       if (this._foundQuery) this._markFound(this._foundQuery);
     } finally {
-      window.requestAnimationFrame(() => this._setRelayout(false));
+      window.requestAnimationFrame(() => { this._setRelayout(false); settleReader(this); });
     }
   }
   // ── DOM ──────────────────────────────────────────────
@@ -9834,6 +10271,9 @@ const ReaderView = class extends ItemView {
         void this.plugin.openAiChat(context);
       });
     }
+    this.focusBtn = tr.createEl("button", { cls: "er-ibtn er-focus-toggle", attr: { type: "button", "aria-label": __ertr("专注阅读"), "aria-pressed": "false" } });
+    setIcon(this.focusBtn, "maximize");
+    this.focusBtn.addEventListener("click", () => setReadingFocus(this, !this._focusRestore));
     const findBtn = tr.createEl("button", { cls: "er-ibtn", attr: { type: "button" } });
     svgIcon(findBtn, "search");
     findBtn.setAttribute("aria-label", __ertr("Поиск по книге"));
@@ -9868,12 +10308,7 @@ const ReaderView = class extends ItemView {
     this.locEl = center.createEl("button", { cls: "er-loc er-loc-clickable" });
     this.locEl.setAttribute("aria-label", __ertr("Перейти к странице"));
     this.locEl.addEventListener("click", () => {
-      if (!this.file || !this.pager || !this.pager.total) return;
-      new GoToPageModal(this.app, this.pager.total, this.pager.spread, (n) => {
-        const [cur, tot] = this.pager.jumpTo(n - 1);
-        this.updateUI(cur, tot);
-        this.plugin.saveProgress(this.file.path, cur, tot, this.pager.currentBlockIndex());
-      }).open();
+      openReaderPagePicker(this);
     });
     this.pctEl = center.createDiv("er-pct");
     this.pctEl.setText("0%");
@@ -9892,6 +10327,7 @@ const ReaderView = class extends ItemView {
     this.buildFindPanel();
     this.hlPopup = root.createDiv("er-hl-popup");
     this.buildHlPopup();
+    setupReaderSelection(this);
     this.registerDomEvent(docOf(this.containerEl), "selectionchange", () => this._scheduleSelCheck());
     this.areaEl.addEventListener("mouseup", () => this._scheduleSelCheck());
     this.areaEl.addEventListener("click", (e) => {
@@ -10081,12 +10517,13 @@ const ReaderView = class extends ItemView {
   // `builtWidth` is what the paginator actually measured, so this compares like
   // with like — the width the caller *intended* can differ from it.
   _layoutWidthStale() {
+    if (this._openingBook) return false;
     if (!this.bookHtml || !this.pager || !this.pager.builtWidth) return false;
     if (this.containerEl.offsetParent === null) return false;
     if (this._staleGaveUpAt === this.pager.builtWidth) return false;
     const now = this.areaEl.clientWidth;
     if (!now) return false;
-    return Math.abs(now - this.pager.builtWidth) >= 8;
+    return Math.abs(now - this.pager.builtWidth) >= 8 || Math.abs(this.areaEl.clientHeight - (this.pager.builtHeight || 0)) >= 8;
   }
   exportHighlights(evt) {
     if (!this.file) {
@@ -10097,6 +10534,7 @@ const ReaderView = class extends ItemView {
     exportHighlightsMenu(this.app, this.plugin, this.file, list, evt);
   }
   updateUI(cur, total) {
+    settleReader(this);
     // В прокрутке листать нечего: стрелки и клик по краю там ничего не делают
     // и только занимают место. Класс снимает их из вида одним правилом.
     if (this.contentEl) this.contentEl.toggleClass("er-scrolling", !!(this.pager && this.pager.scrollMode));
@@ -10105,6 +10543,7 @@ const ReaderView = class extends ItemView {
     const bookPage = currentBookPage(this);
     const where = this.ext === "pdf" ? __ertr("Разворот {0} из {1}", cur + 1, total) : `${cur + 1} / ${total}`;
     this.locEl.setText(bookPage ? __ertr("стр. {0}", bookPage) + " \xB7 " + where : where);
+    if (readerIsPdf(this)) this.locEl.setText(__ertr("第 {0}/{1} 页", bookPage || 1, readerPdfPages(this).length || total));
     this.pctEl.setText(`${pct}%`);
     syncReaderAiCapability(this);
     syncPdfZoomControls(this);
@@ -10325,12 +10764,11 @@ const ReaderView = class extends ItemView {
     }
     const cur = this.pager.spread, tot = this.pager.total;
     this.plugin.saveProgress(this.file.path, cur, tot, this.pager.currentBlockIndex());
-    const pct = this.pager.currentPct;
     this._hideHlPopup();
     this.closePanel();
     await this.plugin.refreshHighlights();
     this._lastWidth = this.areaEl.clientWidth;
-    await this.paginate(pct);
+    await this.repaginate();
     new Notice(__ertr("Обновлено"));
   }
   // ── Highlights: render / select / navigate ────────────
@@ -10351,6 +10789,7 @@ const ReaderView = class extends ItemView {
     this._selTimer = window.setTimeout(() => this._onSelectionCheck(), 60);
   }
   _onSelectionCheck() {
+    if (this._selectionDragging || this._pdfPanning || this.pdfPanMode) return;
     if (this._editHlId || this._commentEditing) return;
     const sel = selOf(this.areaEl);
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
@@ -10475,6 +10914,7 @@ const ReaderView = class extends ItemView {
     this._pendingSel = null;
     this._editHlId = id;
     this._showHlPopup(span.getBoundingClientRect());
+    openInlineHighlightComment(this);
   }
   _unwrapHighlight(id) {
     const flow = this.pager.flow;
@@ -10501,6 +10941,7 @@ const ReaderView = class extends ItemView {
     if (this.hlPopup) this.hlPopup.classList.remove("er-hl-popup-on");
   }
   goToHighlight(id) {
+    rememberReaderJump(this);
     const flow = this.pager.flow;
     const span = flow == null ? void 0 : flow.querySelector(`[data-hl-id="${id}"]`);
     // Нарисованного выделения может не быть: в PDF страницы подставляются по
@@ -10596,6 +11037,11 @@ const ReaderView = class extends ItemView {
   }
   async onClose() {
     this._loadCoordinator.cancel();
+    this._closed = true;
+    this._selectionCleanup?.();
+    window.clearTimeout(this._contextSettleTimer);
+    clearAiSource(this);
+    setReadingFocus(this, false);
     await persistCurrentReaderPosition(this);
     erHideVeil(this);
     let _a;
@@ -11496,7 +11942,7 @@ const ReaderModal = class extends Modal {
         // the columns are measured against.
         // (the status bar strip is pure CSS now — nothing to re-measure)
         const w = this.areaEl ? this.areaEl.clientWidth : 0;
-        if (w && Math.abs(w - (this._lastW || 0)) > 4) { this._lastW = w; this._repaginate(); }
+        if (w && (Math.abs(w - (this._lastW || 0)) > 4 || Math.abs(this.areaEl.clientHeight - (this.pager.builtHeight || 0)) > 4)) { this._lastW = w; this._repaginate(); }
       }, 180);
     });
     this._resizeObs.observe(this.areaEl);
@@ -11577,12 +12023,7 @@ const ReaderModal = class extends Modal {
     this.locEl = center.createEl("button", { cls: "er-loc er-loc-clickable", attr: { type: "button" } });
     this.locEl.setAttribute("aria-label", __ertr("Перейти к странице"));
     this.locEl.addEventListener("click", () => {
-      if (!this.file || !this.pager || !this.pager.total) return;
-      new GoToPageModal(this.app, this.pager.total, this.pager.spread, (n) => {
-        const [cur, tot] = this.pager.jumpTo(n - 1);
-        this._updateUI(cur, tot);
-        this.plugin.saveProgress(this.file.path, cur, tot, this.pager.currentBlockIndex());
-      }).open();
+      openReaderPagePicker(this);
     });
     this.pctEl = center.createDiv("er-pct");
     this.pctEl.setText("0%");
@@ -11602,6 +12043,7 @@ const ReaderModal = class extends Modal {
     this.hlPopup = root.createDiv("er-hl-popup");
     this._buildHlPopup();
     this._selHandler = () => this._scheduleSelCheck();
+    setupReaderSelection(this);
     this._selDoc = docOf(this.areaEl);
     this._selDoc.addEventListener("selectionchange", this._selHandler);
     this.areaEl.addEventListener("click", (e) => {
@@ -11658,22 +12100,23 @@ const ReaderModal = class extends Modal {
     await this._repaginate();
   }
   async _repaginate() {
-    if (!this.bookHtml || !this.areaEl || !this.areaEl.clientWidth) return;
+    if (!this.bookHtml || this._openingBook || this._closed || !this.areaEl || !this.areaEl.clientWidth) return;
+    return queueReadingLayout(this, (anchor) => this._repaginateAnchored(anchor));
+  }
+  async _repaginateAnchored(anchor) {
     // Anchor on the paragraph, not the percentage — see the desktop repaginate().
     // Here it matters on font-size changes and screen rotation.
-    const savedBlock = this.pager.currentBlockIndex();
-    const savedPct = this.pager.currentPct;
     // Re-flowing necessarily lays the book out from spread 0 before it can jump
     // back to where the reader was. Unhidden, that is a page they can see change
     // twice — the same flicker the opening sequence hides for the same reason.
     this.areaEl.addClass("er-booting");
     erShowVeil(this);
-    const [, total] = await this.pager.build(this.areaEl, this.bookHtml, this.plugin.settings, 0);
-    const target = (typeof savedBlock === "number" && savedBlock >= 0)
-      ? this.pager.spreadForBlock(savedBlock)
-      : Math.round(savedPct * Math.max(0, total - 1));
+    await this.pager.build(this.areaEl, this.bookHtml, this.plugin.settings, 0);
     this._renderFlowHighlights();
-    const [cur, tot] = this.pager.jumpTo(target);
+    const [cur, tot] = restoreReadingAnchor(this.pager, anchor);
+    restoreAiSource(this);
+    if (this.pdfZoomMode === "width") fitPdfWidth(this);
+    this._readingAnchor = anchor;
     erRevealWhenSettled(this);
     this._updateUI(cur, tot);
     // Everything below is tied to the block elements that were just replaced:
@@ -11685,6 +12128,10 @@ const ReaderModal = class extends Modal {
   }
   async _loadBook() {
     const loadToken = this._loadCoordinator.begin();
+    this._openingBook = loadToken;
+    this._layoutAgain = false;
+    if (this._layoutPromise) await this._layoutPromise.catch(() => {});
+    if (!this._loadCoordinator.isCurrent(loadToken)) return;
     erHideVeil(this);
     this.areaEl.removeClass("er-booting");
     this.areaEl.empty();
@@ -11740,6 +12187,8 @@ const ReaderModal = class extends Modal {
         : Math.round(pct * Math.max(0, this.pager.total - 1));
       this._renderFlowHighlights();
       const [cur, tot] = this.pager.jumpTo(target);
+      if (hasBlock && this.pager.scrollMode) restoreReadingAnchor(this.pager, { block: saved.block, offset: 0, pct });
+      this._readingAnchor = captureReadingAnchor(this.pager);
       this._updateUI(cur, tot);
       // Not one frame — the dialog can still be settling on a phone, and a
       // re-flow landing after the reveal is a page the reader watches change.
@@ -11759,6 +12208,7 @@ const ReaderModal = class extends Modal {
       renderReaderLoadError(this, e, () => this._loadBook());
     } finally {
       this._loadCoordinator.finish(loadToken);
+      if (this._openingBook === loadToken) { this._openingBook = null; settleReader(this); }
     }
   }
   // First open of a book \u2192 the setup screen (create / pick / skip). Same rules as
@@ -11782,7 +12232,8 @@ const ReaderModal = class extends Modal {
   // Jump to the page holding a global block index, flash it, save the position.
   _jumpToBlock(block, flash = true) {
     if (!this.bookHtml) return;
-    const [cur, tot] = this.pager.jumpTo(this.pager.spreadForBlock(block));
+    rememberReaderJump(this);
+    const [cur, tot] = restoreReadingAnchor(this.pager, { block, offset: 0, pct: this.pager.currentPct });
     this._updateUI(cur, tot);
     if (this.file) this.plugin.saveProgress(this.file.path, cur, tot, this.pager.currentBlockIndex());
     if (flash) this._flashBlock(block);
@@ -11857,6 +12308,7 @@ const ReaderModal = class extends Modal {
     exportHighlightsMenu(this.app, this.plugin, this.file, list, evt);
   }
   _updateUI(cur, total) {
+    settleReader(this);
     if (this.contentEl) this.contentEl.toggleClass("er-scrolling", !!(this.pager && this.pager.scrollMode));
     cur = cur != null ? cur : this.pager.spread;
     total = total != null ? total : this.pager.total;
@@ -11864,6 +12316,7 @@ const ReaderModal = class extends Modal {
     this.pbarFill.style.width = `${pct}%`;
     const bookPage = currentBookPage(this);
     this.locEl.setText(bookPage ? __ertr("стр. {0}", bookPage) + " · " + `${cur + 1} / ${total}` : `${cur + 1} / ${total}`);
+    if (readerIsPdf(this)) this.locEl.setText(__ertr("第 {0}/{1} 页", bookPage || 1, readerPdfPages(this).length || total));
     this.pctEl.setText(`${pct}%`);
     syncReaderAiCapability(this);
     syncPdfZoomControls(this);
@@ -12048,7 +12501,7 @@ const ReaderModal = class extends Modal {
     this._selTimer = window.setTimeout(() => this._onSelectionCheck(), 80);
   }
   _onSelectionCheck() {
-    if (this._editHlId || this._commentEditing) return;
+    if (this._selectionDragging || this._pdfPanning || this.pdfPanMode || this._editHlId || this._commentEditing) return;
     const sel = selOf(this.areaEl);
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) { this._hideHlPopup(); return; }
     const range = sel.getRangeAt(0);
@@ -12156,6 +12609,7 @@ const ReaderModal = class extends Modal {
     this._pendingSel = null;
     this._editHlId = id;
     this._showHlPopup(span.getBoundingClientRect());
+    openInlineHighlightComment(this);
   }
   _unwrapHighlight(id) {
     const flow = this.pager.flow;
@@ -12183,6 +12637,7 @@ const ReaderModal = class extends Modal {
   }
   goToHighlight(id) {
     const hl = this.file ? this.plugin.getHighlights(this.file.path).find((h) => h.id === id) : null;
+    rememberReaderJump(this);
     if (!hl) return;
     const blocks = this.pager.flow?.querySelectorAll(READER_BLOCK_SELECTOR) || [];
     const anchor = resolveHighlightAnchor(blocks, hl, this.file?.extension === "pdf");
@@ -12257,6 +12712,9 @@ const ReaderModal = class extends Modal {
   }
   async onClose() {
     this._closed = true;
+    this._selectionCleanup?.();
+    window.clearTimeout(this._contextSettleTimer);
+    clearAiSource(this);
     this._loadCoordinator.cancel();
     await persistCurrentReaderPosition(this);
     stopReadingTimer(this);

@@ -67,7 +67,7 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-ibtn:hover { opacity:1; background:var(--background-modifier-hover); border-color:color-mix(in srgb,var(--text-muted) 35%,var(--background-modifier-border)); }
 .er-ibtn:active { transform:scale(.87); }
 .er-ibtn svg { width:18px; height:18px; }
-.er-pdf-zoom-control { height:36px; display:none; grid-template-columns:30px 52px 30px; align-items:stretch;
+.er-pdf-zoom-control { height:36px; display:none; grid-template-columns:30px 52px 30px 30px; align-items:stretch;
   flex:none; overflow:hidden; border:1px solid var(--background-modifier-border); border-radius:10px;
   background:color-mix(in srgb,var(--text-normal) 4%,transparent); color:var(--text-muted); }
 .er-pdf-document .er-pdf-zoom-control { display:grid; }
@@ -1870,11 +1870,36 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-ai-context-clear { position:absolute; top:6px; right:6px; z-index:1; }
 .er-ai-context-clear:hover { background:var(--background-modifier-hover); color:var(--text-normal); }
 .er-ai-context-clear svg { width:14px; height:14px; }
+.er-ai-log-wrap {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+}
+.er-ai-modal .er-ai-jump-latest {
+  position:absolute;
+  bottom:8px;
+  align-self:center;
+  min-height:32px;
+  padding:6px 12px;
+  z-index:2;
+  border:1px solid var(--background-modifier-border);
+  border-radius:12px;
+  background:var(--background-primary);
+  color:var(--text-normal);
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
+  font-size:var(--font-ui-small);
+}
+.er-ai-jump-latest[hidden] { display:none; }
+.er-ai-jump-latest:focus-visible { outline:2px solid var(--interactive-accent); outline-offset:2px; }
+.er-ai-interrupted { color:var(--text-muted); font-size:var(--font-ui-small); line-height:1.6; padding:4px 0; }
 .er-ai-log {
   flex: 1 1 auto;
   min-height: 180px;
   max-height: 52vh;
   overflow-y: auto;
+  overscroll-behavior:contain;
   display: flex;
   flex-direction: column;
   gap: var(--size-4-2);
@@ -2170,11 +2195,35 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
   color: var(--text-faint);
 }
 .er-ai-msg-ai {
+  font-size: clamp(15px, var(--font-text-size, 16px), 18px);
   max-width: 100%;
   padding-inline: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+.er-ai-context-slot { min-width: 0; }
+.er-rs button.er-col-btn { height: auto; margin: 0; box-shadow: none; font: inherit; }
+.er-rs button.er-col-btn:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.er-ai-context-detached { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 12px; padding: 4px; }
+.er-ai-context-detached button { background: transparent; box-shadow: none; font-size: inherit; padding: 2px 4px; height: auto; }
+.er-ai-context-attached:not([open]) .er-ai-context-preview { -webkit-line-clamp: 1; }
+.er-ai-sidebar .er-ai-composer, .er-ai-sidebar .er-ai-log { min-width: 0; }
+.er-pct { max-width: min(55vw, 36em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.er-hl-popup { box-sizing: border-box; }
+.er-hl-popup .er-hl-actions { flex-wrap: wrap; }
+.er-flow::highlight(er-ai-source) { background: color-mix(in srgb, var(--er-accent) 20%, transparent); text-decoration: underline; }
+.er-pdf-document.er-pdf-pan .er-pdf-page-break, .er-pdf-document.er-pdf-pan .er-pdf-text-layer { cursor: grab; user-select: none; -webkit-user-select: none; }
+.er-pdf-document .er-clip, .er-pdf-page-break { overflow-anchor: none; }
+.er-pdf-document.er-pdf-pan .er-pdf-page-break:active, .er-pdf-document.er-pdf-pan .er-pdf-text-layer:active { cursor: grabbing; }
+.er-pdf-zoom-step[aria-pressed="true"], .er-focus-toggle[aria-pressed="true"] { color: var(--er-accent); background: var(--background-modifier-hover); }
+/* Only the exit control remains available while the rest of the HUD retracts. */
+.er-reading-focus .er-top:has(.er-focus-toggle:focus-visible) { opacity: 1; transform: none; pointer-events: auto; }
+.er-focus-exit { display: none; }
+.er-reading-focus.er-immersive .er-focus-exit { display: flex; position: absolute; top: 8px; right: 8px; z-index: 8; background: var(--er-ui); border: 1px solid var(--er-border); }
+.er-has-return .er-bot-center { visibility: hidden; }
+@media (max-width: 600px) {
+  .er-note-back { max-width: calc(100% - 120px); padding: 6px 10px; font-size: 12px; }
 }
 .er-ai-msg-streaming::after {
   content:"";
@@ -2292,12 +2341,13 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-ai-msg-ai img, .er-ai-msg-ai svg { max-width:100%; height:auto; }
 .er-ai-msg-ai .footnotes { margin-top:1em; color:var(--text-muted); font-size:.9em; }
 /* Copy / keep, under the answer they belong to. */
-.er-ai-acts { display: flex; gap: var(--size-4-1); padding-left: var(--size-2-2); }
+.er-ai-acts { display:flex; flex-wrap:wrap; gap:var(--size-4-1); padding-left:var(--size-2-2); }
 .er-ai-modal .er-ai-act {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 6px;
+  min-height:32px;
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   background: none;
@@ -2309,12 +2359,12 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 }
 .er-ai-modal .er-ai-act svg { width: 13px; height: 13px; }
 .er-ai-modal .er-ai-act:active { transform: scale(0.97); }
-/* On a mouse the buttons stay out of the way until the answer is hovered; on a
-   touchscreen there is no hover, so they are simply always there. */
+/* Copy/save stay discoverable without hover, including older answers. */
 @media (hover: hover) and (pointer: fine) {
-  .er-ai-acts { opacity: 0; transition: opacity 150ms ease; }
-  .er-ai-group:hover .er-ai-acts, .er-ai-acts:focus-within { opacity: 1; }
   .er-ai-modal .er-ai-act:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+}
+@media (pointer: coarse) {
+  .er-ai-modal .er-ai-act, .er-ai-modal .er-ai-jump-latest { min-height:44px; }
 }
 /* Waiting for the answer: dots that bounce, one after another. */
 .er-ai-typing { display: flex; align-items: center; gap: var(--size-4-2); }
@@ -2464,7 +2514,7 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-note-back {
   position: absolute;
   left: 50%;
-  bottom: calc(68px + var(--safe-area-inset-bottom, 0px));
+  bottom: calc(8px + var(--safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -2501,7 +2551,9 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
   overflow-y: auto;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  /* Only deliberate page turns request smooth motion. Anchor restoration and
+     source snapshots must be synchronous, including programmatic scrollTop. */
+  scroll-behavior: auto;
 }
 .er-clip.er-clip-scroll .er-flow {
   /* Nothing is translated in this mode; the browser owns the motion. */
@@ -2716,4 +2768,13 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
   }
   .er-lib-fitbtn svg { width: 13px; height: 13px; }
   .er-lib-fitbtn:active { opacity: 1; }
+}
+.er-title-error {
+  color: var(--text-error);
+  font-size: var(--font-ui-small);
+  margin-block: 4px 12px;
+}
+
+.er-title-modal input[aria-invalid="true"] {
+  border-color: var(--text-error);
 }
