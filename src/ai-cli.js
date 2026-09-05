@@ -3,6 +3,7 @@
 // This module deliberately has no static Node imports: Obsidian also loads the
 // plugin on mobile, where Node built-ins do not exist. Node modules are resolved
 // only after the caller has established that it is running on desktop.
+import { ACP_AUTO_INSTALL_ENABLED, installAcpWithTools } from "./ai-acp-installer.js";
 
 export const CLI_AI_PROVIDER_IDS = Object.freeze([
   "codex-cli", "claude-cli", "grok-cli", "kimi-cli", "zcode-cli",
@@ -89,7 +90,6 @@ const MAX_OUTPUT_BYTES = 1_500_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const CLI_PATH_CACHE = new Map();
 const CLI_ACP_MANAGERS = new Map();
-const CLI_ACP_INSTALLS = new Map();
 
 export function isCliAiProvider(id) {
   return CLI_AI_PROVIDER_IDS.includes(id);
@@ -114,7 +114,7 @@ export function cliAcpSupport(id) {
     installNote: meta.acpInstallNote || "",
     installUrl: meta.acpInstallUrl,
     community: meta.acpCommunity === true,
-    autoInstall: meta.acpAutoInstall === true,
+    autoInstall: ACP_AUTO_INSTALL_ENABLED && meta.acpAutoInstall === true,
     installVersion: meta.acpInstallVersion || "",
   };
   return {
@@ -564,67 +564,11 @@ async function resolveLocalTool(binary, options = {}) {
   return "";
 }
 
-function classifyAcpInstallFailure(error) {
-  const detail = `${error?.erStderr || ""}\n${error?.erStdout || ""}`;
-  if (/EACCES|EPERM|permission denied|operation not permitted/i.test(detail)) return "installpermission";
-  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|network|socket|ECONN/i.test(detail)) return "installnetwork";
-  return error?.erReason === "timeout" ? "timeout" : "installfailed";
-}
-
 export async function installCliAcp(id, options = {}) {
-  const meta = cliMeta(id);
-  if (!meta?.acpAutoInstall || !meta.acpInstallPackage) {
-    throw cliError("notconfigured", "Automatic ACP installation is unavailable");
-  }
-  if (CLI_ACP_INSTALLS.has(id)) return CLI_ACP_INSTALLS.get(id);
-  const task = (async () => {
-    const { fs, os, path } = runtime();
-    const installRoot = String(options.installRoot || "").trim();
-    if (!installRoot || !path.isAbsolute(installRoot)) {
-      throw cliError("installlocation", "A private ACP install directory is required");
-    }
-    fs.mkdirSync(installRoot, { recursive: true, mode: 0o700 });
-    const nodePath = await resolveLocalTool("node", { ...options, configuredPath: options.nodePath });
-    if (!nodePath) throw cliError("nodemissing", "Node.js was not found");
-    const nodeVersion = await runProcess({ command: nodePath, args: ["--version"], stdin: "", cwd: os.tmpdir() }, {
-      timeoutMs: 10_000,
-      signal: options.signal,
-    });
-    const nodeMajor = Number(String(nodeVersion.stdout || "").replace(/^v/, "").split(".")[0]);
-    if (!Number.isFinite(nodeMajor) || nodeMajor < (meta.acpMinNodeMajor || 0)) {
-      throw cliError("nodeversion", `Node.js ${meta.acpMinNodeMajor}+ is required`, { erNodeMajor: nodeMajor || 0 });
-    }
-    const npmPath = await resolveLocalTool("npm", { ...options, configuredPath: options.npmPath });
-    if (!npmPath) throw cliError("npmmissing", "npm was not found");
-    const delimiter = window.process.platform === "win32" ? ";" : ":";
-    const installPath = [path.dirname(nodePath), window.process.env.PATH || ""].filter(Boolean).join(delimiter);
-    try {
-      await runProcess({
-        command: npmPath,
-        args: acpNpmInstallArgs(id, installRoot),
-        stdin: "",
-        cwd: os.tmpdir(),
-      }, {
-        timeoutMs: options.timeoutMs || 300_000,
-        signal: options.signal,
-        env: { PATH: installPath },
-      });
-    } catch (error) {
-      throw cliError(classifyAcpInstallFailure(error), "ACP installation failed", {
-        erStatus: error?.erStatus,
-      });
-    }
-    const hintedPath = managedAcpEntrypoint(id, installRoot, path);
-    const acpPath = await resolveAcpPath(id, hintedPath, { ...options, installRoot });
-    if (!acpPath) throw cliError("installverify", "ACP installed but its executable was not found");
-    return { acpPath, npmPath, nodePath, nodeMajor, installRoot, version: meta.acpInstallVersion };
-  })();
-  CLI_ACP_INSTALLS.set(id, task);
-  try {
-    return await task;
-  } finally {
-    CLI_ACP_INSTALLS.delete(id);
-  }
+  return installAcpWithTools(id, options, {
+    cliMeta, cliError, runtime, resolveLocalTool, runProcess,
+    acpNpmInstallArgs, managedAcpEntrypoint, resolveAcpPath,
+  });
 }
 
 export async function resolveCliPath(id, configuredPath = "", options = {}) {
