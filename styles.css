@@ -2779,6 +2779,30 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
   border-color: var(--text-error);
 }
 
+/* Persistent arrows remain outside the immersive toolbar. Scroll mode still
+   hides all .er-navbtn controls through the existing rule. */
+.er-page-buttons-always:not(.er-scrolling) .er-area { margin-inline:52px; }
+.er-page-edge { position:absolute; top:50%; z-index:7; background:var(--er-ui); opacity:1; }
+.er-page-edge-prev { left:8px; }
+.er-page-edge-next { right:8px; }
+.er-custom-font { min-width:0; margin:12px 0; }
+.er-custom-font[hidden] { display:none; }
+.er-custom-font label { display:block; font-size:var(--font-ui-small); }
+.er-custom-font input { display:block; width:100%; max-width:100%; margin-top:6px; box-sizing:border-box; }
+.er-custom-font-error { color:var(--text-error); font-size:var(--font-ui-small); }
+.er-custom-font input[aria-invalid="true"] { border-color:var(--text-error); }
+
+.er-font-actions, .er-imported-fonts { display:flex; flex-wrap:wrap; gap:8px; }
+.er-font-actions button { flex:1 1 140px; min-height:36px; }
+.er-custom-font input[hidden] { display:none; }
+.er-imported-fonts { max-height:140px; overflow:auto; margin-top:10px; }
+.er-imported-fonts button { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.er-imported-fonts button[aria-pressed="true"] { color:var(--text-on-accent); background:var(--interactive-accent); }
+.er-font-selected { margin:10px 0; overflow-wrap:anywhere; font-size:16px; }
+.er-font-status { color:var(--text-muted); font-size:var(--font-ui-small); margin-bottom:10px; }
+.er-custom-font details > summary { cursor:pointer; color:var(--text-muted); font-size:var(--font-ui-small); }
+.er-custom-font details > label { margin-top:10px; }
+.er-font-choice-preview { margin-top:5px; font-size:18px; color:var(--text-muted); }
 /* Reading navigation stays together and never participates in page layout. */
 .er-bot.er-navigation {
   width: min(580px, calc(100% - 16px));
@@ -2825,3 +2849,6 @@ button.er-find-item.er-toc-active { background: var(--background-modifier-hover)
   .er-mview .er-navigation .er-navbtn { width: 28px; margin: 0; }
   .er-mview .er-panel.er-navigation-panel { bottom: 60px; max-height: 50%; }
 }
+
+.er-page-buttons-always .er-bot.er-navigation,
+.er-mview.er-page-buttons-always .er-bot.er-navigation { grid-template-columns: 68px minmax(0, 1fr); }

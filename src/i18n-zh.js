@@ -1,6 +1,32 @@
 // Generated from the complete source UI dictionary and reviewed for core reading terms.
 // Keep placeholders, Markdown and HTML structure identical to the source strings.
 export const ER_ZH_CN = {
+  "The imported font is unavailable. Using a fallback; check file sync or import it again.": "导入字体暂不可用，已使用备用字体。请检查字体文件是否同步完成，或重新导入。",
+  "Search fonts\u2026": "搜索字体…",
+  "Mountains and pages \u00b7 Reading 123": "山川与书页 · Reading 123",
+  "Choose installed font": "选择本机字体",
+  "Import font file": "导入字体文件",
+  "Enter font name manually": "手动填写字体名称",
+  "The font is saved in the vault and syncs with vault files.": "字体已保存在仓库中，随仓库文件同步。",
+  "Installed fonts are available only on devices where they are installed.": "本机字体仅在安装了该字体的设备上可用。",
+  "Could not apply the font. Check the font file and vault write access.": "无法应用字体，请检查字体文件和仓库写入权限。",
+  "No custom font selected": "尚未选择自定义字体",
+  "Reading installed fonts\u2026": "正在读取本机字体…",
+  "Found {0} installed font families": "找到 {0} 种本机字体",
+  "No installed fonts were returned. Import a font file instead.": "没有读取到本机字体，请导入字体文件。",
+  "This device cannot list installed fonts or access was denied. Use Import font file.": "当前设备不支持或未允许读取本机字体，请使用“导入字体文件”。",
+  "Importing font\u2026": "正在导入字体…",
+  "Choose a valid TTF, OTF, WOFF or WOFF2 font file.": "请选择有效的 TTF、OTF、WOFF 或 WOFF2 字体文件。",
+  "Font files must not be empty or larger than 64 MB.": "字体文件不能为空或超过 64 MB。",
+  "Font import failed. Check that the font is valid and the vault is writable.": "字体导入失败，请检查文件是否有效及仓库是否可写。",
+
+  "Font name / font-family": "字体名称 / font-family",
+  "Enter an installed font name or a comma-separated fallback list. Unavailable fonts use the fallback.": "填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。",
+  "Enter font names separated by commas, not CSS rules.": "请输入字体名称或逗号分隔的字体列表，不要填写 CSS 规则。",
+  "Page-turn buttons": "翻页按钮",
+  "Show when pointer approaches": "鼠标靠近时显示",
+  "Always show": "常驻显示",
+
   "Drafts could not be saved. They remain in memory. Check plugin folder space and permissions, or restore the draft file and restart.": "草稿无法保存，内容暂留内存。请检查插件目录的空间、权限或恢复草稿文件后重启。",
   "Reading position": "阅读位置",
   "No unique source location found. Please check the search results.": "未找到唯一原文位置，请在搜索结果中确认。",
