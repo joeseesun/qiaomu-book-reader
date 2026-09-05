@@ -8,6 +8,7 @@
     "postinstall": "node patch-pdfjs.cjs",
     "dev": "node esbuild.config.mjs",
     "build": "node scripts/generate-pdf-cmaps.mjs && node esbuild.config.mjs production && node patch-pdfjs.cjs",
+    "build:community": "node scripts/generate-pdf-cmaps.mjs && node esbuild.config.mjs production --profile=community && node scripts/verify-release.mjs --profile=community",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify:release": "node scripts/verify-release.mjs"

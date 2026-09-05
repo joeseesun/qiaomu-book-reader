@@ -1,4 +1,5 @@
 node_modules/
+/dist/
 # package-lock.json IS committed: it pins the exact library versions the release
 # was built with, so a reviewer's `npm install` reproduces the same bundle.
 

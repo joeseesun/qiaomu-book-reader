@@ -24,3 +24,5 @@ jobs:
       - run: npx eslint src/
       - name: Verify committed build artifact
         run: git diff --exit-code -- main.js
+      - name: Verify community candidate excludes the ACP installer
+        run: npm run build:community

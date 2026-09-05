@@ -48,7 +48,7 @@ export function syncPageButtons(view) {
   if (always) {
     if (previous.parentElement !== root) root.append(previous, next);
   } else if (previous.parentElement !== toolbar) {
-    toolbar.prepend(previous);
+    toolbar.insertBefore(previous, toolbar.querySelector(".er-bot-center") || toolbar.firstChild);
     toolbar.append(next);
   }
 }

@@ -3,9 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
+import { buildProfile } from "./build-profile.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const installDir = process.argv[2] ? path.resolve(process.argv[2]) : "";
+const args = process.argv.slice(2);
+const profileArg = args.find((arg) => arg.startsWith("--profile="));
+const profile = buildProfile(profileArg?.slice("--profile=".length) || "standard", root);
+const installArg = args.find((arg) => !arg.startsWith("--"));
+const installDir = installArg ? path.resolve(installArg) : "";
 const releaseFiles = ["main.js", "manifest.json", "styles.css"];
 const bundledFonts = [
   {
@@ -48,7 +53,7 @@ function requireCheck(condition, message) {
 }
 
 const pkg = readJson(path.join(root, "package.json"));
-const manifest = readJson(path.join(root, "manifest.json"));
+const manifest = readJson(path.join(profile.outputDir, "manifest.json"));
 const versions = readJson(path.join(root, "versions.json"));
 
 requireCheck(manifest.id === "qiaomu-book-reader", `unexpected plugin id: ${manifest.id}`);
@@ -56,13 +61,21 @@ requireCheck(pkg.version === manifest.version, "package.json and manifest.json v
 requireCheck(versions[manifest.version] === manifest.minAppVersion, "versions.json is missing the current release");
 
 const assets = Object.fromEntries(releaseFiles.map((name) => {
-  const file = path.join(root, name);
+  const file = path.join(profile.outputDir, name);
   requireCheck(fs.existsSync(file), `missing release asset: ${name}`);
   requireCheck(fs.statSync(file).size > 0, `empty release asset: ${name}`);
   return [name, { bytes: fs.statSync(file).size, sha256: sha256(file) }];
 }));
 
-const mainSource = fs.readFileSync(path.join(root, "main.js"), "utf8");
+const mainSource = fs.readFileSync(path.join(profile.outputDir, "main.js"), "utf8");
+requireCheck(mainSource.includes(`Build channel: ${profile.name}`), "bundle channel does not match verification profile");
+if (profile.name === "community") {
+  const info = readJson(path.join(profile.outputDir, "build-info.json"));
+  requireCheck(info.profile === "community", "community build metadata missing");
+  requireCheck(info.inputs.includes("src/ai-acp-manual.js"), "manual ACP module is missing");
+  requireCheck(!info.inputs.includes("src/ai-acp-installer.js"), "community bundle includes the dependency installer");
+  requireCheck(!mainSource.includes("ACP installed but its executable was not found"), "installer execution code leaked into the community bundle");
+}
 const fontPayloads = bundledFonts.map(({ file, family, sourceSha256 }) => {
   const archive = path.join(root, file);
   requireCheck(fs.existsSync(archive), `missing bundled font source: ${file}`);
@@ -87,6 +100,7 @@ if (installDir) {
 
 console.log(JSON.stringify({
   ok: true,
+  profile: profile.name,
   id: manifest.id,
   version: manifest.version,
   minAppVersion: manifest.minAppVersion,

@@ -797,7 +797,7 @@ test("desktop AI chat keeps per-book threads and structured document or selectio
   assert.match(css, /\.er-ai-sidebar \.er-ai-log \{ min-height: 0; max-height: none; \}/);
   assert.match(source, /const AiChatHistoryModal = class extends Modal/);
   assert.match(source, /createEl\("textarea", \{ cls: "er-ai-input" \}\)/);
-  assert.match(source, /this\.inputController = bindAiComposer\(input, send, this\)/);
+  assert.match(source, /this\.inputController = bindReaderAiComposer\(this, input, send, footer\)/);
   assert.match(source, /items\.slice\(0, 3\)/);
   assert.match(source, /new AiChatHistoryModal\(this\.app, this\)\.open\(\)/);
   assert.match(source, /normalizeAiChatHistory\(this\.plugin\.settings\.aiChatHistory\)/);

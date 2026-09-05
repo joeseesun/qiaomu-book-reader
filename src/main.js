@@ -18,6 +18,9 @@ import { createOpenAiSseParser } from "./ai-stream.js";
 import { composeAiAnswerNote } from "./ai-note.js";
 import { suggestAiNoteTitle } from "./ai-note-title.js";
 import { bindAiComposer } from "./ai-composer.js";
+import { DRAFT_LIMIT, loadAiDrafts } from "./ai-drafts.js";
+import { aiAnswerMarker, appendAiAnswer, verifiedQuotes, normalizeLocationMarks } from "./reading-workflow.js";
+import { searchableQuery, searchBookBlocks, nextSearchIndex } from "./reader-search.js";
 import { captureReadingAnchor, restoreReadingAnchor, queueReadingLayout, shouldFollowContext, comfortableLineWidth, zoomAnchorOffset, textPoint } from "./reader-experience.js";
 import { deriveAiSetupState } from "./ai-setup-state.js";
 import { rewriteEpubImageResources } from "./epub-resources.js";
@@ -67,6 +70,35 @@ Object.assign(__erEN, {
   "鼠标靠近时显示": "Show when pointer approaches",
   "常驻显示": "Always show",
 
+  "草稿无法保存，内容暂留内存。请检查插件目录的空间、权限或恢复草稿文件后重启。": "Drafts could not be saved. They remain in memory. Check plugin folder space and permissions, or restore the draft file and restart.",
+  "阅读位置": "Reading position",
+  "未找到唯一原文位置，请在搜索结果中确认。": "No unique source location found. Please check the search results.",
+  "无法定位原文，请确认书籍仍在仓库中并已加载。": "Cannot locate the source. Check that the book is still in the vault and has loaded.",
+  "位置标记": "Location bookmarks",
+  "暂无位置标记": "No location bookmarks yet",
+  "重命名标记": "Rename bookmark",
+  "删除标记": "Delete bookmark",
+  "保存失败，请检查仓库权限后重试。": "Saving failed. Check vault permissions and retry.",
+  "标记当前位置": "Bookmark this location",
+  "清理草稿": "Clear draft",
+  "只清理本书未发送的文字，不删除对话和选文。": "Only clear this book's unsent text. Keep conversations and selected sources.",
+  "搜索对话标题或书名": "Search conversation titles or books",
+  "重命名对话": "Rename conversation",
+  "保存选项": "Save options",
+  "追加到本书笔记": "Append to book note",
+  "查看原文": "View source",
+  "本轮不附加原文": "No source attached this turn",
+  "历史对话仍包含之前的原文。如需隔离历史，请新建对话。": "Earlier sources remain in conversation history. Start a new conversation to isolate history.",
+  "上一处": "Previous match",
+  "下一处": "Next match",
+  "搜索结果": "Search results",
+  "输入一个汉字或至少两个字符": "Enter one Chinese character or at least two characters",
+  "AI 回复已追加到本书笔记": "AI reply appended to the book note",
+  "无法追加 AI 回复，未覆盖已有笔记。请检查目标笔记和仓库权限。": "Could not append the reply; existing notes were not overwritten. Check the target note and vault permissions.",
+  "页码或百分比": "Page number or percentage",
+  "请输入有效的页码或 0–100%": "Enter a valid page number or 0–100%",
+  "开始计时": "Start timer",
+  "暂停计时": "Pause timer",
   "标题已根据回复内容在本地生成，可直接修改，不会额外调用模型。": "Title suggested locally from the reply. Edit it freely; no extra model request is made.",
   "请输入有效的笔记标题。": "Enter a valid note title.",
   "正在保存…": "Saving…",
@@ -967,6 +999,7 @@ const DEFAULT = {
   // selection. Keyed by the book file's path → the note name to link to.
   // Empty/unset → fall back to the book file's own name.
   bookNoteLinks: {},
+  locationMarks: [],
   // Books we've already shown the "pick a book note" prompt for (keyed by path),
   // so first-open asks once and never nags again.
   bookNotePrompted: {},
@@ -1703,6 +1736,7 @@ function startTimerSession(view) {
   if (view._timer) return;
   if (!view.plugin.settings.timerEnabled) return;
   view._running = true;
+  view._timerStarted = true;
   view._flushAcc = 0;
   view._timer = window.setInterval(() => {
     if (!view.plugin.settings.timerEnabled) { pauseTimerSession(view); return; }
@@ -1752,7 +1786,7 @@ function resetTimerSession(view) {
 function updateTimerBtn(view) {
   if (!view.timerBtnEl) return;
   const s = view.plugin.settings;
-  if (!s.timerEnabled) { view.timerBtnEl.addClass("er-hidden"); return; }
+  if (!s.timerEnabled || (!view._running && !view._timerStarted)) { view.timerBtnEl.addClass("er-hidden"); return; }
   view.timerBtnEl.removeClass("er-hidden");
   const remain = Math.max(0, view.plugin.getGoalSeconds() - view.plugin.getTodaySeconds());
   const done = remain <= 0;
@@ -2058,6 +2092,7 @@ function buildReaderExtraSettings(view, p, showPageButtons = true) {
     });
   });
   p.createDiv("er-pan-hint").setText(__ertr("«По клику»: клик по левой части страницы — назад, по правой — вперёд. Центр свободен для выделения текста."));
+  if (!readerIsPdf(view)) {
   sec(__ertr("Выравнивание текста"));
   const alRow = p.createDiv("er-col-row");
   [["left", __ertr("Слева")], ["justify", __ertr("По ширине")], ["center", __ertr("По центру")], ["right", __ertr("Справа")]].forEach(([v, label]) => {
@@ -2088,6 +2123,7 @@ function buildReaderExtraSettings(view, p, showPageButtons = true) {
     });
   });
   p.createDiv("er-pan-hint").setText(__ertr("Куда прижимать текст, если страница заполнена не до конца — например, в конце главы."));
+  }
   sec(__ertr("Цель чтения"));
   const onRow = p.createDiv("er-col-row");
   const goalStep = p.createDiv("er-sz-row");
@@ -2243,6 +2279,8 @@ const QiaomuBookReader = class extends Plugin {
   }
   async onload() {
     await this.loadAll();
+    this.aiDraftStore = await loadAiDrafts(this.app.vault.adapter, `${this.manifest.dir}/ai-drafts.json`, () => new Notice(__ertr("草稿无法保存，内容暂留内存。请检查插件目录的空间、权限或恢复草稿文件后重启。")));
+    this.register(() => { void this.aiDraftStore.flush(); });
     this.registerView(VIEW_TYPE, (leaf) => new ReaderView(leaf, this));
     this.registerView(LIB_VIEW_TYPE, (leaf) => new LibraryView(leaf, this));
     this.registerView(AI_CHAT_VIEW_TYPE, (leaf) => new AiChatView(leaf, this));
@@ -2480,7 +2518,6 @@ const QiaomuBookReader = class extends Plugin {
       }
       return;
     }
-    if (context?.readerView?._focusRestore) setReadingFocus(context.readerView, false);
     let leaf = this.app.workspace.getLeavesOfType(AI_CHAT_VIEW_TYPE)[0];
     if (!leaf) leaf = this.app.workspace.getRightLeaf(false) || this.app.workspace.getRightLeaf(true);
     if (!leaf) {
@@ -2595,6 +2632,7 @@ const QiaomuBookReader = class extends Plugin {
     this.settings.aiThinking = { ...(this.settings.aiThinking || {}) };
     this.settings.aiCliEfforts = { ...(this.settings.aiCliEfforts || {}) };
     this.settings.aiChatHistory = normalizeAiChatHistory(this.settings.aiChatHistory);
+    this.settings.locationMarks = normalizeLocationMarks(this.settings.locationMarks);
     if (this.settings.aiProvider && this.settings.aiModel && !this.settings.aiModels[this.settings.aiProvider]) {
       this.settings.aiModels[this.settings.aiProvider] = this.settings.aiModel;
     }
@@ -4255,6 +4293,7 @@ function normalizeAiChatHistory(value) {
     return {
       id: String(item?.id || "").slice(0, 80),
       title: String(item?.title || "").slice(0, 80),
+      ...(item?.titleEdited ? { titleEdited: true } : {}),
       book: String(item?.book || "").slice(0, 180),
       bookPath: String(item?.bookPath || "").slice(0, 500),
       text: legacyText,
@@ -4358,7 +4397,9 @@ function settleReader(view, delay = 220) {
     syncOpenAiReaderContext(view);
     if (!readerIsPdf(view)) {
       const chapter = chapterForBlock(view.tocItems || [], view._readingAnchor?.block || 0);
-      view.pctEl?.setText(chapter ? `${chapter} · ${Math.round(view.pager.currentPct * 100)}%` : `${Math.round(view.pager.currentPct * 100)}%`);
+      view.locEl?.setText(chapter || __ertr("阅读位置"));
+      view.locEl?.setAttribute("title", chapter || __ertr("阅读位置"));
+      view.pctEl?.setText(`${Math.round(view.pager.currentPct * 100)}%`);
     }
   }, delay);
 }
@@ -4368,14 +4409,131 @@ function rememberReaderJump(view) {
   const anchor = captureReadingAnchor(view.pager);
   showFootnoteReturn(view, anchor);
 }
+function addReaderNavigation(view, bot, findBtn, tocBtn) {
+  bot.addClass("er-navigation");
+  const toggle = (name) => (view.togglePanel || view._togglePanel).call(view, name);
+  const tools = bot.createDiv("er-navigation-tools");
+  view.tocBtn = tocBtn || tools.createEl("button", { cls: "er-ibtn", attr: { type: "button", "aria-label": __ertr("Оглавление") } });
+  view.findBtn = findBtn || tools.createEl("button", { cls: "er-ibtn", attr: { type: "button", "aria-label": __ertr("Поиск по книге") } });
+  if (tocBtn) tools.appendChild(tocBtn);
+  else { svgIcon(view.tocBtn, "list"); view.tocBtn.addEventListener("click", () => toggle("toc")); }
+  if (findBtn) tools.appendChild(findBtn);
+  else {
+    svgIcon(view.findBtn, "search");
+    view.findBtn.addEventListener("click", () => { toggle("find"); if (view.panelOpen === "find") view._findInput?.focus(); });
+  }
+  bot.prepend(tools);
+}
+function syncNavigationPanel(view, name) {
+  if (name === "find") view._searchReturnSaved = false;
+  view.contentEl?.toggleClass("er-navigation-open", name === "find" || name === "toc");
+  view.findPan?.toggleClass("er-panel-open", name === "find");
+  view.findBtn?.setAttribute("aria-expanded", String(name === "find"));
+  view.tocBtn?.setAttribute("aria-expanded", String(name === "toc"));
+}
+async function jumpToAiQuote(plugin, file, quote) {
+  try {
+    if (!(plugin.app.vault.getAbstractFileByPath(file.path) instanceof TFile)) throw new Error("Missing book");
+    let view = plugin._openReaderModal || plugin.app.workspace.getLeavesOfType(VIEW_TYPE).map((leaf) => leaf.view).find((v) => v.file?.path === file.path);
+    if (!view || view.file?.path !== file.path) {
+      await plugin.openFile(file);
+      view = plugin._openReaderModal || plugin.app.workspace.getLeavesOfType(VIEW_TYPE)[0]?.view;
+    }
+    const deadline = Date.now() + 15000;
+    while (view && Date.now() < deadline && (view.file?.path !== file.path || view._openingBook || !view.pager?.flow)) await new Promise((resolve) => window.setTimeout(resolve, 100));
+    if (!view?.pager?.flow || view.file?.path !== file.path || view._openingBook) throw new Error("Book not ready");
+    const hits = searchBookBlocks(readerSearchTexts(view.pager.flow), quote, 2);
+    if (hits.length !== 1) {
+      (view.togglePanel || view._togglePanel).call(view, "find");
+      view._findInput.value = quote;
+      view._findInput.dispatchEvent(new Event("input"));
+      view._findInput.focus();
+      new Notice(__ertr("未找到唯一原文位置，请在搜索结果中确认。"));
+      return;
+    }
+    rememberReaderJump(view);
+    const [cur, total] = restoreReadingAnchor(view.pager, { block: hits[0].block, offset: hits[0].offset, pct: view.pager.currentPct });
+    (view.updateUI || view._updateUI).call(view, cur, total);
+    markFoundIn(view, quote);
+    await plugin.saveProgress(file.path, cur, total, view.pager.currentBlockIndex());
+  } catch { new Notice(__ertr("无法定位原文，请确认书籍仍在仓库中并已加载。")); }
+}
+
+function showLocationMarks(view) {
+  const modal = new Modal(view.app);
+  modal.onOpen = () => {
+    const c = modal.contentEl;
+    c.empty(); c.createEl("h3", { text: __ertr("位置标记") });
+    const marks = normalizeLocationMarks(view.plugin.settings.locationMarks).filter((item) => item.bookPath === view.file?.path);
+    if (!marks.length) c.createDiv({ text: __ertr("暂无位置标记") });
+    const save = async (items) => {
+      const previous = view.plugin.settings.locationMarks;
+      view.plugin.settings.locationMarks = items;
+      try { await view.plugin.saveAll(); modal.onOpen(); }
+      catch (error) { view.plugin.settings.locationMarks = previous; throw error; }
+    };
+    for (const mark of marks) {
+      const row = c.createDiv("er-location-mark");
+      row.createEl("button", { cls: "er-location-mark-open", text: mark.title }).addEventListener("click", () => {
+        if (view.file?.path !== mark.bookPath) return;
+        const block = view.pager.blockEl(mark.anchor.block);
+        // A changed EPUB must not silently jump to an unrelated paragraph.
+        if (!mark.anchor.pdfPage && mark.excerpt && !block?.textContent.includes(mark.excerpt)) {
+          void jumpToAiQuote(view.plugin, view.file, mark.excerpt); modal.close(); return;
+        }
+        rememberReaderJump(view);
+        const [cur, total] = restoreReadingAnchor(view.pager, mark.anchor);
+        (view.updateUI || view._updateUI).call(view, cur, total);
+        void view.plugin.saveProgress(view.file.path, cur, total, view.pager.currentBlockIndex());
+        modal.close();
+      });
+      const rename = row.createEl("button", { cls: "er-ibtn", attr: { "aria-label": __ertr("重命名标记") } });
+      setIcon(rename, "pencil");
+      rename.addEventListener("click", () => new ReaderNameModal(view.app, __ertr("重命名标记"), mark.title, (title) => save(normalizeLocationMarks(view.plugin.settings.locationMarks).map((item) => item.id === mark.id ? { ...item, title } : item))).open());
+      const del = row.createEl("button", { cls: "er-ibtn", attr: { "aria-label": __ertr("删除标记") } });
+      setIcon(del, "trash");
+      del.addEventListener("click", () => new ConfirmModal(view.app, {
+        title: __ertr("删除标记"), body: mark.title, okText: __ertr("Удалить"), cancelText: __ertr("Отмена"),
+        onYes: async () => { try { await save(normalizeLocationMarks(view.plugin.settings.locationMarks).filter((item) => item.id !== mark.id)); } catch { new Notice(__ertr("保存失败，请检查仓库权限后重试。")); } },
+      }).open());
+    }
+  };
+  modal.open();
+}
+
+function addLocationMark(view) {
+  if (!view.file || !view.pager?.flow) return;
+  const file = view.file;
+  const anchor = captureReadingAnchor(view.pager);
+  if (!anchor || !Number.isInteger(anchor.block)) return;
+  const excerpt = view.pager.blockEl(anchor.block)?.textContent.slice(anchor.offset, anchor.offset + 100) || "";
+  const label = readerIsPdf(view) ? __ertr("第 {0} 页", anchor.pdfPage || 1) : chapterForBlock(view.tocItems || [], anchor.block) || __ertr("阅读位置");
+  new ReaderNameModal(view.app, __ertr("标记当前位置"), label, async (title) => {
+    const old = view.plugin.settings.locationMarks;
+    view.plugin.settings.locationMarks = normalizeLocationMarks([...normalizeLocationMarks(old), { id: newAiSessionKey(), bookPath: file.path, title, excerpt, anchor }]);
+    try { await view.plugin.saveAll(); }
+    catch (error) { view.plugin.settings.locationMarks = old; throw error; }
+  }).open();
+}
+
+function addReadingMenuActions(menu, view) {
+  menu.addItem((it) => it.setTitle(__ertr("标记当前位置")).setIcon("bookmark-plus").onClick(() => addLocationMark(view)));
+  menu.addItem((it) => it.setTitle(__ertr("位置标记")).setIcon("bookmark").onClick(() => showLocationMarks(view)));
+  if (view.plugin.settings.timerEnabled) menu.addItem((it) => it.setTitle(__ertr(view._running ? "暂停计时" : "开始计时")).setIcon(view._running ? "pause" : "play").onClick(() => toggleTimerSession(view)));
+}
 function setReadingFocus(view, enabled) {
   if (view.app.isMobile) return;
   const workspace = view.app.workspace;
   if (enabled && !view._focusRestore) {
     if (view.pager && !view.pager.scrollMode) view.pager.applyTransform(false);
     view._readingAnchor = captureReadingAnchor(view.pager);
+    const keepAiVisible = !workspace.rightSplit?.collapsed && workspace.getLeavesOfType(AI_CHAT_VIEW_TYPE).some(
+      (leaf) => leaf.getRoot() === workspace.rightSplit && leaf.view.containerEl.isShown()
+    );
     view._focusRestore = [workspace.leftSplit, workspace.rightSplit].map((side) => ({ side, collapsed: side?.collapsed }));
-    for (const { side } of view._focusRestore) side?.collapse();
+    for (const { side } of view._focusRestore) {
+      if (side !== workspace.rightSplit || !keepAiVisible) side?.collapse();
+    }
   } else if (!enabled && view._focusRestore) {
     const restore = view._focusRestore;
     view._focusRestore = null;
@@ -5715,6 +5873,55 @@ function renderAiContextQuote(host, value, options = {}) {
   return { card, clear: null };
 }
 
+function bindReaderAiComposer(chat, input, send, footer, blurOnSend = false) {
+  const path = chat.bookFile?.path;
+  const store = chat.plugin.aiDraftStore;
+  input.maxLength = DRAFT_LIMIT;
+  input.value = store?.texts.get(path) || "";
+  const clear = footer.createEl("button", { cls: "er-ai-act er-ai-draft-clear", text: __ertr("清理草稿") });
+  footer.prepend(clear);
+  clear.hidden = !input.value;
+  let lastSaved = input.value;
+  const onDraftChange = (value, { settled = false } = {}) => {
+    // An old, closed composer must not overwrite a draft from a reopened one.
+    if (settled && store && (store.texts.get(path) || "") !== lastSaved) return;
+    store?.set(path, value); lastSaved = value; clear.hidden = !value;
+  };
+  const controller = bindAiComposer(input, send, chat, { blurOnSend, onDraftChange });
+  chat.draftChanged = onDraftChange;
+  clear.addEventListener("click", () => {
+    new ConfirmModal(chat.app, {
+      title: __ertr("清理草稿"), body: __ertr("只清理本书未发送的文字，不删除对话和选文。"),
+      okText: __ertr("Очистить"), cancelText: __ertr("Отмена"),
+      onYes: () => { input.value = ""; input.dispatchEvent(new Event("input")); controller.refresh(); input.focus(); },
+    }).open();
+  });
+  return controller;
+}
+
+const ReaderNameModal = class extends Modal {
+  constructor(app, title, value, submit) { super(app); this.title = title; this.value = value; this.submit = submit; }
+  onOpen() {
+    const c = this.contentEl;
+    c.createEl("h3", { text: this.title });
+    const input = c.createEl("input", { cls: "er-panel-input", attr: { type: "text", "aria-label": this.title, maxlength: "80" } });
+    input.value = this.value || "";
+    const error = c.createDiv({ cls: "er-title-error", attr: { role: "alert" } });
+    const save = c.createEl("button", { text: __ertr("Сохранить") });
+    const submit = async () => {
+      const title = input.value.trim();
+      if (!title || save.disabled) return;
+      save.disabled = true;
+      try { await this.submit(title.slice(0, 80)); this.close(); }
+      catch { error.setText(__ertr("保存失败，请检查仓库权限后重试。")); save.disabled = false; }
+    };
+    save.addEventListener("click", submit);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); void submit(); } });
+    erAutoFocus(input);
+  }
+  onClose() { this.contentEl.empty(); }
+};
+
 function renderAiComposerPrompts(host, chat) {
   const items = aiQuickPrompts(chat.plugin.settings);
   chat.quickPromptButtons = [];
@@ -5761,11 +5968,8 @@ function bindAiSlashPrompts(menu, input, chat) {
   };
   const choose = (item) => {
     if (!item || chat.busy) return;
-    input.value = "";
-    input.setCssProps?.({ height: "auto" });
     close();
-    chat._setSending(false);
-    void chat._send(item.prompt);
+    void chat.inputController.submit(item.prompt);
   };
   const draw = () => {
     const raw = input.value.trimStart();
@@ -5828,7 +6032,7 @@ const AiChatHistoryModal = class extends Modal {
   constructor(app, chat) {
     super(app);
     this.chat = chat;
-    this.scope = chat.bookFile?.path ? "book" : "all";
+    this.filterScope = chat.bookFile?.path ? "book" : "all";
   }
   onOpen() {
     const c = this.contentEl;
@@ -5836,7 +6040,7 @@ const AiChatHistoryModal = class extends Modal {
     this.modalEl.addClass("er-ai-history-modal");
     const head = c.createDiv("er-ai-history-head");
     head.createEl("h3", { text: __ertr("对话记录") });
-    const clearBook = this.scope === "book" && !!this.chat.bookFile?.path;
+    const clearBook = this.filterScope === "book" && !!this.chat.bookFile?.path;
     const clear = head.createEl("button", { text: __ertr(clearBook ? "清空本书记录" : "清空全部记录") });
     clear.addEventListener("click", () => {
       if (this.chat.busy) return;
@@ -5859,17 +6063,28 @@ const AiChatHistoryModal = class extends Modal {
       const scopes = c.createDiv("er-ai-history-scopes");
       for (const [id, label] of [["book", __ertr("本书")], ["all", __ertr("全部")]]) {
         const button = scopes.createEl("button", { text: label });
-        button.toggleClass("is-active", this.scope === id);
+        button.toggleClass("is-active", this.filterScope === id);
         button.addEventListener("click", () => {
-          this.scope = id;
+          this.filterScope = id;
           this.onOpen();
         });
       }
     }
-    const items = this.scope === "book" && this.chat.bookFile?.path
+    const items = this.filterScope === "book" && this.chat.bookFile?.path
       ? allItems.filter((item) => item.bookPath === this.chat.bookFile.path)
       : allItems;
     const list = c.createDiv("er-ai-history-list");
+    const query = c.createEl("input", { cls: "er-ai-history-search", attr: { type: "search", placeholder: __ertr("搜索对话标题或书名"), "aria-label": __ertr("搜索对话标题或书名") } });
+    c.insertBefore(query, list);
+    query.value = this.query || "";
+    const noMatch = c.createDiv({ cls: "er-ai-history-empty", text: __ertr("Ничего не найдено") });
+    const filter = () => {
+      this.query = query.value;
+      const text = query.value.trim().toLocaleLowerCase();
+      for (const row of list.children) row.hidden = text && !row.textContent.toLocaleLowerCase().includes(text);
+      noMatch.hidden = !items.length || Array.from(list.children).some((row) => !row.hidden);
+    };
+    query.addEventListener("input", filter);
     if (!items.length) list.createDiv({ cls: "er-ai-history-empty", text: __ertr("暂无对话记录") });
     for (const item of items) {
       const row = list.createDiv("er-ai-history-item");
@@ -5881,6 +6096,22 @@ const AiChatHistoryModal = class extends Modal {
         if (this.chat.busy) return;
         this.chat.loadSession(item);
         this.close();
+      });
+      const rename = row.createEl("button", { cls: "er-ai-history-delete", attr: { "aria-label": __ertr("重命名对话") } });
+      setIcon(rename, "pencil");
+      rename.addEventListener("click", () => {
+        if (this.chat.busy) return;
+        new ReaderNameModal(this.app, __ertr("重命名对话"), item.title, async (title) => {
+          const record = this.chat.plugin.settings.aiChatHistory.find((candidate) => candidate.id === item.id);
+          if (!record || this.chat.busy) return;
+          const previous = { title: record.title, titleEdited: record.titleEdited };
+          record.title = title; record.titleEdited = true;
+          try {
+            await this.chat.plugin.saveAll();
+            if (this.chat.chatRecordId === item.id) this.chat.sessionTitle = title;
+            this.onOpen();
+          } catch (error) { Object.assign(record, previous); throw error; }
+        }).open();
       });
       const del = row.createEl("button", { cls: "er-ai-history-delete" });
       svgIcon(del, "trash");
@@ -5899,6 +6130,7 @@ const AiChatHistoryModal = class extends Modal {
         }).open();
       });
     }
+    filter();
   }
   onClose() { this.contentEl.empty(); }
 };
@@ -5946,6 +6178,8 @@ const AiExplainModal = class extends Modal {
       onClear: () => {
         this.pendingContext = null;
         this.text = "";
+        const row = bar.createDiv({ cls: "er-ai-context-detached", text: __ertr("本轮不附加原文"), attr: { title: __ertr("历史对话仍包含之前的原文。如需隔离历史，请新建对话。") } });
+        bar.prepend(row);
       },
     });
     this.pendingContextEl = rendered?.card || null;
@@ -5962,7 +6196,7 @@ const AiExplainModal = class extends Modal {
     this.sendEl = send;
     this.canCancel = true;
     bindAiSlashPrompts(slashMenu, input, this);
-    this.inputController = bindAiComposer(input, send, this, { blurOnSend: true });
+    this.inputController = bindReaderAiComposer(this, input, send, footer, true);
     erAutoFocus(input);
     erBlurOnTapOutside(c, input);
     this._watchKeyboard();
@@ -6052,7 +6286,7 @@ const AiExplainModal = class extends Modal {
       new Notice(ok ? __ertr("Скопировано ✓") : __ertr("Не удалось скопировать"));
     });
     let savedNote = answerTurn?.savedNotePath ? this.app.vault.getAbstractFileByPath(answerTurn.savedNotePath) : null;
-    const save = act("note", __ertr("保存 AI 回复"), async () => {
+    const saveAnswer = async (toBookNote = false) => {
       if (savedNote && this.app.vault?.getAbstractFileByPath(savedNote.path)) {
         await this.app.workspace.openLinkText(savedNote.path, bookFile?.path || "", "tab");
         return;
@@ -6062,6 +6296,7 @@ const AiExplainModal = class extends Modal {
       try {
       const note = await createNoteFromAiAnswer(this.app, this.plugin, answer, source.question, source.context, bookFile, {
         open: false,
+        toBookNote,
       });
       if (note) {
         savedNote = note;
@@ -6072,8 +6307,28 @@ const AiExplainModal = class extends Modal {
         }
       }
       } finally { save.disabled = false; }
-    });
+    };
+    const save = act("note", __ertr("保存 AI 回复"), () => { void saveAnswer(); });
+    if (bookFile && this.plugin.settings.askNoteTitle === false) {
+      const options = act("more-horizontal", __ertr("保存选项"), (event) => {
+        const menu = new Menu();
+        menu.addItem((item) => item.setTitle(__ertr("追加到本书笔记")).onClick(() => saveAnswer(true)));
+        menu.showAtMouseEvent(event);
+      });
+      options.setAttribute("aria-label", __ertr("保存选项"));
+    }
     if (savedNote) save.querySelector("span")?.setText(__ertr("已保存 · 打开笔记"));
+    const targetIndex = this.turns.indexOf(targetUser);
+    const sources = targetIndex >= 0 ? this.turns.slice(0, targetIndex + 1).map((turn) => turn.context?.text) : [source.context?.text];
+    const quotes = verifiedQuotes(answer, sources);
+    if (bookFile && quotes.length) {
+      const links = group.createDiv("er-ai-citations");
+      for (const quote of quotes) {
+        const link = links.createEl("button", { cls: "er-ai-act", text: `${__ertr("查看原文")} · ${quote.slice(0, 24)}${quote.length > 24 ? "…" : ""}` });
+        link.setAttribute("title", quote);
+        link.addEventListener("click", () => { void jumpToAiQuote(this.plugin, bookFile, quote); });
+      }
+    }
     if (source.regenerate === false) return;
     const regenerate = act("rotate-ccw", __ertr("重新生成"), () => {
       if (this.busy) return;
@@ -6253,6 +6508,7 @@ const AiExplainModal = class extends Modal {
   }
   onClose() {
     if (this.abortController) this.abortController.abort();
+    void this.plugin.aiDraftStore?.flush();
     this.activeMarkdownRenderer?.dispose();
     this.activeMarkdownRenderer = null;
     if (this._kbShow) {
@@ -6286,7 +6542,7 @@ const AiChatView = class extends ItemView {
     this.structuredContext = true;
     this.aiSessionKey = window.crypto?.randomUUID?.() || `reader-${Date.now()}-${Math.random()}`;
     this.contextUnavailable = false;
-    this.drafts = new Map();
+    this.drafts = this.plugin.aiDraftStore?.texts || new Map();
   }
   getViewType() { return AI_CHAT_VIEW_TYPE; }
   getDisplayText() { return __ertr("AI 助读"); }
@@ -6316,7 +6572,7 @@ const AiChatView = class extends ItemView {
     const actions = head.createDiv("er-ai-head-actions");
     const iconButton = (icon, label, fn) => {
       const button = actions.createEl("button", { cls: "er-ai-prompt-settings" });
-      svgIcon(button, icon);
+      setIcon(button, icon);
       button.setAttribute("aria-label", label);
       button.addEventListener("click", fn);
       return button;
@@ -6425,9 +6681,8 @@ const AiChatView = class extends ItemView {
     this.drafts ||= new Map();
     const path = this.bookFile?.path;
     if (!path || !this.inputEl?.isConnected) return;
-    this.drafts.delete(path);
-    this.drafts.set(path, this.inputEl.value);
-    if (this.drafts.size > 30) this.drafts.delete(this.drafts.keys().next().value);
+    if ((this.busy || this.inputController?.pending) && !this.inputEl.value) return;
+    this.plugin.aiDraftStore?.set(path, this.inputEl.value);
   }
   _newChat({ persist = true } = {}) {
     if (this.busy) return;
@@ -6444,6 +6699,7 @@ const AiChatView = class extends ItemView {
     this.turns = [];
     this.chatRecordId = "";
     this.aiSessionKey = newAiSessionKey();
+    this.sessionTitle = "";
     if (!this.pendingContext && this.readerView) {
       const current = readerDefaultAiContext(this.readerView);
       this.pendingContext = normalizeAiTurnContext(current);
@@ -6475,6 +6731,7 @@ const AiChatView = class extends ItemView {
     if (this.pendingContext) this.text = this.pendingContext.text;
     this.turns = session.turns.map((turn) => ({ ...turn }));
     this.chatRecordId = session.id;
+    this.sessionTitle = session.titleEdited ? session.title : "";
     this.aiSessionKey = newAiSessionKey();
     this._renderConversation({ focusInput: options.focusInput });
     const draft = options.draft ?? this.drafts.get(session.bookPath) ?? "";
@@ -6489,7 +6746,8 @@ const AiChatView = class extends ItemView {
     const completeTurns = this.turns.slice(0, lastAssistant + 1);
     const record = {
       id: this.chatRecordId || newAiSessionKey(),
-      title: aiChatTitle(completeTurns, this.text),
+      title: this.sessionTitle || aiChatTitle(completeTurns, this.text),
+      ...(this.sessionTitle ? { titleEdited: true } : {}),
       book: this.book,
       bookPath: this.bookFile?.path || "",
       text: this.text,
@@ -6575,7 +6833,7 @@ const AiChatView = class extends ItemView {
     this.sendEl = send;
     this.canCancel = true;
     bindAiSlashPrompts(slashMenu, input, this);
-    this.inputController = bindAiComposer(input, send, this);
+    this.inputController = bindReaderAiComposer(this, input, send, footer);
     if (options.focusInput !== false) erAutoFocus(input);
     erBlurOnTapOutside(c, input);
     this._warmSession();
@@ -6598,7 +6856,7 @@ const AiChatView = class extends ItemView {
     if (!context) {
       if (this.contextMode === "none" && this.readerView?.file?.path === this.bookFile?.path) {
         const row = host.createDiv("er-ai-context-detached");
-        row.createSpan({ text: __ertr("不附加原文") });
+        row.createSpan({ text: __ertr("本轮不附加原文"), attr: { title: __ertr("历史对话仍包含之前的原文。如需隔离历史，请新建对话。") } });
         row.createEl("button", { text: __ertr("重新引用原文"), attr: { type: "button" } }).addEventListener("click", () => {
           this.contextMode = "follow";
           this._prepareContext();
@@ -6640,6 +6898,8 @@ const AiChatView = class extends ItemView {
   close() {}
   async onClose() {
     if (this.abortController) this.abortController.abort();
+    this._rememberDraft();
+    await this.plugin.aiDraftStore?.flush();
     this.activeMarkdownRenderer?.dispose();
     this.activeMarkdownRenderer = null;
     if (this.turns.length) await this._persistSession();
@@ -7010,61 +7270,28 @@ async function extractPdf(file, app, _settings = {}, onProgress, options = {}) {
     signal?.removeEventListener("abort", abortLoading);
   }
 }
-function searchBookBlocks(blocks, query, limit = 300) {
-  const q = String(query || "").trim().toLowerCase();
-  if (q.length < 2) return [];
-  let out = [];
-  for (let i = 0; i < blocks.length && out.length < limit; i++) {
-    const text = blocks[i];
-    const hay = text.toLowerCase();
-    let from = 0;
-    while (out.length < limit) {
-      const at = hay.indexOf(q, from);
-      if (at < 0) break;
-      const s = Math.max(0, at - 45), e = Math.min(text.length, at + q.length + 55);
-      let pre = text.slice(s, at), post = text.slice(at + q.length, e);
-      if (s > 0) pre = pre.replace(/^\S*\s/, "");
-      if (e < text.length) post = post.replace(/\s\S*$/, "");
-      out.push({
-        block: i,
-        pre: (s > 0 ? "…" : "") + pre,
-        hit: text.slice(at, at + q.length),
-        post: post + (e < text.length ? "…" : "")
-      });
-      from = at + q.length;
-    }
-  }
-  return out;
-}
 function markFoundIn(view, query) {
   clearFoundIn(view);
   const flow = view.pager && view.pager.flow;
-  const q = String(query || "").trim().toLowerCase();
-  if (!flow || q.length < 2) return;
+  const q = searchableQuery(query);
+  if (!flow || !q) return;
   if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight === "undefined") return;
   view._foundQuery = q;
   const ranges = [];
   const CAP = 2e3;
   try {
-    const walker = docOf(flow).createTreeWalker(flow, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode()) && ranges.length < CAP) {
-      const text = node.nodeValue || "";
-      const hay = text.toLowerCase();
-      let from = 0;
-      while (ranges.length < CAP) {
-        const at = hay.indexOf(q, from);
-        if (at < 0) break;
-        const r = docOf(flow).createRange();
-        r.setStart(node, at);
-        r.setEnd(node, at + q.length);
-        ranges.push(r);
-        from = at + q.length;
-      }
+    for (const hit of searchBookBlocks(readerSearchTexts(flow), q, CAP)) {
+      const block = view.pager.blockEl(hit.block);
+      const start = textPoint(block, hit.offset), end = textPoint(block, hit.offset + hit.hit.length);
+      if (!start || !end) continue;
+      const r = docOf(flow).createRange();
+      r.setStart(start.node, start.offset);
+      r.setEnd(end.node, end.offset);
+      ranges.push(r);
     }
     if (ranges.length) CSS.highlights.set("er-found", new Highlight(...ranges));
     window.clearTimeout(view._foundTimer);
-    view._foundTimer = window.setTimeout(() => clearFoundIn(view), FOUND_PAINT_MS);
+    view._foundTimer = window.setTimeout(() => { if (view.panelOpen !== "find") clearFoundIn(view); }, FOUND_PAINT_MS);
   } catch { /* optional step; a failure here must not interrupt reading */ }
 }
 function clearFoundIn(view) {
@@ -7074,72 +7301,125 @@ function clearFoundIn(view) {
     if (typeof CSS !== "undefined" && CSS.highlights) CSS.highlights.delete("er-found");
   } catch { /* optional step; a failure here must not interrupt reading */ }
 }
-function buildFindPanelFor(view, p, { close, jump }) {
+function buildFindPanelFor(view, p, { close }) {
+  view._disposeFindPanel?.();
   p.empty();
+  p.addClass("er-navigation-panel");
   p.createDiv("er-pan-title").setText(__ertr("Поиск по книге"));
   const box = p.createDiv("er-toc-find");
   const inp = box.createEl("input", { type: "text" });
   inp.addClass("er-toc-find-input");
   inp.placeholder = __ertr("Что найти в книге…");
+  inp.setAttribute("aria-label", inp.placeholder);
   const info = p.createDiv("er-find-info");
-  const off = p.createDiv("er-find-off");
+  info.setAttribute("aria-live", "polite");
+  const controls = p.createDiv("er-find-controls");
+  const prev = controls.createEl("button", { text: __ertr("上一处") });
+  const next = controls.createEl("button", { text: __ertr("下一处") });
+  const expand = controls.createEl("button", { text: __ertr("搜索结果") });
+  const off = controls.createEl("button", { cls: "er-find-off" });
   off.setText(__ertr("Снять подсветку"));
+  const done = controls.createEl("button", { text: __ertr("Закрыть") });
+  const finish = () => { close(); view.findBtn?.focus(); };
+  done.addEventListener("click", finish);
   const list = p.createDiv("er-toc-list");
+  let hits = [], current = -1, searched = "", composing = false, timer;
+  view._disposeFindPanel = () => window.clearTimeout(timer);
+  const update = () => {
+    prev.disabled = next.disabled = !hits.length;
+    info.setText(!searched ? __ertr("输入一个汉字或至少两个字符") : hits.length ? `${current < 0 ? "—" : current + 1} / ${hits.length}${hits.length === 300 ? "+" : ""}` : __ertr("Ничего не найдено"));
+    Array.from(list.children).forEach((el, i) => el.toggleClass("er-toc-active", i === current));
+  };
+  const visit = (index) => {
+    const hit = hits[index];
+    if (!hit) return;
+    if (!view._searchReturnSaved) { rememberReaderJump(view); view._searchReturnSaved = true; }
+    current = index;
+    const [cur, total] = restoreReadingAnchor(view.pager, { block: hit.block, offset: hit.offset, pct: view.pager.currentPct });
+    (view.updateUI || view._updateUI).call(view, cur, total);
+    void view.plugin.saveProgress(view.file.path, cur, total, view.pager.currentBlockIndex());
+    p.addClass("er-find-browsing");
+    markFoundIn(view, searched);
+    update();
+  };
+  const step = (direction) => {
+    window.clearTimeout(timer);
+    if (searched !== inp.value) run();
+    visit(nextSearchIndex(current, direction, hits.length));
+  };
+  prev.addEventListener("click", () => step(-1));
+  next.addEventListener("click", () => step(1));
+  expand.addEventListener("click", () => p.removeClass("er-find-browsing"));
   off.addEventListener("click", () => {
     inp.value = "";
+    hits = []; current = -1; searched = ""; view._searchReturnSaved = false;
+    window.clearTimeout(timer);
     clearFoundIn(view);
     list.empty();
-    info.setText("");
+    update(); inp.focus();
   });
   view._findInput = inp;
   const run = () => {
+    if (view._findInput !== inp || !p.isConnected) return;
     const q = inp.value;
+    searched = q; current = -1; hits = [];
+    p.removeClass("er-find-browsing");
     list.empty();
-    if (q.trim().length < 2) {
-      info.setText(__ertr("Введите хотя бы два символа"));
+    if (!searchableQuery(q)) {
+      update();
+      info.setText(__ertr("输入一个汉字或至少两个字符"));
       clearFoundIn(view);
       return;
     }
-    if (!view._findCorpus) view._findCorpus = blockTexts(view.pager && view.pager.flow);
-    const hits = searchBookBlocks(view._findCorpus, q);
+    if (!view._findCorpus) view._findCorpus = readerSearchTexts(view.pager && view.pager.flow);
+    hits = searchBookBlocks(view._findCorpus, q);
+    update();
     if (!hits.length) {
       info.setText(__ertr("Ничего не найдено"));
       clearFoundIn(view);
       return;
     }
-    info.setText(__ertr("Найдено: {0}. Слово подсвечено в тексте.", hits.length));
     markFoundIn(view, q);
-    for (const h of hits) {
-      const el = list.createDiv("er-toc-item er-find-item");
+    for (const [index, h] of hits.entries()) {
+      const el = list.createEl("button", { cls: "er-toc-item er-find-item" });
       const line = el.createDiv("er-find-text");
       line.createSpan({ text: h.pre });
       line.createSpan({ cls: "er-find-hit", text: h.hit });
       line.createSpan({ text: h.post });
-      const spread = view.pager && view.pager.spreadForBlock ? view.pager.spreadForBlock(h.block) : null;
-      if (typeof spread === "number") el.createDiv("er-toc-where").setText(__ertr("разв. {0}", spread + 1));
-      el.addEventListener("click", () => {
-        close();
-        jump(h.block);
-        markFoundIn(view, q);
-      });
+      const page = pageForBlock(view.pager.flow, h.block);
+      const label = readerIsPdf(view) && page ? __ertr("第 {0} 页", page) : chapterForBlock(view.tocItems || [], h.block);
+      if (label) el.createDiv("er-toc-where").setText(label);
+      el.addEventListener("click", () => visit(index));
     }
   };
-  let timer = null;
+  inp.addEventListener("compositionstart", () => { composing = true; window.clearTimeout(timer); });
+  inp.addEventListener("compositionend", () => { composing = false; run(); });
   inp.addEventListener("input", () => {
     window.clearTimeout(timer);
+    if (composing) return;
     timer = window.setTimeout(run, 180);
   });
-  inp.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      window.clearTimeout(timer);
-      run();
+  p.onkeydown = (e) => {
+    if (composing || e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(); }
+    if (e.target === inp && ["Enter", "ArrowDown", "ArrowUp"].includes(e.key)) {
+      e.preventDefault(); e.stopPropagation();
+      step(e.key === "ArrowUp" || e.shiftKey ? -1 : 1);
     }
-  });
+  };
+  update();
 }
 function buildTocPanelFor(view, p, { close, jump }) {
   p.empty();
+  p.addClass("er-navigation-panel");
+  p.onkeydown = (event) => {
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); view.tocBtn?.focus(); }
+  };
   p.createDiv("er-pan-title").setText(__ertr("Содержание"));
+  const marks = p.createDiv("er-find-controls");
+  marks.createEl("button", { text: __ertr("标记当前位置") }).addEventListener("click", () => { close(); addLocationMark(view); });
+  marks.createEl("button", { text: __ertr("位置标记") }).addEventListener("click", () => { close(); showLocationMarks(view); });
+  marks.createEl("button", { text: __ertr("Закрыть") }).addEventListener("click", () => { close(); view.tocBtn?.focus(); });
   const items = view.tocItems || [];
   if (!items.length) {
     p.createDiv("er-toc-empty").setText(__ertr("В этой книге не нашлось ни оглавления, ни заголовков."));
@@ -7262,9 +7542,8 @@ function pdfTextLooksUnreadable(items) {
   const singles = tokens.filter((t) => t.length === 1).length;
   return singles / tokens.length > 0.7;
 }
-function blockTexts(flow) {
-  if (!flow) return [];
-  return [...flow.querySelectorAll(READER_BLOCK_SELECTOR)].map((el) => (el.textContent || "").replace(/\s+/g, " ").trim());
+function readerSearchTexts(flow) {
+  return flow ? [...flow.querySelectorAll(READER_BLOCK_SELECTOR)].map((el) => el.textContent || "") : [];
 }
 function tocLooksLikeNoise(items, all) {
   if (!items || items.length < 30) return false;
@@ -8270,6 +8549,7 @@ const ReadSettingsModal = class extends Modal {
       return;
     }
     this.previewEl = c.createDiv("er-rs-preview");
+    this.previewEl.hidden = readerIsPdf(v);
     this.previewEl.setText(__ertr("阅读不是为了记住所有内容，而是为了遇见值得留下的思想。"));
     this._paintPreview();
     c.addEventListener("click", () => window.setTimeout(() => this._paintPreview(), 80), true);
@@ -8406,7 +8686,7 @@ const ReadSettingsModal = class extends Modal {
     );
     // На телефоне колонка и так узкая: 60–90 знаков в строку туда не влезают,
     // то есть настройка ничего не меняла. Планшету и компьютеру она нужна.
-    if (erDeviceKey() !== "phone") this._seg(
+    if (erDeviceKey() !== "phone" && !readerIsPdf(v)) this._seg(
       colB,
       __ertr("Ширина строки"),
       [[0, __ertr("Авто")], [60, "60"], [70, "70"], [80, "80"], [90, "90"]],
@@ -8527,15 +8807,15 @@ const NoteTitleModal = class extends Modal {
     // лягут в ту же заметку книги, а не расплодят файлы: кнопка даёт это
     // выбрать прямо здесь, не выключая обычные отдельные заметки в настройках.
     const bookNote = this.bookFile ? bookNoteLinkFor(this.plugin, this.bookFile) : "";
-    if (!aiAnswer && bookNote) {
-      const toBook = foot.createEl("button", { text: __ertr("В заметку книги") });
+    if ((aiAnswer && this.bookFile) || bookNote) {
+      const toBook = foot.createEl("button", { text: __ertr(aiAnswer ? "追加到本书笔记" : "В заметку книги") });
       toBook.addClass("er-setup-btn", "er-setup-btn-quiet");
-      toBook.setAttribute("aria-label", __ertr("Дописать цитату в «{0}» вместо отдельной заметки", bookNote));
+      toBook.setAttribute("aria-label", aiAnswer ? __ertr("追加到本书笔记") : __ertr("Дописать цитату в «{0}» вместо отдельной заметки", bookNote));
       toBook.addEventListener("click", () => {
         if (this._answered) return;
         this._answered = true;
         this.close();
-        this.onDone({ toBookNote: true });
+        this.onDone({ toBookNote: true, title: input.value });
       });
     }
     const cancel = foot.createEl("button", { text: __ertr("Отмена") });
@@ -8699,6 +8979,7 @@ async function createNoteFromSelection(app, plugin, selText, bookFile, opts = {}
     });
     if (chosen === null) return null;
     if (chosen.toBookNote) {
+      if (noteKind === "ai-answer") return appendAnswerToBookNote(app, plugin, bookFile, noteBody, chosen.title || title);
       const base = opts.hl && typeof opts.hl === "object" ? opts.hl : {};
       await exportHighlightsToBookNote(app, plugin, bookFile, [{ ...base, text: clean, color: color != null ? color : base.color }]);
       return null;
@@ -8791,6 +9072,7 @@ async function createNoteFromAiAnswer(app, plugin, answer, question, context, bo
   }
   const normalizedContext = normalizeAiTurnContext(context);
   const title = suggestAiNoteTitle(cleanAnswer, { fallback: __ertr("AI 回复") });
+  if (opts.toBookNote) return appendAnswerToBookNote(app, plugin, bookFile, cleanAnswer, title);
   return createNoteFromSelection(app, plugin, title, bookFile, {
     ...opts,
     noteKind: "ai-answer",
@@ -8798,6 +9080,29 @@ async function createNoteFromAiAnswer(app, plugin, answer, question, context, bo
     sourceText: normalizedContext?.text || "",
     bookLinkHeading: __ertr("## Заметки AI"),
   });
+}
+async function appendAnswerToBookNote(app, plugin, bookFile, answer, title) {
+  if (!bookFile) return null;
+  try {
+    let note = resolveBookNote(app, bookNoteLinkFor(plugin, bookFile));
+    if (!note) {
+      const folder = bookNotesFolderPath(app) || notesFolderPath(app) || "";
+      // A coincidental filename is not consent to modify an unrelated note.
+      let name = sanitizeNoteTitle(bookFile.basename), index = 2;
+      const base = name;
+      while (app.vault.getAbstractFileByPath(erPath(`${folder}/${name}.md`))) name = `${base} ${index++}`;
+      note = await plugin.createBookNote(bookFile, name, folder);
+    }
+    if (!(note instanceof TFile) || isUnsafeReadingNote(app, note)) throw new Error("Unsafe book note target");
+    const marker = await aiAnswerMarker(bookFile.path, answer);
+    await app.vault.process(note, (text) => appendAiAnswer(text, { title: sanitizeNoteTitle(title), answer, marker }));
+    new Notice(__ertr("AI 回复已追加到本书笔记"));
+    return note;
+  } catch (error) {
+    console.error("Qiaomu Book Reader: answer append failed", error);
+    new Notice(__ertr("无法追加 AI 回复，未覆盖已有笔记。请检查目标笔记和仓库权限。"));
+    return null;
+  }
 }
 function _escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -9022,15 +9327,22 @@ const GoToPageModal = class extends Modal {
     modalEl.addClass("er-confirm-modal");
     contentEl.empty();
     contentEl.createDiv("er-confirm-title").setText(__ertr("Перейти к странице"));
-    const input = contentEl.createEl("input", { cls: "er-gotopage-input", attr: { type: "number", min: "1", max: String(this.total), placeholder: `1–${this.total}` } });
+    const input = contentEl.createEl("input", { cls: "er-gotopage-input", attr: { type: "text", placeholder: `1–${this.total} / 50%`, "aria-label": __ertr("页码或百分比") } });
+    const error = contentEl.createDiv({ cls: "er-title-error", attr: { role: "alert" } });
     input.value = String(this.current + 1);
     const submit = () => {
-      const n = parseInt(input.value, 10);
+      const raw = input.value.trim();
+      const percent = /^(?:\d+(?:\.\d+)?|\.\d+)%$/.test(raw);
+      const value = Number(percent ? raw.slice(0, -1) : raw);
+      if ((!percent && !/^\d+$/.test(raw)) || !Number.isFinite(value) || value < (percent ? 0 : 1) || value > (percent ? 100 : this.total)) {
+        error.setText(__ertr("请输入有效的页码或 0–100%")); return;
+      }
+      const n = percent ? 1 + Math.round((this.total - 1) * value / 100) : value;
       this.close();
-      if (!isNaN(n)) this.onSubmit(Math.max(1, Math.min(this.total, n)));
+      this.onSubmit(n);
     };
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
         submit();
       }
@@ -10147,8 +10459,9 @@ const ReaderView = class extends ItemView {
       }
       else {
         this._hideHlPopup();
-        setReadingFocus(this, false);
-        if (leaf?.view?.getViewType?.() !== AI_CHAT_VIEW_TYPE) clearAiSource(this);
+        const isAiChat = leaf?.view?.getViewType?.() === AI_CHAT_VIEW_TYPE;
+        if (!isAiChat || leaf.getRoot() !== this.app.workspace.rightSplit) setReadingFocus(this, false);
+        if (!isAiChat) clearAiSource(this);
       }
     }));
   }
@@ -10167,6 +10480,9 @@ const ReaderView = class extends ItemView {
     let _a2, _b;
     this.file = file;
     this.ext = file.extension === "epub" ? "epub" : file.extension === "fb2" ? "fb2" : "pdf";
+    this._findCorpus = null;
+    this._clearFound();
+    this.buildFindPanel();
     this.bookHtml = "";
     this.pdfDocumentContext = null;
     this.tocItems = [];
@@ -10495,6 +10811,7 @@ const ReaderView = class extends ItemView {
     moreBtn.setAttribute("aria-label", __ertr("Ещё"));
     moreBtn.addEventListener("click", (event) => {
       const menu = new Menu();
+      addReadingMenuActions(menu, this);
       menu.addItem((it) => it.setTitle(__ertr("Выделения")).setIcon("highlighter").onClick(() => this.togglePanel("highlights")));
       menu.addItem((it) => it.setTitle(__ertr("Сбросить таймер")).setIcon("rotate-ccw").onClick(() => resetTimerSession(this)));
       menu.showAtMouseEvent(event);
@@ -10518,6 +10835,7 @@ const ReaderView = class extends ItemView {
     nx.addEventListener("click", () => this.nav("next"));
     this._pageButtons = { root, toolbar: bot, previous: pv, next: nx };
     syncPageButtons(this);
+    addReaderNavigation(this, bot, findBtn, tocBtn);
     this.overlayEl = root.createDiv("er-overlay");
     this.overlayEl.addEventListener("click", () => this.closePanel());
     this.settPan = root.createDiv("er-panel");
@@ -10950,6 +11268,7 @@ const ReaderView = class extends ItemView {
     if (name === "settings") this._renderHistory();
     if (name === "toc" && this._tocRender) this._tocRender();
     this.panelOpen = name;
+    syncNavigationPanel(this, name);
     this.settPan.classList.toggle("er-panel-open", name === "settings");
     this.tocPan.classList.toggle("er-panel-open", name === "toc");
     this.findPan.classList.toggle("er-panel-open", name === "find");
@@ -10960,6 +11279,7 @@ const ReaderView = class extends ItemView {
   }
   closePanel() {
     this.panelOpen = null;
+    syncNavigationPanel(this, null);
     this.settPan.classList.remove("er-panel-open");
     this.tocPan.classList.remove("er-panel-open");
     this.hlPan.classList.remove("er-panel-open");
@@ -12201,12 +12521,8 @@ const ReaderModal = class extends Modal {
     moreBtn.setAttribute("aria-label", __ertr("Ещё"));
     moreBtn.addEventListener("click", (e) => {
       const menu = new Menu();
+      addReadingMenuActions(menu, this);
       menu.addItem((it) => it.setTitle(__ertr("Заметка книги")).setIcon("file-text").onClick(() => openOrCreateBookNoteBeside(this.plugin, this.file)));
-      menu.addItem((it) => it.setTitle(__ertr("Поиск по книге")).setIcon("search").onClick(() => {
-        this._togglePanel("find");
-        if (this._findInput) erAutoFocus(this._findInput, 80);
-      }));
-      menu.addItem((it) => it.setTitle(__ertr("Оглавление")).setIcon("list").onClick(() => this._togglePanel("toc")));
       menu.addItem((it) => it.setTitle(__ertr("Выделения")).setIcon("highlighter").onClick(() => this._togglePanel("highlights")));
       // The ↺ next to the timer is hidden on a phone — the pill was taking a
       // third of the bar and leaving the book title as «Выготски…». It is used
@@ -12243,6 +12559,7 @@ const ReaderModal = class extends Modal {
     nx.addEventListener("click", () => this._nav("next"));
     this._pageButtons = { root, toolbar: bot, previous: pv, next: nx };
     syncPageButtons(this);
+    addReaderNavigation(this, bot);
     this.overlayEl = root.createDiv("er-overlay");
     this.overlayEl.addEventListener("click", () => this._closePanel());
     this.settPan = root.createDiv("er-panel");
@@ -12687,6 +13004,7 @@ const ReaderModal = class extends Modal {
     if (name === "highlights") this._buildHlPanel();
     if (name === "settings") this._renderHistory();
     this.panelOpen = name;
+    syncNavigationPanel(this, name);
     this.settPan.classList.toggle("er-panel-open", name === "settings");
     this.tocPan.classList.toggle("er-panel-open", name === "toc");
     this.hlPan.classList.toggle("er-panel-open", name === "highlights");
@@ -12694,6 +13012,7 @@ const ReaderModal = class extends Modal {
   }
   _closePanel() {
     this.panelOpen = null;
+    syncNavigationPanel(this, null);
     this.settPan.classList.remove("er-panel-open");
     this.tocPan.classList.remove("er-panel-open");
     this.hlPan.classList.remove("er-panel-open");
@@ -13506,7 +13825,7 @@ const SettingsTab = class extends PluginSettingTab {
           cls: `er-acp-guide-badge${acp.community ? " is-community" : ""}`,
           text: __ertr(acp.mode === "native"
             ? "原生 ACP · 无需另装"
-            : acp.community
+            : acp.community && acp.autoInstall
               ? "社区适配器 · 支持一键准备"
               : acp.autoInstall
                 ? "ACP 适配器 · 支持一键准备"

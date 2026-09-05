@@ -58,6 +58,21 @@ test("always-on arrows retain handlers, move outside immersive chrome and return
   dom.window.close();
 });
 
+test("returning arrows preserve the shared navigation tools and page location order", () => {
+  const dom = new JSDOM('<div id="root"><div id="toolbar" class="er-navigation"><div class="er-navigation-tools">contents / search</div><button id="prev"></button><div class="er-bot-center">page</div><button id="next"></button></div></div>');
+  const doc = dom.window.document;
+  const toolbar = doc.getElementById("toolbar");
+  const view = { plugin: { settings: { pageButtonsVisibility: "always" } }, _pageButtons: { root: doc.getElementById("root"), toolbar, previous: doc.getElementById("prev"), next: doc.getElementById("next") } };
+  const tools = toolbar.firstElementChild;
+  syncPageButtons(view);
+  assert.equal(toolbar.children.length, 2);
+  assert.equal(toolbar.firstElementChild, tools);
+  view.plugin.settings.pageButtonsVisibility = "hover";
+  syncPageButtons(view);
+  assert.deepEqual([...toolbar.children].map((el) => el.id || el.className), ["er-navigation-tools", "prev", "er-bot-center", "next"]);
+  dom.window.close();
+});
+
 test("custom font editor reveals on selection, commits on change and preserves last valid value", async () => {
   const dom = new JSDOM('<div id="host"></div>');
   const { document, HTMLElement, Event } = dom.window;

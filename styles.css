@@ -2803,3 +2803,52 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-custom-font details > summary { cursor:pointer; color:var(--text-muted); font-size:var(--font-ui-small); }
 .er-custom-font details > label { margin-top:10px; }
 .er-font-choice-preview { margin-top:5px; font-size:18px; color:var(--text-muted); }
+/* Reading navigation stays together and never participates in page layout. */
+.er-bot.er-navigation {
+  width: min(580px, calc(100% - 16px));
+  grid-template-columns: 68px 32px minmax(0, 1fr) 32px;
+  gap: 2px;
+}
+.er-navigation-tools { display: flex; align-items: center; gap: 2px; }
+.er-navigation-tools .er-ibtn { width: 32px; height: 34px; flex-shrink: 0; }
+.er-navigation .er-navbtn { width: 32px; margin: 0; }
+.er-navigation .er-bot-center { padding: 0 6px; gap: 6px; }
+.er-navigation .er-loc { min-width: 0; flex: 1; font-size: 12px; }
+.er-navigation .er-pct { flex-shrink: 0; font-size: 12px; }
+.er-navigation .er-pct::before { display: none; }
+.er-scrolling .er-bot.er-navigation { grid-template-columns: 68px minmax(0, 1fr); }
+.er-navigation-open .er-overlay { opacity: 0; backdrop-filter: none; }
+.er-navigation-open .er-bot { z-index: 41; }
+.er-note-back { z-index: 42; }
+.er-panel.er-navigation-panel {
+  top: auto; right: auto; left: 8px; bottom: 64px;
+  width: min(420px, calc(100% - 16px)); max-height: min(45%, 380px);
+  border-radius: 12px; border: 1px solid var(--background-modifier-border);
+  padding: 12px; gap: 6px;
+}
+.er-navigation-panel .er-pan-title { margin: 0; padding: 0 0 8px; font-size: 13px; }
+.er-navigation-panel .er-toc-find { padding: 0; margin: 0; }
+.er-navigation-panel .er-toc-list { overflow: auto; min-height: 0; padding: 0; }
+.er-find-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.er-find-controls button { font-size: 11px; padding: 3px 7px; height: 28px; }
+.er-find-controls .er-find-off { margin: 0; }
+.er-find-panel .er-find-info { margin: 0; font-size: 11px; }
+.er-find-panel.er-find-browsing .er-toc-list { display: none; }
+button.er-find-item { display: block; width: 100%; height: auto; text-align: left; white-space: normal; box-shadow: none; background: transparent; padding: 10px 8px; }
+button.er-find-item.er-toc-active { background: var(--background-modifier-hover); }
+.er-location-mark { display: flex; gap: 6px; margin-block: 8px; }
+.er-location-mark-open { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.er-ai-history-search { width: 100%; margin-block: 8px; }
+.er-ai-draft-clear { margin-right: auto; }
+.er-ai-citations { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-block: 4px 8px; }
+.er-ai-citations .er-ai-act { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.er-ai-composer [hidden], .er-ai-history-modal [hidden], .er-rs [hidden] { display: none !important; }
+@media (max-width: 600px) {
+  .er-mview .er-bot.er-navigation { grid-template-columns: 68px 28px minmax(0, 1fr) 28px; }
+  .er-mview.er-scrolling .er-bot.er-navigation { grid-template-columns: 68px minmax(0, 1fr); }
+  .er-mview .er-navigation .er-navbtn { width: 28px; margin: 0; }
+  .er-mview .er-panel.er-navigation-panel { bottom: 60px; max-height: 50%; }
+}
+
+.er-page-buttons-always .er-bot.er-navigation,
+.er-mview.er-page-buttons-always .er-bot.er-navigation { grid-template-columns: 68px minmax(0, 1fr); }

@@ -6,6 +6,7 @@ import { JSDOM } from "jsdom";
 import { bindAiComposer } from "../src/ai-composer.js";
 import { suggestAiNoteTitle } from "../src/ai-note-title.js";
 import { shouldFollowContext } from "../src/reader-experience.js";
+import { verifiedQuotes } from "../src/reading-workflow.js";
 
 const source = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -52,6 +53,58 @@ function composer() {
   const type = (text) => { input.value = text; input.dispatchEvent(new window.Event("input")); };
   return { window, input, send, chat, calls, enter, type, finish: (result) => settle(result) };
 }
+
+test("quick prompts stay visible in new and existing chats, including while sending", () => {
+  const renderSource = source.slice(source.indexOf("function renderAiComposerPrompts("), source.indexOf("function bindAiSlashPrompts("));
+  const sendingStart = source.indexOf("  _setSending(busy) {");
+  const sendingSource = source.slice(sendingStart, source.indexOf("\n  // Obsidian", sendingStart));
+  const items = ["解释一下", "举个例子", "总结要点", "自定义问题"].map((name) => ({ name, prompt: `prompt:${name}` }));
+  let menu;
+  class Menu {
+    constructor() { this.entries = []; menu = this; }
+    addItem(build) {
+      const entry = { setTitle(title) { this.title = title; return this; }, onClick(fn) { this.click = fn; return this; } };
+      build(entry); this.entries.push(entry);
+    }
+    showAtMouseEvent() {}
+  }
+  const sandbox = { aiQuickPrompts: () => items, __ertr: (s) => s, Menu, svgIcon() {} };
+  const render = vm.runInNewContext(`${renderSource}\nrenderAiComposerPrompts`, sandbox);
+  const setSending = vm.runInNewContext(`({${sendingSource}})._setSending`, sandbox);
+  for (const turns of [[], [{ role: "assistant", content: "Existing answer" }]]) {
+    const window = dom();
+    const host = window.document.querySelector("main");
+    const calls = [];
+    const send = window.document.createElement("button");
+    send.toggleClass = (name, enabled) => send.classList.toggle(name, enabled);
+    const chat = { plugin: { settings: {} }, turns, _send: (prompt) => calls.push(prompt), sendEl: send, canCancel: true };
+    const row = render(host, chat);
+    assert.equal(row.hidden, false);
+    assert.equal(host.querySelector(".er-ai-prompt-expand"), null);
+    assert.equal(chat.quickPromptButtons.length, 4);
+    chat.quickPromptButtons[0].click();
+    assert.deepEqual(calls, [items[0].prompt], "one click sends the configured prompt");
+    chat.busy = true;
+    setSending.call(chat, true);
+    assert.equal(row.hidden, false, "generation must not collapse prompts");
+    assert.ok(chat.quickPromptButtons.every((button) => button.disabled));
+    chat.quickPromptButtons[1].click();
+    assert.equal(calls.length, 1);
+    chat.busy = false;
+    setSending.call(chat, false);
+    assert.equal(row.hidden, false);
+    assert.ok(chat.quickPromptButtons.every((button) => !button.disabled));
+    chat.quickPromptButtons[3].click();
+    assert.equal(menu.entries[0].title, "自定义问题");
+    menu.entries[0].click();
+    assert.equal(calls[1], items[3].prompt);
+  }
+  items.length = 0;
+  const host = dom().document.querySelector("main");
+  assert.equal(render(host, { plugin: { settings: {} } }), null);
+  assert.equal(host.children.length, 0, "empty settings do not leave an unused expander");
+  assert.doesNotMatch(source, /promptExpand|promptRow/);
+});
 
 test("IME candidate confirmation, Shift+Enter and composing keyCode do not submit", async () => {
   const c = composer();
@@ -104,7 +157,7 @@ function chatHarness(explain, overrides = {}) {
     window, AbortController, Modal: class {}, console: { error() {} },
     __ertr: (s) => s, newAiSessionKey: () => window.crypto.randomUUID(),
     normalizeAiTurnContext: (value) => value ? { ...value } : null,
-    svgIcon() {}, aiExplain: explain, copyToClipboard: async () => true, Notice: class {},
+    svgIcon() {}, verifiedQuotes, aiExplain: explain, copyToClipboard: async () => true, Notice: class {},
     createNoteFromAiAnswer: async () => null,
     renderAiUserTurn: (log, turn) => log.createDiv({ cls: "er-ai-msg-me", text: turn.content }),
     createAiStreamingMarkdownRenderer: (_owner, el, _path, opts) => ({
@@ -118,7 +171,7 @@ function chatHarness(explain, overrides = {}) {
   const cls = source.slice(source.indexOf("const AiExplainModal = class"), source.indexOf("// Desktop AI stays docked"));
   const { Chat, createLog } = vm.runInNewContext(`${helpers}\n${cls}\n({ Chat: AiExplainModal, createLog: createAiChatLog })`, context);
   const chat = Object.create(Chat.prototype);
-  Object.assign(chat, { plugin: {}, app: {}, turns: [], structuredContext: true,
+  Object.assign(chat, { plugin: { settings: {} }, app: {}, turns: [], structuredContext: true,
     book: "测试书", bookFile: { path: "books/test.epub" },
     pendingContext: { kind: "selection", text: "原文" },
     aiSessionKey: "initial", _setSending() {}, persisted: 0,
@@ -276,7 +329,8 @@ function sidebarHarness() {
     readerDefaultAiContext: () => ({ kind: "page", text: "当前页" }),
   };
   const { Chat, normalizeHistory } = vm.runInNewContext(`${normalize}\n${cls}\n({ Chat: AiChatView, normalizeHistory: normalizeAiChatHistory })`, context);
-  const chat = new Chat({}, { settings: { aiChatHistory: [] }, async saveAll() {} });
+  const texts = new Map();
+  const chat = new Chat({}, { settings: { aiChatHistory: [] }, aiDraftStore: { texts, set: (key, text) => texts.set(key, text) }, async saveAll() {} });
   chat.app = { vault: { getAbstractFileByPath: (path) => files.get(path) } };
   chat.contentEl = window.document.querySelector("main");
   chat._renderConversation = function() {
@@ -306,6 +360,29 @@ test("switching books isolates drafts, including returning to stored history", a
   chat._newChat();
   assert.equal(chat.inputEl.value, "B 的未发送草稿");
   assert.equal(chat.turns.length, 0);
+});
+
+test("manual conversation titles survive persistence and reset for new conversations", async () => {
+  const { chat, files, normalizeHistory } = sidebarHarness();
+  chat.bookFile = files.get("a.epub");
+  const session = { id: "renamed", title: "我自己的标题", titleEdited: true, bookPath: "a.epub", contextVersion: 1, turns: [{ role: "user", content: "问题" }, { role: "assistant", content: "答案" }] };
+  chat.loadSession(session, { skipPersist: true });
+  await chat._persistSession();
+  assert.equal(chat.plugin.settings.aiChatHistory[0].title, "我自己的标题");
+  assert.equal(normalizeHistory(chat.plugin.settings.aiChatHistory)[0].titleEdited, true);
+  chat._newChat();
+  assert.equal(chat.sessionTitle, "");
+});
+
+test("switching books before a send settles cannot erase the recoverable question", () => {
+  const { chat, files } = sidebarHarness();
+  chat.setContext({ kind: "page", text: "A", bookFile: files.get("a.epub") });
+  chat.plugin.aiDraftStore.set("a.epub", "尚未确认发送的问题");
+  chat.inputEl.value = "";
+  chat.busy = false;
+  chat.inputController = { pending: true };
+  chat._rememberDraft();
+  assert.equal(chat.drafts.get("a.epub"), "尚未确认发送的问题");
 });
 
 test("explicitly detached sources stay detached after persistence and normalization", async () => {
