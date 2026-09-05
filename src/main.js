@@ -29,6 +29,7 @@ import { cliAcpSupport, cliMeta, cliReasoningEfforts, disposeCliAiSessions, effe
 import { ER_ZH_CN } from "./i18n-zh.js";
 import { translateUiText } from "./i18n-runtime.js";
 import { READER_THEMES, READER_THEME_CHOICES, migrateReaderTheme } from "./reader-themes.js";
+import { normalizeCustomFontFamily, resolveReaderFont, syncPageButtons } from "./reader-appearance.js";
 import { BUNDLED_FONT_FAMILIES, ensureBundledReaderFont } from "./bundled-fonts.js";
 import { cloneJson, createSerialTaskQueue, isPlainRecord, mergeReadingProgress, readJsonRecordStore, writeVerifiedJsonRecord } from "./storage.js";
 import { createReaderLoadCoordinator, isReaderLoadAbort, throwIfReaderLoadAborted } from "./reader-load.js";
@@ -39,6 +40,13 @@ const __erEN = {"Пожелания и ошибки — в телеграм-бо
 // generated line thousands of entries long, and anything added inside it is
 // unreviewable and easy to lose. Same table, readable diff.
 Object.assign(__erEN, {
+  "字体名称 / font-family": "Font name / font-family",
+  "填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。": "Enter an installed font name or a comma-separated fallback list. Unavailable fonts use the fallback.",
+  "请输入字体名称或逗号分隔的字体列表，不要填写 CSS 规则。": "Enter font names separated by commas, not CSS rules.",
+  "翻页按钮": "Page-turn buttons",
+  "鼠标靠近时显示": "Show when pointer approaches",
+  "常驻显示": "Always show",
+
   "标题已根据回复内容在本地生成，可直接修改，不会额外调用模型。": "Title suggested locally from the reply. Edit it freely; no extra model request is made.",
   "请输入有效的笔记标题。": "Enter a valid note title.",
   "正在保存…": "Saving…",
@@ -916,6 +924,8 @@ const DEFAULT = {
   libTheme: "auto",
   fontSize: 18,
   fontFamily: "georgia",
+  customFontFamily: "",
+  pageButtonsVisibility: "hover",
   lineHeight: 1.8,
   columns: "2",
   // Text alignment inside the reading column: "left" (default), "justify",
@@ -1130,6 +1140,11 @@ function erTheme(settings) {
   return THEMES[s.theme] || THEMES.auto;
 }
 const READER_FONTS = Object.freeze({
+  custom: {
+    id: "custom",
+    stack: "Georgia,serif",
+    labels: { ru: "Свой шрифт", en: "Custom font", zh: "自定义字体" },
+  },
   georgia: {
     id: "georgia",
     stack: "Georgia,'Times New Roman',serif",
@@ -1197,6 +1212,45 @@ const READER_FONTS = Object.freeze({
 const FONTS = Object.fromEntries(Object.values(READER_FONTS).map((font) => [font.id, font.stack]));
 function erReaderFonts() { return Object.values(READER_FONTS); }
 function erFontLabel(font) { return font.labels[__erLang] || font.labels.en; }
+function buildCustomFontInput(host, settings, apply) {
+  const wrap = host.createDiv("er-custom-font");
+  const label = wrap.createEl("label", { text: __ertr("字体名称 / font-family") });
+  const input = label.createEl("input", { type: "text", cls: "er-panel-input" });
+  input.value = settings.customFontFamily || "";
+  input.placeholder = '"georgia", serif';
+  wrap.createDiv({ cls: "er-pan-hint", text: __ertr("填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。") });
+  const error = wrap.createDiv({ cls: "er-custom-font-error", attr: { role: "status" } });
+  input.addEventListener("change", async () => {
+    const value = normalizeCustomFontFamily(input.value);
+    input.setAttribute("aria-invalid", String(value === null));
+    error.setText(value === null ? __ertr("请输入字体名称或逗号分隔的字体列表，不要填写 CSS 规则。") : "");
+    if (value === null) return;
+    settings.customFontFamily = value;
+    await apply();
+  });
+  const refresh = () => { wrap.hidden = settings.fontFamily !== "custom"; };
+  refresh();
+  return refresh;
+}
+function buildPageButtonsSetting(host, plugin) {
+  new Setting(host)
+    .setName(__ertr("翻页按钮"))
+    .addDropdown((d) => d
+      .addOption("hover", __ertr("鼠标靠近时显示"))
+      .addOption("always", __ertr("常驻显示"))
+      .setValue(plugin.settings.pageButtonsVisibility || "hover")
+      .onChange(async (value) => {
+        plugin.settings.pageButtonsVisibility = value;
+        const readers = plugin.app.workspace.getLeavesOfType(VIEW_TYPE).map((leaf) => leaf.view);
+        if (plugin._openReaderModal) readers.push(plugin._openReaderModal);
+        for (const reader of readers) {
+          syncPageButtons(reader);
+          if (reader.bookHtml && typeof reader.repaginate === "function") await reader.repaginate();
+          else if (reader.bookHtml && typeof reader._repaginate === "function") await reader._repaginate();
+        }
+        await plugin.saveAll();
+      }));
+}
 // Цвета выделений (полупрозрачные — текст читается на любой теме)
 const HL_COLORS = [
   // Keep labels lazy: the plugin language is loaded after module evaluation.
@@ -1254,7 +1308,7 @@ function erPath(p) {
 // Only the LOOK is per device. Folders, templates, highlight colours and
 // reading progress stay shared — those are decisions about the vault, not about
 // the screen you happen to be holding.
-const DEVICE_KEYS = ["theme", "fontSize", "fontFamily", "lineHeight", "columns", "textAlign", "vAlign", "einkMode"];
+const DEVICE_KEYS = ["theme", "fontSize", "fontFamily", "customFontFamily", "pageButtonsVisibility", "lineHeight", "columns", "textAlign", "vAlign", "einkMode"];
 function erDeviceKey() {
   try {
     if (Platform) {
@@ -1845,9 +1899,10 @@ function panelSection(view, p, { label, emoji, settingKey, defaultOpen = false }
   });
   return body;
 }
-function buildReaderExtraSettings(view, p) {
+function buildReaderExtraSettings(view, p, showPageButtons = true) {
   const s = view.plugin.settings;
   const sec = (l) => p.createDiv("er-pan-sec").setText(l);
+  if (showPageButtons) buildPageButtonsSetting(p, view.plugin);
   sec(__ertr("Листание"));
   const navRow = p.createDiv("er-col-row");
   [["buttons", __ertr("Кнопками")], ["click", __ertr("По клику")]].forEach(([v, label]) => {
@@ -3284,7 +3339,7 @@ const Paginator = class {
       padding:${padVt}px 0 ${padVtBot}px;
       box-sizing:content-box;
       margin-top:0;
-      font-family:${FONTS[settings.fontFamily]};
+      font-family:${resolveReaderFont(settings, FONTS)};
       ${chineseTypography ? "font-synthesis-style:none;" : ""}
       font-size:${settings.fontSize}px;
       line-height:${settings.lineHeight};
@@ -7904,7 +7959,7 @@ const ReadSettingsModal = class extends Modal {
     const s = this.view.plugin.settings;
     const t = erTheme(s);
     void ensureBundledReaderFont(docOf(p), s.fontFamily);
-    p.style.fontFamily = FONTS[s.fontFamily] || FONTS.georgia;
+    p.style.fontFamily = resolveReaderFont(s, FONTS);
     p.style.fontSize = `${s.fontSize || 18}px`;
     p.style.lineHeight = String(s.lineHeight || 1.8);
     p.style.textAlign = s.textAlign || "left";
@@ -8138,9 +8193,11 @@ const ReadSettingsModal = class extends Modal {
       () => s.fontFamily,
       async (f) => {
         s.fontFamily = f;
+        refreshCustomFont();
         await this._apply(true);
       }
     );
+    const refreshCustomFont = buildCustomFontInput(colA, s, () => this._apply(true));
     const lineHead = colA.createDiv("er-rs-range-head");
     lineHead.createSpan({ text: __ertr("Межстрочный") });
     const lineValue = lineHead.createSpan({ cls: "er-rs-range-value" });
@@ -8172,6 +8229,7 @@ const ReadSettingsModal = class extends Modal {
     });
     }
     colB.createDiv("er-rs-h").setText(__ertr("Параметры страницы"));
+    buildPageButtonsSetting(colB, v.plugin);
     this._seg(
       colB,
       __ertr("Как листать"),
@@ -8224,7 +8282,7 @@ const ReadSettingsModal = class extends Modal {
       emoji: "",
       settingKey: "readerAdvOpen"
     });
-    buildReaderExtraSettings(v, moreBody);
+    buildReaderExtraSettings(v, moreBody, false);
     const foot = c.createDiv("er-rs-foot");
     if (typeof v._renderHistory === "function") {
       foot.createDiv("er-pan-sec").setText(__ertr("Вернуться к месту"));
@@ -10315,6 +10373,8 @@ const ReaderView = class extends ItemView {
     const nx = bot.createEl("button", { cls: "er-navbtn", attr: { "aria-label": __ertr("Далее") } });
     svgIcon(nx, "chevron-right");
     nx.addEventListener("click", () => this.nav("next"));
+    this._pageButtons = { root, toolbar: bot, previous: pv, next: nx };
+    syncPageButtons(this);
     this.overlayEl = root.createDiv("er-overlay");
     this.overlayEl.addEventListener("click", () => this.closePanel());
     this.settPan = root.createDiv("er-panel");
@@ -10482,6 +10542,7 @@ const ReaderView = class extends ItemView {
     setupImmersiveChrome(this, root);
   }
   applyVars() {
+    syncPageButtons(this);
     const t = erTheme(this.plugin.settings);
     const s = this.plugin.settings;
     const r = this.contentEl;
@@ -10627,12 +10688,18 @@ const ReaderView = class extends ItemView {
         btn.addClass("active");
       btn.addEventListener("click", async () => {
         this.plugin.settings.fontFamily = f;
+        refreshCustomFont();
         await this.plugin.saveAll();
         if (this.bookHtml)
           await this.repaginate();
         ffRow.querySelectorAll(".er-ff-btn").forEach((b) => b.removeClass("active"));
         btn.addClass("active");
       });
+    });
+    const refreshCustomFont = buildCustomFontInput(adv, this.plugin.settings, async () => {
+      await this.plugin.saveAll();
+      if (this.bookHtml && typeof this.repaginate === "function") await this.repaginate();
+      else if (this.bookHtml) await this._repaginate();
     });
     secA(__ertr("Межстрочный"));
     const lhRow = adv.createDiv("er-lh-row");
@@ -11948,6 +12015,7 @@ const ReaderModal = class extends Modal {
     this._resizeObs.observe(this.areaEl);
   }
   _applyTheme() {
+    syncPageButtons(this);
     const t = erTheme(this.plugin.settings);
     const m = this.modalEl;
     m.style.setProperty("--er-bg", t.bg);
@@ -12030,6 +12098,8 @@ const ReaderModal = class extends Modal {
     const nx = bot.createEl("button", { cls: "er-navbtn", attr: { type: "button", "aria-label": __ertr("Далее") } });
     svgIcon(nx, "chevron-right");
     nx.addEventListener("click", () => this._nav("next"));
+    this._pageButtons = { root, toolbar: bot, previous: pv, next: nx };
+    syncPageButtons(this);
     this.overlayEl = root.createDiv("er-overlay");
     this.overlayEl.addEventListener("click", () => this._closePanel());
     this.settPan = root.createDiv("er-panel");
@@ -12389,11 +12459,17 @@ const ReaderModal = class extends Modal {
       if (this.plugin.settings.fontFamily === ff) btn.addClass("active");
       btn.addEventListener("click", async () => {
         this.plugin.settings.fontFamily = ff;
+        refreshCustomFont();
         await this.plugin.saveAll();
         this._applyContentStyle();
         ffRow.querySelectorAll(".er-ff-btn").forEach(b => b.removeClass("active"));
         btn.addClass("active");
       });
+    });
+    const refreshCustomFont = buildCustomFontInput(adv, this.plugin.settings, async () => {
+      await this.plugin.saveAll();
+      if (this.bookHtml && typeof this.repaginate === "function") await this.repaginate();
+      else if (this.bookHtml) await this._repaginate();
     });
     secA(__ertr("\u041C\u0435\u0436\u0441\u0442\u0440\u043E\u0447\u043D\u044B\u0439"));
     const lhRow = adv.createDiv("er-lh-row");
@@ -13546,8 +13622,9 @@ const SettingsTab = class extends PluginSettingTab {
     this._sectionIntro(c, __ertr("Оформление"), __ertr("这里与阅读器内的“阅读设置”同步；改变的是书页，工具栏仍跟随 Obsidian。"));
     const applyAppearance = async (repaginate = true) => {
       await this.plugin.saveAll();
-      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
-        const view = leaf.view;
+      const readers = this.app.workspace.getLeavesOfType(VIEW_TYPE).map((leaf) => leaf.view);
+      if (this.plugin._openReaderModal) readers.push(this.plugin._openReaderModal);
+      for (const view of readers) {
         if (!view) continue;
         if (typeof view.applyVars === "function") view.applyVars();
         else if (typeof view._applyTheme === "function") view._applyTheme();
@@ -13573,9 +13650,12 @@ const SettingsTab = class extends PluginSettingTab {
         erReaderFonts().forEach((font) => d.addOption(font.id, erFontLabel(font)));
         d.setValue(s.fontFamily || "georgia").onChange(async (font) => {
           s.fontFamily = font;
+          refreshCustomFont();
           await applyAppearance(true);
         });
       });
+    const refreshCustomFont = buildCustomFontInput(c, s, () => applyAppearance(true));
+    buildPageButtonsSetting(c, this.plugin);
     new Setting(c)
       .setName(__ertr("字号"))
       .setDesc(__ertr("阅读正文大小，与书内设置实时同步。"))

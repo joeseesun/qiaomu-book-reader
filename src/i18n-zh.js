@@ -1,6 +1,13 @@
 // Generated from the complete source UI dictionary and reviewed for core reading terms.
 // Keep placeholders, Markdown and HTML structure identical to the source strings.
 export const ER_ZH_CN = {
+  "Font name / font-family": "字体名称 / font-family",
+  "Enter an installed font name or a comma-separated fallback list. Unavailable fonts use the fallback.": "填写本机已安装的字体名称，可用逗号分隔备用字体；未安装时使用备用字体。",
+  "Enter font names separated by commas, not CSS rules.": "请输入字体名称或逗号分隔的字体列表，不要填写 CSS 规则。",
+  "Page-turn buttons": "翻页按钮",
+  "Show when pointer approaches": "鼠标靠近时显示",
+  "Always show": "常驻显示",
+
   "Title suggested locally from the reply. Edit it freely; no extra model request is made.": "标题已根据回复内容在本地生成，可直接修改，不会额外调用模型。",
   "Enter a valid note title.": "请输入有效的笔记标题。",
   "Saving…": "正在保存…",

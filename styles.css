@@ -2778,3 +2778,16 @@ img.er-pdf-lazy:not([data-loaded="1"]) { background:color-mix(in srgb,var(--er-t
 .er-title-modal input[aria-invalid="true"] {
   border-color: var(--text-error);
 }
+
+/* Persistent arrows remain outside the immersive toolbar. Scroll mode still
+   hides all .er-navbtn controls through the existing rule. */
+.er-page-buttons-always:not(.er-scrolling) .er-area { margin-inline:52px; }
+.er-page-edge { position:absolute; top:50%; z-index:7; background:var(--er-ui); opacity:1; }
+.er-page-edge-prev { left:8px; }
+.er-page-edge-next { right:8px; }
+.er-custom-font { min-width:0; margin:12px 0; }
+.er-custom-font[hidden] { display:none; }
+.er-custom-font label { display:block; font-size:var(--font-ui-small); }
+.er-custom-font input { display:block; width:100%; max-width:100%; margin-top:6px; box-sizing:border-box; }
+.er-custom-font-error { color:var(--text-error); font-size:var(--font-ui-small); }
+.er-custom-font input[aria-invalid="true"] { border-color:var(--text-error); }
